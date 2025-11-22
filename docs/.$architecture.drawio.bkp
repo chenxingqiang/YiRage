@@ -49,6 +49,9 @@
         <mxCell id="cuda-backend" value="CUDA Backend" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontStyle=1;verticalAlign=top;" parent="1" vertex="1">
           <mxGeometry x="110" y="340" width="130" height="180" as="geometry" />
         </mxCell>
+        <mxCell id="4dQvvKtvJGJXW_JbfuQc-1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="cuda-opt" target="cuda-backend">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
         <mxCell id="cuda-opt" value="CUDAOptimizer&#xa;• Tensor Core&#xa;• Warp&#xa;• Bank Conflict&#xa;• Occupancy" style="rounded=0;whiteSpace=wrap;html=1;align=center;fillColor=#ffffff" parent="1" vertex="1">
           <mxGeometry x="115" y="365" width="120" height="70" as="geometry" />
         </mxCell>
@@ -127,7 +130,7 @@
         <mxCell id="arrow-mps-hw" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;dashed=1" parent="1" source="mps-backend" target="hw-apple" edge="1">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="stats" value="YiRage Stats&#xa;━━━━━━━━━━&#xa;7 Backends&#xa;42+ Optimizers&#xa;5 Search Strategies&#xa;17K+ Lines of Code&#xa;M3 Mac Ready ✓" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=center;fontSize=12;fontStyle=1" parent="1" vertex="1">
+        <mxCell id="stats" value="YiRage Stats&#xa;━━━━━━━━━━&#xa;7 Backends&#xa;42+ Optimizers&#xa;5 Search Strategies&#xa;17K+ Lines of Code&#xa;M3 Mac Ready ✓" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;align=left;fontSize=12;fontStyle=1" parent="1" vertex="1">
           <mxGeometry x="900" y="360" width="180" height="140" as="geometry" />
         </mxCell>
         <mxCell id="legend-title" value="Legend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=12;fontStyle=1" parent="1" vertex="1">
@@ -141,6 +144,9 @@
         </mxCell>
         <mxCell id="legend3" value="Specialized" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10" parent="1" vertex="1">
           <mxGeometry x="1010" y="680" width="90" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="4dQvvKtvJGJXW_JbfuQc-5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="python-api-2" target="python-api-2">
+          <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

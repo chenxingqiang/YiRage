@@ -28,7 +28,7 @@
 ## 🏗️ Architecture
 
 <div align="center">
-  <img src="img/architecture.drawio.png" alt="YiRage Architecture" width="900"/>
+  <img src="img/architecture.drawio.svg" alt="YiRage Architecture" width="900"/>
 </div>
 
 ### Three-Layer Design
