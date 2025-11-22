@@ -1,12 +1,12 @@
-import mirage as mi
+import yirage as yr
 import numpy as np
 import torch
 
 if __name__ == "__main__":
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(8, 4096), dtype=mi.float16)
-    W1 = graph.new_input(dims=(4096, 4096), dtype=mi.float16)
-    W2 = graph.new_input(dims=(4096, 4096), dtype=mi.float16)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(8, 4096), dtype=yr.float16)
+    W1 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+    W2 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
     O1 = graph.matmul(X, W1)
     O2 = graph.matmul(X, W2)
     O1 = graph.silu(O1)

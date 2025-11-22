@@ -25,12 +25,12 @@ image = (
     )
     .add_local_file(ssh_key_path, "/root/.ssh/authorized_keys", copy=True)
     .run_commands("chmod 600 /root/.ssh/authorized_keys")
-    .run_commands("git clone --recursive --branch mpk https://www.github.com/mirage-project/mirage")
-    .env({"MIRAGE_HOME": "/mirage"})
-    .env({"LD_LIBRARY_PATH": "/mirage/build/abstract_subexpr/release:/mirage/build/formal_verifier/release:$LD_LIBRARY_PATH"})
+    .run_commands("git clone --recursive --branch ypk https://www.github.com/yirage-project/yirage")
+    .env({"YIRAGE_HOME": "/yirage"})
+    .env({"LD_LIBRARY_PATH": "/yirage/build/abstract_subexpr/release:/yirage/build/formal_verifier/release:$LD_LIBRARY_PATH"})
     .run_commands("curl https://sh.rustup.rs -sSf | bash -s -- -y")
     .env({"PATH": "/root/.cargo/bin:$PATH"})
-    .run_commands("cd mirage && uv pip install --system -e . -v transformers torch==2.6.0 mpi4py")
+    .run_commands("cd yirage && uv pip install --system -e . -v transformers torch==2.6.0 mpi4py")
     .apt_install("openssh-server")
     .run_commands(
         "echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config",
@@ -38,7 +38,7 @@ image = (
 )
 
 hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
-app = modal.App("mpk-ssh", image=image, volumes={"/root/.cache/huggingface": hf_cache_vol})
+app = modal.App("ypk-ssh", image=image, volumes={"/root/.cache/huggingface": hf_cache_vol})
 
 LOCAL_PORT = 9090
 

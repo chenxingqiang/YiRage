@@ -13,13 +13,13 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/element_unary.h"
-#include "mirage/threadblock/forloop_accum.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/transpiler/utils.h"
-#include "mirage/triton_transpiler/transpile.h"
+#include "yirage/threadblock/element_unary.h"
+#include "yirage/threadblock/forloop_accum.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/transpiler/utils.h"
+#include "yirage/triton_transpiler/transpile.h"
 
 inline int round_up_to_power_of_2(int n) {
   if (n <= 0) {
@@ -38,16 +38,16 @@ inline bool is_power_of_2(int n) {
   return n > 0 && (n & (n - 1)) == 0;
 }
 
-namespace mirage {
+namespace yirage {
 namespace triton_transpiler {
 
-namespace kn = mirage::kernel;
-namespace tb = mirage::threadblock;
+namespace kn = yirage::kernel;
+namespace tb = yirage::threadblock;
 
-using mirage::transpiler::CodeKeeper;
-using mirage::transpiler::Combine;
-using mirage::transpiler::fmt;
-using mirage::transpiler::map;
+using yirage::transpiler::CodeKeeper;
+using yirage::transpiler::Combine;
+using yirage::transpiler::fmt;
+using yirage::transpiler::map;
 using std::string;
 
 inline std::string get_tensor_shape(tb::STensor const &stensor) {
@@ -643,4 +643,4 @@ TritonCustomOPTranspileResult
 }
 
 } // namespace triton_transpiler
-} // namespace mirage
+} // namespace yirage

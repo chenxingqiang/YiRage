@@ -13,30 +13,30 @@
  * limitations under the License.
  */
 
-#include "mirage/nki_transpiler/transpile.h"
-#include "mirage/nki_transpiler/utils.h"
-#include "mirage/threadblock/element_unary.h"
-#include "mirage/threadblock/forloop_accum.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/transpiler/utils.h"
-#include "mirage/type.h"
+#include "yirage/nki_transpiler/transpile.h"
+#include "yirage/nki_transpiler/utils.h"
+#include "yirage/threadblock/element_unary.h"
+#include "yirage/threadblock/forloop_accum.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/transpiler/utils.h"
+#include "yirage/type.h"
 
 #include <algorithm>
 #include <utility>
 #include <vector>
 
-namespace mirage {
+namespace yirage {
 namespace nki_transpiler {
 
-namespace kn = mirage::kernel;
-namespace tb = mirage::threadblock;
-namespace ty = mirage::type;
+namespace kn = yirage::kernel;
+namespace tb = yirage::threadblock;
+namespace ty = yirage::type;
 
-using mirage::transpiler::CodeKeeper;
-using mirage::transpiler::fmt;
-using mirage::transpiler::map;
+using yirage::transpiler::CodeKeeper;
+using yirage::transpiler::fmt;
+using yirage::transpiler::map;
 using std::string;
 
 namespace {
@@ -755,4 +755,4 @@ std::optional<NKICustomOPTranspileResult>
   return NKICustomOPTranspileResult{func_name, code.to_string()};
 }
 } // namespace nki_transpiler
-} // namespace mirage
+} // namespace yirage

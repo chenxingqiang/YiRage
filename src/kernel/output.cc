@@ -13,11 +13,11 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/kernel/operator.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
 std::vector<size_t> get_default_strides(DTensor const &A) {
@@ -62,7 +62,7 @@ KNOutputOp::KNOutputOp(Graph *_kgraph,
                        DTensor const &A,
                        std::vector<size_t> const &strides,
                        int3 _output_map)
-    : KNOperator(_kgraph, mirage::type::KN_OUTPUT_OP, A),
+    : KNOperator(_kgraph, yirage::type::KN_OUTPUT_OP, A),
       output_strides(strides), output_map(_output_map) {}
 
 KNOutputOp::~KNOutputOp() {}
@@ -75,7 +75,7 @@ KNOutputOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 bool KNOutputOp::fingerprint(void) {
   // This operator does not have a fingerprint
   return true;
@@ -83,4 +83,4 @@ bool KNOutputOp::fingerprint(void) {
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

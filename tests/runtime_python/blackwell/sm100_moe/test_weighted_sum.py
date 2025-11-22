@@ -25,7 +25,7 @@ for output_size in output_sizes:
     torch_topk_weights = F.softmax(topk_expert_score, dim=1, dtype=torch.float)
     output = torch.zeros(batch_size, output_size, device="cuda", dtype=torch.bfloat16)
         
-    # mpk impl
+    # ypk impl
     runtime_kernel_blackwell.mul_sum_add_sm100(x, residual, torch_topk_weights, output)
     # reference impl
     torch_out = x.to(torch.float) * torch_topk_weights.unsqueeze(-1)

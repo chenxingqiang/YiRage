@@ -1,8 +1,8 @@
-#include "mirage/nki_transpiler/helper_function.h"
+#include "yirage/nki_transpiler/helper_function.h"
 
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace nki_transpiler {
 
 std::string
@@ -120,4 +120,4 @@ HelperFunction tiled_matmul_accum_function() {
 }
 
 } // namespace nki_transpiler
-} // namespace mirage
+} // namespace yirage

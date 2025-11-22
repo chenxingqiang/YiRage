@@ -15,19 +15,19 @@
 #include <cuda_runtime_api.h>
 #include <omp.h>
 
-#include "mirage/kernel/graph.h"
-#include "mirage/search/search.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/transpiler/transpile.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/search/search.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/transpiler/transpile.h"
 
 #include "config.h"
 
 using std::cout, std::cerr, std::endl, std::string, std::vector, std::optional,
     std::nullopt, std::pair, std::array;
-using namespace mirage;
-namespace kn = mirage::kernel;
-namespace tb = mirage::threadblock;
-namespace trans = mirage::transpiler;
+using namespace yirage;
+namespace kn = yirage::kernel;
+namespace tb = yirage::threadblock;
+namespace trans = yirage::transpiler;
 
 template <typename T>
 inline T ceil_div(T a, T b) {
@@ -354,7 +354,7 @@ public:
   }
 
 private:
-  // Call `mirage::transpiler::Transpile` to transpile the graph, and return the
+  // Call `yirage::transpiler::Transpile` to transpile the graph, and return the
   // result
   trans::TranspileResult transpile() const {
     // Transpile
@@ -419,7 +419,7 @@ private:
         "-Xcompiler=-Wall",
         "-std=c++17",
         "-I" + env_config::get_cutlass_root() + "/include",
-        "-I" + env_config::get_mirage_runtime_root()};
+        "-I" + env_config::get_yirage_runtime_root()};
     string compile_command = "nvcc " + cu_file_path;
     for (string const &option : compile_options) {
       compile_command += " " + option;

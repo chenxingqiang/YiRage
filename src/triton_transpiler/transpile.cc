@@ -12,22 +12,22 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "mirage/triton_transpiler/transpile.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/threadblock/element_unary.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/transpiler/utils.h"
+#include "yirage/triton_transpiler/transpile.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/threadblock/element_unary.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/transpiler/utils.h"
 
 #define BLOCK_SIZE_X 128
 #define BLOCK_SIZE_Y 1
 #define CEIL_DIV(a, b) (((a) + (b)-1) / (b))
 
-namespace mirage {
+namespace yirage {
 namespace triton_transpiler {
 
-using mirage::transpiler::CodeKeeper;
-using mirage::transpiler::Combine;
-using mirage::transpiler::fmt;
+using yirage::transpiler::CodeKeeper;
+using yirage::transpiler::Combine;
+using yirage::transpiler::fmt;
 
 int TritonTranspiler::kernel_idx_counter = 0;
 
@@ -42,7 +42,7 @@ TritonTranspiler::TritonTranspiler(kernel::Graph const *_graph,
                                    TritonTranspilerConfig const &_config)
     : config(_config) {
   // Create a new kernel graph
-  using namespace mirage::type;
+  using namespace yirage::type;
   g = std::make_shared<kernel::Graph>();
   std::unordered_map<size_t, kernel::DTensor> dtensor_mapping;
 
@@ -320,7 +320,7 @@ TritonTranspileResult TritonTranspiler::transpile_ugraph() {
   std::vector<std::string> middle_tensor_shapes;
   std::vector<std::string> output_tensor_names;
 
-  using namespace mirage::type;
+  using namespace yirage::type;
   // Initialize input, output tensors and middle tensors
   for (kn::KNOperator *const op : g->operators) {
     if (op->op_type == KN_INPUT_OP) {
@@ -576,4 +576,4 @@ TritonTranspileResult transpile(kernel::Graph const *g,
 }
 
 } // namespace triton_transpiler
-} // namespace mirage
+} // namespace yirage

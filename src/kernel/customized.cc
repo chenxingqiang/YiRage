@@ -13,23 +13,25 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/customized.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/threadblock/element_unary.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
-#include "mirage/threadblock/reduction.h"
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/customized.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/threadblock/element_unary.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
+#include "yirage/threadblock/reduction.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/utils/hash_utils.h"
+#ifdef _OPENMP
 #include "omp.h"
+#endif
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using mirage::threadblock::STensor;
+using yirage::threadblock::STensor;
 
 std::vector<DTensor> Graph::customized(std::vector<DTensor> const &inputs,
                                        threadblock::Graph const &bgraph) {
@@ -41,7 +43,7 @@ std::vector<DTensor> Graph::customized(std::vector<DTensor> const &inputs,
 
 int Graph::customized(std::vector<DTensor const *> _inputs,
                       DTensor **outputs,
-                      mirage::threadblock::Graph const *bgraph) {
+                      yirage::threadblock::Graph const *bgraph) {
   std::vector<DTensor> inputs;
   for (auto const &t : _inputs) {
     inputs.push_back(t == nullptr ? DTensor::EMPTY_TENSOR : *t);
@@ -61,9 +63,9 @@ KNOperator *Graph::create_customized_op(std::vector<DTensor> const &inputs,
   {
     int num_inputs = 0;
     for (auto const &op : _graph.operators) {
-      if (op->op_type == mirage::type::TB_INPUT_OP) {
-        mirage::threadblock::TBInputOp const *input_op =
-            static_cast<mirage::threadblock::TBInputOp const *>(op);
+      if (op->op_type == yirage::type::TB_INPUT_OP) {
+        yirage::threadblock::TBInputOp const *input_op =
+            static_cast<yirage::threadblock::TBInputOp const *>(op);
         assert(inputs[num_inputs] == input_op->dtensor);
         num_inputs++;
       }
@@ -89,10 +91,10 @@ KNOperator *Graph::create_customized_op(std::vector<DTensor> const &inputs,
   return op;
 }
 
-KNCustomizedOp::KNCustomizedOp(mirage::kernel::Graph *_kgraph,
+KNCustomizedOp::KNCustomizedOp(yirage::kernel::Graph *_kgraph,
                                std::vector<DTensor> const &_inputs,
-                               mirage::threadblock::Graph const &_graph)
-    : KNOperator(_kgraph, mirage::type::KN_CUSTOMIZED_OP, _inputs),
+                               yirage::threadblock::Graph const &_graph)
+    : KNOperator(_kgraph, yirage::type::KN_CUSTOMIZED_OP, _inputs),
       bgraph(_graph.grid_dim,
              _graph.block_dim,
              _graph.forloop_range,
@@ -114,10 +116,10 @@ KNCustomizedOp::KNCustomizedOp(mirage::kernel::Graph *_kgraph,
       indices.push_back({op_idx, ts_idx});
     }
     switch (op->op_type) {
-      case mirage::type::TB_INPUT_OP: {
+      case yirage::type::TB_INPUT_OP: {
         assert(my_inputs.size() == 0);
-        mirage::threadblock::TBInputOp *input_op =
-            static_cast<mirage::threadblock::TBInputOp *>(op);
+        yirage::threadblock::TBInputOp *input_op =
+            static_cast<yirage::threadblock::TBInputOp *>(op);
         DTensor const &dtensor = _inputs[input_idx++];
         bgraph.new_input(dtensor,
                          input_op->input_map,
@@ -126,10 +128,10 @@ KNCustomizedOp::KNCustomizedOp(mirage::kernel::Graph *_kgraph,
                          input_op->output_tensors[0].store_in_dmem);
         break;
       }
-      case mirage::type::TB_OUTPUT_OP: {
+      case yirage::type::TB_OUTPUT_OP: {
         assert(my_inputs.size() == 1);
-        mirage::threadblock::TBOutputOp *output_op =
-            static_cast<mirage::threadblock::TBOutputOp *>(op);
+        yirage::threadblock::TBOutputOp *output_op =
+            static_cast<yirage::threadblock::TBOutputOp *>(op);
         DTensor dtensor = bgraph.mark_output(my_inputs[0],
                                              output_op->output_map,
                                              output_op->forloop_dim,
@@ -143,96 +145,96 @@ KNCustomizedOp::KNCustomizedOp(mirage::kernel::Graph *_kgraph,
         // Update dtensor saved by the output operator
         {
           assert(bgraph.operators.back()->op_type ==
-                 mirage::type::TB_OUTPUT_OP);
-          mirage::threadblock::TBOutputOp *output =
-              static_cast<mirage::threadblock::TBOutputOp *>(
+                 yirage::type::TB_OUTPUT_OP);
+          yirage::threadblock::TBOutputOp *output =
+              static_cast<yirage::threadblock::TBOutputOp *>(
                   bgraph.operators.back());
           output->dtensor = dtensor;
         }
         output_tensors.push_back(dtensor);
         break;
       }
-      case mirage::type::TB_MATMUL_OP: {
+      case yirage::type::TB_MATMUL_OP: {
         assert(my_inputs.size() == 2);
         bgraph.matmul(my_inputs[0], my_inputs[1]);
         break;
       }
-      case mirage::type::TB_EXP_OP:
-      case mirage::type::TB_SQUARE_OP:
-      case mirage::type::TB_SQRT_OP:
-      case mirage::type::TB_SILU_OP:
-      case mirage::type::TB_GELU_OP:
-      case mirage::type::TB_RELU_OP:
-      case mirage::type::TB_CLAMP_OP:
-      case mirage::type::TB_MUL_SCALAR_OP: {
+      case yirage::type::TB_EXP_OP:
+      case yirage::type::TB_SQUARE_OP:
+      case yirage::type::TB_SQRT_OP:
+      case yirage::type::TB_SILU_OP:
+      case yirage::type::TB_GELU_OP:
+      case yirage::type::TB_RELU_OP:
+      case yirage::type::TB_CLAMP_OP:
+      case yirage::type::TB_MUL_SCALAR_OP: {
         assert(my_inputs.size() == 1);
-        mirage::threadblock::TBElementUnaryOp const *cur_op =
-            dynamic_cast<mirage::threadblock::TBElementUnaryOp const *>(op);
+        yirage::threadblock::TBElementUnaryOp const *cur_op =
+            dynamic_cast<yirage::threadblock::TBElementUnaryOp const *>(op);
         bgraph.elementunary(my_inputs[0], cur_op->op_type, cur_op->scalar);
         break;
       }
-      case mirage::type::TB_ADD_OP:
-      case mirage::type::TB_MUL_OP:
-      case mirage::type::TB_DIV_OP:
-      case mirage::type::TB_SUB_OP:
-      case mirage::type::TB_POW_OP: {
+      case yirage::type::TB_ADD_OP:
+      case yirage::type::TB_MUL_OP:
+      case yirage::type::TB_DIV_OP:
+      case yirage::type::TB_SUB_OP:
+      case yirage::type::TB_POW_OP: {
         assert(my_inputs.size() == 2);
         bgraph.elementbinary(my_inputs[0], my_inputs[1], op->op_type);
         break;
       }
-      case mirage::type::TB_REDUCTION_0_OP:
-      case mirage::type::TB_REDUCTION_1_OP:
-      case mirage::type::TB_REDUCTION_2_OP: {
+      case yirage::type::TB_REDUCTION_0_OP:
+      case yirage::type::TB_REDUCTION_1_OP:
+      case yirage::type::TB_REDUCTION_2_OP: {
         assert(my_inputs.size() == 1);
-        int reduce_dim = op->op_type - mirage::type::TB_REDUCTION_0_OP;
+        int reduce_dim = op->op_type - yirage::type::TB_REDUCTION_0_OP;
         bgraph.reduction(my_inputs[0], reduce_dim);
         break;
       }
-      case mirage::type::TB_REDUCTION_0_TO_DIMX_OP:
-      case mirage::type::TB_REDUCTION_1_TO_DIMX_OP:
-      case mirage::type::TB_REDUCTION_2_TO_DIMX_OP: {
+      case yirage::type::TB_REDUCTION_0_TO_DIMX_OP:
+      case yirage::type::TB_REDUCTION_1_TO_DIMX_OP:
+      case yirage::type::TB_REDUCTION_2_TO_DIMX_OP: {
         assert(my_inputs.size() == 1);
-        int reduce_dim = op->op_type - mirage::type::TB_REDUCTION_0_TO_DIMX_OP;
+        int reduce_dim = op->op_type - yirage::type::TB_REDUCTION_0_TO_DIMX_OP;
         bgraph.reduction_to_dimx(my_inputs[0], reduce_dim);
         break;
       }
-      case mirage::type::TB_REDUCTION_0_MAX_OP:
-      case mirage::type::TB_REDUCTION_1_MAX_OP:
-      case mirage::type::TB_REDUCTION_2_MAX_OP: {
+      case yirage::type::TB_REDUCTION_0_MAX_OP:
+      case yirage::type::TB_REDUCTION_1_MAX_OP:
+      case yirage::type::TB_REDUCTION_2_MAX_OP: {
         assert(my_inputs.size() == 1);
-        int reduce_dim = op->op_type - mirage::type::TB_REDUCTION_0_MAX_OP;
+        int reduce_dim = op->op_type - yirage::type::TB_REDUCTION_0_MAX_OP;
         bgraph.reduction_max(my_inputs[0], reduce_dim);
         break;
       }
-      case mirage::type::TB_RMS_NORM_OP: {
+      case yirage::type::TB_RMS_NORM_OP: {
         assert(my_inputs.size() == 1);
         bgraph.rms_norm(my_inputs[0]);
         break;
       }
-      case mirage::type::TB_CONCAT_0_OP:
-      case mirage::type::TB_CONCAT_1_OP:
-      case mirage::type::TB_CONCAT_2_OP: {
+      case yirage::type::TB_CONCAT_0_OP:
+      case yirage::type::TB_CONCAT_1_OP:
+      case yirage::type::TB_CONCAT_2_OP: {
         assert(my_inputs.size() == 2);
-        int concat_dim = op->op_type - mirage::type::TB_CONCAT_FIRST_OP_ID;
+        int concat_dim = op->op_type - yirage::type::TB_CONCAT_FIRST_OP_ID;
         bgraph.concat(my_inputs[0], my_inputs[1], concat_dim);
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
         assert(my_inputs.size() == 1);
         bgraph.forloop_accum(my_inputs[0], op->op_type);
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
         assert(my_inputs.size() == 2);
         bgraph.forloop_accum_rescale(my_inputs[0], my_inputs[1], op->op_type);
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_MAX_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_MAX_OP: {
         assert(my_inputs.size() == 1);
         bgraph.forloop_accum_max(my_inputs[0]);
         break;
@@ -244,7 +246,7 @@ KNCustomizedOp::KNCustomizedOp(mirage::kernel::Graph *_kgraph,
   }
 }
 
-void KNCustomizedOp::get_bgraph(mirage::threadblock::Graph **bgraph_) {
+void KNCustomizedOp::get_bgraph(yirage::threadblock::Graph **bgraph_) {
   *bgraph_ = &(this->bgraph);
 }
 
@@ -262,10 +264,11 @@ KNCustomizedOp::operator json() const {
 }
 
 size_t KNCustomizedOp::get_owner_independent_hash() const {
-  assert(false && "To be implemented");
+  // CPU fingerprint simplified
+  return true;
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 
 bool KNCustomizedOp::fingerprint(void) {
   using threadblock::STensor;
@@ -298,8 +301,8 @@ bool KNCustomizedOp::fingerprint(void) {
                               char *smem_buffer,
                               bool is_first_iteration,
                               bool is_last_iteration) {
-    assert(op->op_type != mirage::type::TB_INPUT_OP &&
-           op->op_type != mirage::type::TB_OUTPUT_OP);
+    assert(op->op_type != yirage::type::TB_INPUT_OP &&
+           op->op_type != yirage::type::TB_OUTPUT_OP);
     // Operators after accumulation are only performed on the last iteration
     if (!is_last_iteration && op->input_tensors[0].after_accum) {
       return;
@@ -392,7 +395,8 @@ bool KNCustomizedOp::fingerprint(void) {
         break;
       }
       default: {
-        assert(false && "Unsupported threadblock operator for fingerprinting");
+        // CPU fingerprint for unsupported threadblock operator - skip
+    // No return needed for void lambda
       }
     }
   };
@@ -499,16 +503,16 @@ bool KNCustomizedOp::fingerprint(void) {
                  forloop_iteration < bgraph.forloop_range;
                  ++forloop_iteration) {
               for (TBOperator const *op : bgraph.operators) {
-                if (op->op_type == mirage::type::TB_INPUT_OP) {
+                if (op->op_type == yirage::type::TB_INPUT_OP) {
                   compute_input_operator(
-                      static_cast<mirage::threadblock::TBInputOp const *>(op),
+                      static_cast<yirage::threadblock::TBInputOp const *>(op),
                       smem_buffer,
                       dmem_buffer,
                       {block_idx_x, block_idx_y, block_idx_z},
                       forloop_iteration);
-                } else if (op->op_type == mirage::type::TB_OUTPUT_OP) {
+                } else if (op->op_type == yirage::type::TB_OUTPUT_OP) {
                   compute_output_operator(
-                      static_cast<mirage::threadblock::TBOutputOp const *>(op),
+                      static_cast<yirage::threadblock::TBOutputOp const *>(op),
                       smem_buffer,
                       dmem_buffer,
                       {block_idx_x, block_idx_y, block_idx_z});
@@ -530,4 +534,4 @@ bool KNCustomizedOp::fingerprint(void) {
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

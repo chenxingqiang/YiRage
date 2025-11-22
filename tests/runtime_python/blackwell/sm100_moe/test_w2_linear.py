@@ -52,7 +52,7 @@ for reduction_size in reduction_sizes:
                 current_hidden_states += current_residual
             torch_out[top_x, idx] = current_hidden_states
 
-        # mpk impl
+        # ypk impl
         mpk_routing_indices = torch.zeros((num_experts, batch_size), device="cuda", dtype=torch.int32)
         mpk_expert_mask = torch.zeros((num_experts+1), device="cuda", dtype=torch.int32)
         

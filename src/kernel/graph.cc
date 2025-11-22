@@ -13,17 +13,17 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/graph.h"
-#include "mirage/config.h"
-#include "mirage/kernel/customized.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/task_register.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/config.h"
+#include "yirage/kernel/customized.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/task_register.h"
+#include "yirage/utils/hash_utils.h"
 
 #include <algorithm>
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
 Graph::Graph(dim3 _gpu_dim, bool _disable_fingerprint)
@@ -49,7 +49,7 @@ size_t Graph::pair_hash::operator()(std::pair<int, int> const &p) const {
 int Graph::get_input_dtensors(DTensor **inputs) const {
   int num_inputs = 0;
   for (auto const &op : this->operators) {
-    if (op->op_type == mirage::type::KN_INPUT_OP) {
+    if (op->op_type == yirage::type::KN_INPUT_OP) {
       assert(op->output_tensors.size() == 1);
       inputs[num_inputs++] = &op->output_tensors[0];
     }
@@ -60,7 +60,7 @@ int Graph::get_input_dtensors(DTensor **inputs) const {
 int Graph::get_num_input_dtensors() const {
   int num_inputs = 0;
   for (auto const &op : this->operators) {
-    if (op->op_type == mirage::type::KN_INPUT_OP) {
+    if (op->op_type == yirage::type::KN_INPUT_OP) {
       num_inputs++;
     }
   }
@@ -70,7 +70,7 @@ int Graph::get_num_input_dtensors() const {
 int Graph::get_num_output_dtensors() const {
   int num_outputs = 0;
   for (auto const &op : this->operators) {
-    if (op->op_type == mirage::type::KN_OUTPUT_OP) {
+    if (op->op_type == yirage::type::KN_OUTPUT_OP) {
       num_outputs++;
     }
   }
@@ -82,7 +82,7 @@ int Graph::get_input_dtensor_shape_and_stride(DTensor const *input,
                                               int *dims) const {
   for (auto const &op : this->operators) {
     if (op == input->owner_op) {
-      assert(op->op_type == mirage::type::KN_INPUT_OP &&
+      assert(op->op_type == yirage::type::KN_INPUT_OP &&
              "input is not an KNInputOp");
       KNInputOp *input_op = static_cast<KNInputOp *>(op);
       int num_dims = (int)input_op->input_strides.size();
@@ -106,12 +106,12 @@ bool Graph::can_allocate(DTensor const &tensor,
   }
 
   size_t data_size = ((tensor.data_size() + 15) & ~15);
-  if (dmem_data_offset + data_size > mirage::config::MAX_DMEM_SIZE) {
+  if (dmem_data_offset + data_size > yirage::config::MAX_DMEM_SIZE) {
     return false;
   }
   if (allocate_fingerprint) {
     size_t fp_size = ((tensor.fingerprint_size() + 15) & ~15);
-    if (dmem_fp_offset + fp_size > mirage::config::MAX_DMEM_FP_SIZE) {
+    if (dmem_fp_offset + fp_size > yirage::config::MAX_DMEM_FP_SIZE) {
       return false;
     }
   }
@@ -126,10 +126,10 @@ bool Graph::can_allocate(size_t data_size_in_bytes,
     return true;
   }
 
-  if (dmem_data_offset + data_size_in_bytes > mirage::config::MAX_DMEM_SIZE) {
+  if (dmem_data_offset + data_size_in_bytes > yirage::config::MAX_DMEM_SIZE) {
     return false;
   }
-  if (dmem_fp_offset + fp_size_in_bytes > mirage::config::MAX_DMEM_FP_SIZE) {
+  if (dmem_fp_offset + fp_size_in_bytes > yirage::config::MAX_DMEM_FP_SIZE) {
     return false;
   }
   return true;
@@ -208,7 +208,7 @@ void from_json(json const &j, Graph &g) {
     jop.at("op_type").get_to(op_type);
     switch (op_type) {
       case type::KNOperatorType::KN_INPUT_OP: {
-        int num_dim, dim[mirage::config::MAX_TENSOR_DIMS];
+        int num_dim, dim[yirage::config::MAX_TENSOR_DIMS];
         type::DataType data_type;
         layout::DmemLayout layout;
         std::vector<size_t> input_strides;
@@ -334,7 +334,7 @@ size_t Graph::get_owner_independent_hash() const {
 }
 
 // Persistent kernel functions
-using namespace mirage::runtime;
+using namespace yirage::runtime;
 void Graph::attach_torch_tensor(DTensor const *input,
                                 void *torch_data_ptr,
                                 char const *name) {
@@ -640,10 +640,10 @@ void Graph::register_task(char const *task_type, std::vector<int> params) {
     task_config[op] =
         std::make_tuple(3, 1, TASK_MOE_MUL_SUM_ADD_SM100, variant_id);
   } else {
-    printf("Unsupported task name: %s\n", name);
+    printf("Unsupported task name: %s\n", name.c_str());
     assert(false && "Unsupported task type");
   }
 }
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

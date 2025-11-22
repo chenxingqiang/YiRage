@@ -13,14 +13,14 @@
  * limitations under the License.
  */
 
-#include "mirage/transpiler/transpile.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/threadblock/element_unary.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/transpiler/transpile.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/threadblock/element_unary.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/transpiler/transpiler.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 template <typename DT>
@@ -33,7 +33,7 @@ DT get_tensor_in_new_graph(std::unordered_map<size_t, DT> mapping,
 // return the guid of the output tensors whose owner should be substituted
 std::vector<size_t>
     get_tensors_replace_for_online_softmax(kernel::Graph const *g) {
-  using namespace mirage::type;
+  using namespace yirage::type;
   std::vector<size_t> ret;
 
   for (auto const &op : g->operators) {
@@ -50,7 +50,7 @@ std::vector<size_t>
           continue;
         }
         auto output_tensor = bop->output_tensors[0];
-        std::vector<mirage::threadblock::TBOperator *> consumers;
+        std::vector<yirage::threadblock::TBOperator *> consumers;
         for (auto const &bop2 : customized_op->bgraph.operators) {
           for (auto const &input_tensor : bop2->input_tensors) {
             if (input_tensor.guid == output_tensor.guid) {
@@ -99,7 +99,7 @@ std::vector<size_t>
 
 // Rewrite the graph for online softmax, return the original graph if no needed
 kernel::Graph const *rewrite_graph_for_online_softmax(kernel::Graph const *g) {
-  using namespace mirage::type;
+  using namespace yirage::type;
   auto tensors_replace = get_tensors_replace_for_online_softmax(g);
   if (tensors_replace.size() == 0) {
     // No need to rewrite the graph
@@ -245,7 +245,7 @@ kernel::Graph const *rewrite_graph_for_online_softmax(kernel::Graph const *g) {
                               bop->output_tensors[0].guid) !=
                     tensors_replace.end()) {
                   // Find the operators that need to be replaced
-                  mirage::threadblock::TBOperator *forloop_accum_op,
+                  yirage::threadblock::TBOperator *forloop_accum_op,
                       *forloop_accum_sum_op, *mat_mul_op;
                   forloop_accum_op = forloop_accum_sum_op = mat_mul_op =
                       nullptr;
@@ -468,8 +468,8 @@ Transpiler::Transpiler(kernel::Graph const *_graph,
     throw std::runtime_error("Unsupported target compute capability");
   }
 
-  // using mirage::type namespace to simplify code
-  using namespace mirage::type;
+  // using yirage::type namespace to simplify code
+  using namespace yirage::type;
   // Rewrite the graph for online softmax
   kernel::Graph const *rewritten_graph =
       config.enable_online_softmax ? rewrite_graph_for_online_softmax(_graph)
@@ -800,4 +800,4 @@ TranspileResult
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

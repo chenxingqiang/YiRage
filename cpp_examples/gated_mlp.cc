@@ -1,8 +1,8 @@
-#include "mirage/kernel/graph.h"
-#include "mirage/search/search.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/search/search.h"
+#include "yirage/threadblock/graph.h"
 
-using namespace mirage;
+using namespace yirage;
 
 int main(int argc, char **argv) {
   kernel::Graph ref_graph;
@@ -29,7 +29,7 @@ int main(int argc, char **argv) {
     }
     printf("[cudnn kernel graph] Total runtime = %.4lfms\n", total_runtime);
   }
-  mirage::cpu::CTensor ref_fp = ref_graph.operators.back()
+  yirage::cpu::CTensor ref_fp = ref_graph.operators.back()
                                     ->output_tensors[0]
                                     .copy_fingerprint_to_ctensor();
 
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
   kernel::DTensor W3 = graph.new_input(
       {4096, 4096}, {4096, 1}, type::DT_FLOAT16, layout::DmemColumnMajor);
   {
-    namespace tb = mirage::threadblock;
+    namespace tb = yirage::threadblock;
     dim3 grid_dim = {64, 1, 1}, block_dim = {128, 1, 1};
     tb::Graph bgraph(grid_dim, block_dim, 64, 64);
     tb::STensor bX = bgraph.new_input(X, {-1, -1, -1}, 1, layout::SmemRowMajor);

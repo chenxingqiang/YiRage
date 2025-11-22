@@ -1,7 +1,7 @@
-#include "mirage/search/op_utils.h"
-#include "mirage/utils/containers.h"
+#include "yirage/search/op_utils.h"
+#include "yirage/utils/containers.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 bool is_binary(type::TBOperatorType op) {
@@ -299,4 +299,4 @@ size_t count_op_of_type(type::TBOperatorType op_type,
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

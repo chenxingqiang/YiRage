@@ -21,7 +21,7 @@ for output_size in output_sizes:
         input = torch.randn((batch_size, num_topk, output_size*2), device="cuda", dtype=torch.bfloat16, generator=g)
         output = torch.empty((batch_size, num_topk, output_size), device="cuda", dtype=torch.bfloat16)
 
-        # MPK impl
+        # YPK impl
         runtime_kernel_blackwell.silu_mul(input, output)
 
         # Reference impl 

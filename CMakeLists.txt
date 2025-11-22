@@ -9,12 +9,14 @@ else()
   endif()
 endif()
 
+# Determine which languages to enable based on backends
+set(PROJECT_LANGUAGES C CXX)
 if (NOT "${USE_CUDA}" STREQUAL "OFF")
-  project(MIRAGE LANGUAGES C CXX CUDA)
-else()
-  message(STATUS "USE_CUDA is OFF, will not use CUDA")
-  project(MIRAGE LANGUAGES C CXX)
+  list(APPEND PROJECT_LANGUAGES CUDA)
+  message(STATUS "CUDA backend enabled")
 endif()
+
+project(YIRAGE LANGUAGES ${PROJECT_LANGUAGES})
 
 #include directories
 include_directories(${CMAKE_INCLUDE_PATH})
@@ -28,23 +30,71 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_LIST_DIR}/cmake)
 set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89;90")
 #set(CUTLASS_NVCC_ARCHS "80;86")
 
-file(GLOB_RECURSE MIRAGE_SRCS
+file(GLOB_RECURSE YIRAGE_SRCS
   src/*.cc
 )
 
-if (${USE_CUDA} STREQUAL "OFF")
-  file(GLOB_RECURSE MIRAGE_EXCLUDE_SRCS
-    src/transpiler/*.cc
-  )
+# Add transpiler stub for non-CUDA builds
+list(APPEND YIRAGE_SRCS src/transpiler_stub.cc)
 
-  list(REMOVE_ITEM MIRAGE_SRCS ${MIRAGE_EXCLUDE_SRCS})
+# Collect backend-specific sources
+file(GLOB BACKEND_SRCS src/backend/*.cc)
+list(APPEND YIRAGE_SRCS ${BACKEND_SRCS})
+
+# Collect kernel optimizer sources
+file(GLOB_RECURSE KERNEL_OPT_SRCS
+  src/kernel/common/*.cc
+  src/kernel/cuda/*.cc
+  src/kernel/cpu/*.cc
+  src/kernel/mps/*.cc
+  src/kernel/triton/*.cc
+  src/kernel/nki/*.cc
+  src/kernel/cudnn/*.cc
+  src/kernel/mkl/*.cc
+)
+list(APPEND YIRAGE_SRCS ${KERNEL_OPT_SRCS})
+
+# Collect search strategy sources
+file(GLOB SEARCH_COMMON_SRCS src/search/common/*.cc)
+file(GLOB SEARCH_STRATEGY_SRCS src/search/backend_strategies/*.cc)
+list(APPEND YIRAGE_SRCS ${SEARCH_COMMON_SRCS})
+list(APPEND YIRAGE_SRCS ${SEARCH_STRATEGY_SRCS})
+
+# Handle CUDA-specific sources
+if (NOT "${USE_CUDA}" STREQUAL "OFF")
+  # CUDA enabled: include .cu files and transpiler
+  file(GLOB_RECURSE YIRAGE_CUDA_SRCS
+    src/*.cu
+  )
+  list(APPEND YIRAGE_SRCS ${YIRAGE_CUDA_SRCS})
+  message(STATUS "CUDA backend enabled, including .cu files and transpiler")
+else()
+  # CUDA disabled: exclude transpiler, triton_transpiler, and nki_transpiler
+  file(GLOB_RECURSE YIRAGE_EXCLUDE_SRCS
+    src/transpiler/*.cc
+    src/triton_transpiler/*.cc
+    src/nki_transpiler/*.cc
+  )
+  list(REMOVE_ITEM YIRAGE_SRCS ${YIRAGE_EXCLUDE_SRCS})
+  message(STATUS "CUDA backend disabled, excluding transpilers")
   
-  message(STATUS "MIRAGE_SRCS: ${MIRAGE_SRCS}")
+  # Keep all kernel/*.cc files as they contain backend-agnostic code
+  # The CUDA-specific parts are protected by #ifdef
 endif()
 
-file(GLOB_RECURSE MIRAGE_CUDA_SRCS
-  src/*.cu
-)
+# Handle CPU backend
+if (NOT "${USE_CPU}" STREQUAL "OFF")
+  message(STATUS "CPU backend enabled")
+endif()
+
+# Handle other backends
+if (NOT "${USE_MPS}" STREQUAL "OFF")
+  message(STATUS "MPS backend enabled")
+endif()
+
+if (NOT "${USE_NKI}" STREQUAL "OFF")
+  message(STATUS "NKI backend enabled")
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17" SUPPORT_CXX17)
@@ -65,10 +115,18 @@ endif()
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
   message("Build in Debug mode")
   set(CMAKE_CUDA_FLAGS "-O0 -g -Xcompiler=-fPIC ${CMAKE_CUDA_FLAGS}")
-  set(CMAKE_CXX_FLAGS "-fopenmp -O0 -g -Wall -fPIC ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "-O0 -g -Wall -fPIC ${CMAKE_CXX_FLAGS}")
 else()
   set(CMAKE_CUDA_FLAGS "-O2 -Xcompiler=-fPIC ${CMAKE_CUDA_FLAGS}")
-  set(CMAKE_CXX_FLAGS "-fopenmp -O2 -Wall -fPIC ${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "-O2 -Wall -fPIC ${CMAKE_CXX_FLAGS}")
+endif()
+
+# Add OpenMP flags only if enabled and available
+if (NOT "${USE_OPENMP}" STREQUAL "OFF")
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+  endif()
 endif()
 
 #set CUDA
@@ -76,11 +134,11 @@ if (NOT "${USE_CUDA}" STREQUAL "OFF")
   include(cmake/cuda.cmake)
   find_cuda(${USE_CUDA})
   if (CUDA_FOUND)
-    list(APPEND MIRAGE_SRCS ${MIRAGE_CUDA_SRCS})
+    list(APPEND YIRAGE_SRCS ${YIRAGE_CUDA_SRCS})
     include_directories(${CUDA_INCLUDE_DIRS})
     message(STATUS "CUDA_INCLUDE_DIR=" ${CUDA_INCLUDE_DIRS})
-    list(APPEND MIRAGE_LINK_LIBS ${CUDA_CUDART_LIBRARY})
-    list(APPEND MIRAGE_LINK_LIBS ${CUDA_CUDA_LIBRARY})
+    list(APPEND YIRAGE_LINK_LIBS ${CUDA_CUDART_LIBRARY})
+    list(APPEND YIRAGE_LINK_LIBS ${CUDA_CUDA_LIBRARY})
   else()
     message(FATAL_ERROR "Cannot find CUDA, USE_CUDA=" ${USE_CUDA})
   endif(CUDA_FOUND)
@@ -91,7 +149,7 @@ set(CUTLASS_DIR ${PROJECT_SOURCE_DIR}/deps/cutlass)
 include_directories(deps/cutlass/include)
 include_directories(deps/cutlass/tools/util/include)
 
-#include_directories(${MIRAGE_INCLUDE_DIRS})
+#include_directories(${YIRAGE_INCLUDE_DIRS})
 
 #set Z3
 if(Z3_CXX_INCLUDE_DIRS AND Z3_LIBRARIES)
@@ -104,21 +162,21 @@ else()
   message(STATUS "Z3_DIR: ${Z3_DIR}")
 endif()
 include_directories(${Z3_CXX_INCLUDE_DIRS})
-#target_link_libraries(mirage_runtime PUBLIC ${Z3_LIBRARIES})
-list(APPEND MIRAGE_LINK_LIBS ${Z3_LIBRARIES})
+#target_link_libraries(yirage_runtime PUBLIC ${Z3_LIBRARIES})
+list(APPEND YIRAGE_LINK_LIBS ${Z3_LIBRARIES})
 
 add_subdirectory(deps/json)
-list(APPEND MIRAGE_LINK_LIBS nlohmann_json::nlohmann_json)
+list(APPEND YIRAGE_LINK_LIBS nlohmann_json::nlohmann_json)
 
 link_directories(${CMAKE_SOURCE_DIR}/build/release)
-list(APPEND MIRAGE_LINK_LIBS abstract_subexpr)
+list(APPEND YIRAGE_LINK_LIBS abstract_subexpr)
 
 #add_subdirectory(deps/z3 z3 EXCLUDE_FROM_ALL)
 #include_directories(deps/z3/src/api/c++)
 #include_directories(deps/z3/src/api)
-#list(APPEND MIRAGE_LINK_LIBS z3)
+#list(APPEND YIRAGE_LINK_LIBS z3)
 
-add_library(mirage_runtime ${MIRAGE_SRCS})
+add_library(yirage_runtime ${YIRAGE_SRCS})
 
 # Note(zhihao): CUDA_SEPARABLE_COMPILATION is non-compatible with
 # cython's installation, since enabling separable compilation
@@ -126,7 +184,7 @@ add_library(mirage_runtime ${MIRAGE_SRCS})
 # cmake_device_link.o, and cython's installation cannot
 # automatically link to that file, resulting in:
 # undefined symbol: __cudaRegisterLinkedBinary_...
-#set_target_properties(mirage_runtime
+#set_target_properties(yirage_runtime
 #  PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
 
 # Ensure Rust is installed
@@ -156,7 +214,7 @@ endif()
 
 set(ABSTRACT_SUBEXPR_LIBRARIES ${PROJECT_SOURCE_DIR}/build/abstract_subexpr/release/libabstract_subexpr.so)
 set(FORMAL_VERIFIER_LIBRARIES ${PROJECT_SOURCE_DIR}/build/formal_verifier/release/libformal_verifier.so)
-list(APPEND MIRAGE_LINK_LIBS "-lstdc++fs")
+list(APPEND YIRAGE_LINK_LIBS "-lstdc++fs")
 
 #set RUST
 if(ABSTRACT_SUBEXPR_LIB AND ABSTRACT_SUBEXPR_LIBRARIES)
@@ -166,7 +224,7 @@ else()
   message(STATUS "ABSTRACT_SUBEXPR_LIB not set, will build it")
 endif()
 include_directories(${ABSTRACT_SUBEXPR_LIB})
-list(APPEND MIRAGE_LINK_LIBS ${ABSTRACT_SUBEXPR_LIBRARIES})
+list(APPEND YIRAGE_LINK_LIBS ${ABSTRACT_SUBEXPR_LIBRARIES})
 
 if(FORMAL_VERIFIER_LIB AND FORMAL_VERIFIER_LIBRARIES)
   message(STATUS "FORMAL_VERIFIER_LIB: ${FORMAL_VERIFIER_LIB}")
@@ -175,32 +233,90 @@ else()
   message(STATUS "FORMAL_VERIFIER_LIB not set, will build it")
 endif()
 include_directories(${FORMAL_VERIFIER_LIB})
-list(APPEND MIRAGE_LINK_LIBS ${FORMAL_VERIFIER_LIBRARIES})
+list(APPEND YIRAGE_LINK_LIBS ${FORMAL_VERIFIER_LIBRARIES})
 
-set_target_properties(mirage_runtime PROPERTIES CUDA_ARCHITECTURES "75;80;86;89;90")
+set_target_properties(yirage_runtime PROPERTIES CUDA_ARCHITECTURES "75;80;86;89;90")
 
-target_compile_features(mirage_runtime PUBLIC cxx_std_17)
+target_compile_features(yirage_runtime PUBLIC cxx_std_17)
 
+# Backend compile definitions - multiple backends can be enabled
 if (NOT "${USE_CUDA}" STREQUAL "OFF")
-  target_compile_definitions(mirage_runtime PUBLIC MIRAGE_BACKEND_USE_CUDA)
-  target_compile_definitions(mirage_runtime PUBLIC MIRAGE_FINGERPRINT_USE_CUDA)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)  # Backward compatibility
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CUDA)
+else()
+  # When CUDA is disabled, use CPU fingerprint
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+endif()
+
+if (NOT "${USE_CPU}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CPU_ENABLED)
+endif()
+
+if (NOT "${USE_MPS}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MPS_ENABLED)
+endif()
+
+if (NOT "${USE_CUDNN}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDNN_ENABLED)
+endif()
+
+if (NOT "${USE_MKL}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MKL_ENABLED)
+endif()
+
+if (NOT "${USE_MKLDNN}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MKLDNN_ENABLED)
+endif()
+
+if (NOT "${USE_OPENMP}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_OPENMP_ENABLED)
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime OpenMP::OpenMP_CXX)
+  endif()
+endif()
+
+if (NOT "${USE_XEON}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_XEON_ENABLED)
 endif()
 
 if (NOT "${USE_NKI}" STREQUAL "OFF")
-  target_compile_definitions(mirage_runtime PUBLIC MIRAGE_BACKEND_USE_NKI)
-  target_compile_definitions(mirage_runtime PUBLIC MIRAGE_FINGERPRINT_USE_CPU)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_NKI_ENABLED)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_NKI)  # Backward compatibility
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+endif()
+
+if (NOT "${USE_TRITON}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_TRITON_ENABLED)
+endif()
+
+if (NOT "${USE_MHA}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MHA_ENABLED)
+endif()
+
+if (NOT "${USE_NNPACK}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_NNPACK_ENABLED)
+endif()
+
+if (NOT "${USE_OPT_EINSUM}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_OPT_EINSUM_ENABLED)
+endif()
+
+if (NOT "${USE_CUSPARSELT}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUSPARSELT_ENABLED)
 endif()
 
 if (NOT "${USE_FORMAL_VERIFIER}" STREQUAL "OFF")
-  target_compile_definitions(mirage_runtime PUBLIC MIRAGE_USE_FORMAL_VERIFIER)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_USE_FORMAL_VERIFIER)
 endif()
 
-target_link_libraries(mirage_runtime ${MIRAGE_LINK_LIBS})
+target_link_libraries(yirage_runtime ${YIRAGE_LINK_LIBS})
 
-target_include_directories(mirage_runtime
+target_include_directories(yirage_runtime
   PUBLIC ${PROJECT_SOURCE_DIR}/include)
 
-install(TARGETS mirage_runtime
+install(TARGETS yirage_runtime
     LIBRARY DESTINATION lib)
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include
@@ -216,7 +332,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Multi-Query Attention Incremental Decoding
@@ -227,7 +343,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Multi-Query Attention Speculative Decoding
@@ -238,7 +354,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Multi-Query Attention Prefilling
@@ -249,7 +365,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Group-Query Attention Incremental Decoding
@@ -260,7 +376,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Group-Query Attention Spec Decoding
@@ -271,7 +387,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Group-Query Attention Prefilling
@@ -282,7 +398,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Multi-Head Attention Incremental Decoding
@@ -293,7 +409,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Multi-Head Attention Speculative Decoding
@@ -304,7 +420,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Multi-Head Attention Prefilling
@@ -315,7 +431,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # LoRA
@@ -326,7 +442,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # MLP
@@ -337,7 +453,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # MoE
@@ -348,7 +464,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # RMS
@@ -359,7 +475,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # GatedMLP
@@ -370,7 +486,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # Chameleon
@@ -381,7 +497,7 @@ if ("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
 # egg_tests
@@ -392,15 +508,15 @@ if("${BUILD_CPP_EXAMPLES}" STREQUAL "ON")
   add_executable(${CPP_EXAMPLES_BIN} ${CPP_EXAMPLES_SRCS})
   set_target_properties(${CPP_EXAMPLES_BIN}
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CPP_EXAMPLES_DIR})
-  target_link_libraries(${CPP_EXAMPLES_BIN} mirage_runtime)
+  target_link_libraries(${CPP_EXAMPLES_BIN} yirage_runtime)
 endif()
 
-option(MIRAGE_BUILD_UNIT_TEST "build unit tests" OFF)
+option(YIRAGE_BUILD_UNIT_TEST "build unit tests" OFF)
 
-if (MIRAGE_BUILD_UNIT_TEST)
+if (YIRAGE_BUILD_UNIT_TEST)
   enable_testing()
   add_subdirectory(tests)
   if(CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
-  target_link_libraries(mirage_runtime stdc++fs)
+  target_link_libraries(yirage_runtime stdc++fs)
   endif()
 endif()

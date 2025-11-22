@@ -1,13 +1,13 @@
-import mirage as mi
+import yirage as yr
 import numpy as np
 import torch
 
 if __name__ == "__main__":
-    graph = mi.new_kernel_graph()
-    Q = graph.new_input(dims=(2, 256, 64), dtype=mi.float16)
-    K = graph.new_input(dims=(2, 64, 1024), dtype=mi.float16)
-    V = graph.new_input(dims=(2, 1024, 64), dtype=mi.float16)
-    tbgraph1 = mi.new_threadblock_graph(
+    graph = yr.new_kernel_graph()
+    Q = graph.new_input(dims=(2, 256, 64), dtype=yr.float16)
+    K = graph.new_input(dims=(2, 64, 1024), dtype=yr.float16)
+    V = graph.new_input(dims=(2, 1024, 64), dtype=yr.float16)
+    tbgraph1 = yr.new_threadblock_graph(
         grid_dim=(2, 1, 16), block_dim=(128, 1, 1), forloop_range=16, reduction_dimx=64
     )
     bQ = tbgraph1.new_input(dtensor=Q, input_map=(0, -1, 1), forloop_dim=-1)
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     tbgraph1.new_output(stensor=bO2, output_map=(0, 2, 1))
     O = graph.customized([Q, K, V], tbgraph1)
 
-    tbgraph2 = mi.new_threadblock_graph(
+    tbgraph2 = yr.new_threadblock_graph(
         grid_dim=(2, 1, 1), block_dim=(128, 1, 1), forloop_range=1, reduction_dimx=64
     )
     bA = tbgraph2.new_input(dtensor=O[0], input_map=(0, 1, -1), forloop_dim=-1)
@@ -52,7 +52,7 @@ if __name__ == "__main__":
     tR = tO1 / tO2
 
     input_strides = [tensor.stride() for tensor in input_tensors]
-    p = mi.generate_cuda_program(
+    p = yr.generate_cuda_program(
         graph.cygraph,
         target_cc=86,
         input_strides=input_strides,

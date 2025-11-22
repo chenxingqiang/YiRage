@@ -15,6 +15,6 @@
 
 #include "cutlass/fast_math.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {} // namespace threadblock
-} // namespace mirage
+} // namespace yirage

@@ -13,11 +13,11 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/matmul.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
+#include "yirage/threadblock/matmul.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 STensor Graph::matmul(STensor const &A, STensor const &B) {
@@ -53,7 +53,7 @@ TBOperator *Graph::create_matmul_op(STensor const &A, STensor const &B) {
   TBMatmulOp *op = new TBMatmulOp(this, A, B);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -62,7 +62,7 @@ TBOperator *Graph::create_matmul_op(STensor const &A, STensor const &B) {
 }
 
 TBMatmulOp::TBMatmulOp(Graph *_graph, STensor const &A, STensor const &B)
-    : TBOperator(_graph, mirage::type::TB_MATMUL_OP, A, B) {
+    : TBOperator(_graph, yirage::type::TB_MATMUL_OP, A, B) {
   STensor C;
   assert(A.num_dims == B.num_dims);
   // Check that this is not a TB-level batch matmul
@@ -72,7 +72,7 @@ TBMatmulOp::TBMatmulOp(Graph *_graph, STensor const &A, STensor const &B)
   }
   // Currently only support row-major output
   // to be consistent with cutlass
-  C.layout = mirage::layout::SmemRowMajor;
+  C.layout = yirage::layout::SmemRowMajor;
   C.num_dims = A.num_dims;
   for (int i = 0; i < C.num_dims; i++) {
     C.dim[i] = A.dim[i];
@@ -99,4 +99,4 @@ TBMatmulOp::operator json() const {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

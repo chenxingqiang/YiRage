@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import argparse
 import os
 import torch
@@ -13,10 +13,10 @@ num_kv_tokens = 4096
 
 silu = torch.nn.SiLU()
 def get_rms_linear():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(192,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(192,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW = tb_graph.new_input(dtensor=W, input_map=(1, -1, -1), forloop_dim=0)
     tM = tb_graph.matmul(tX, tW)
@@ -29,10 +29,10 @@ def get_rms_linear():
     return graph
 
 def get_rms_linear2():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(448,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(448,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW = tb_graph.new_input(dtensor=W, input_map=(1, -1, -1), forloop_dim=0)
     tM = tb_graph.matmul(tX, tW)
@@ -44,7 +44,7 @@ def get_rms_linear2():
     graph.mark_output(O[0])
     return graph
    
-def mirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
+def yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
     func = kernels[0]
     outputs = func(inputs=[X, Wqkv])
     Xqkv = outputs[0]
@@ -83,14 +83,14 @@ if __name__ == "__main__":
     kernels = [k1, k2]
 
     for _ in range(16):
-        mirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+        yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
     torch.cuda.synchronize()
 
     starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     repetitions = 1000
     starter.record()
     for rep in range(repetitions):
-        mirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+        yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
 
     ender.record()
     torch.cuda.synchronize()

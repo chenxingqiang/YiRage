@@ -13,9 +13,9 @@
  * limitations under the License.
  */
 
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/transpiler/transpiler.h"
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 // Plan the memory for every DTensor
@@ -60,4 +60,4 @@ void Transpiler::plan_dtensor_memory() {
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

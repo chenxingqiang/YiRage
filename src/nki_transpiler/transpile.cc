@@ -13,21 +13,21 @@
  * limitations under the License.
  */
 
-#include "mirage/nki_transpiler/transpile.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/transpiler/utils.h"
+#include "yirage/nki_transpiler/transpile.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/transpiler/utils.h"
 #include <cassert>
 
 #include "z3++.h"
 
-namespace mirage {
+namespace yirage {
 namespace nki_transpiler {
 
-using mirage::transpiler::ceil_div;
-using mirage::transpiler::CodeKeeper;
-using mirage::transpiler::Combine;
-using mirage::transpiler::fmt;
+using yirage::transpiler::ceil_div;
+using yirage::transpiler::CodeKeeper;
+using yirage::transpiler::Combine;
+using yirage::transpiler::fmt;
 
 namespace cost {
 using cost_t = int;
@@ -48,7 +48,7 @@ NKITranspiler::NKITranspiler(kernel::Graph const *_graph,
                              NKITranspilerConfig const &_config)
     : config(_config), nki_custom_kernel_idx_counter(0) {
   // using mirnage::type namespace to simplify code
-  using namespace mirage::type;
+  using namespace yirage::type;
 
   // We need to construct a new kernel graph by decomposing forloop accumulators
   // into the non-reduction accumulator type to enable transpiler optimizations
@@ -655,4 +655,4 @@ NKITranspileResult transpile(kernel::Graph const *g,
 }
 
 } // namespace nki_transpiler
-} // namespace mirage
+} // namespace yirage

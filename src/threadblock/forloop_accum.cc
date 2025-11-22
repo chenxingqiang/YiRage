@@ -13,15 +13,15 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/forloop_accum.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
+#include "yirage/threadblock/forloop_accum.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 STensor Graph::forloop_accum(STensor const &input,
-                             mirage::type::TBOperatorType type) {
+                             yirage::type::TBOperatorType type) {
   TBOperator *op = create_forloop_accum_op(input, type);
   assert(op != nullptr);
   operators.push_back(op);
@@ -29,7 +29,7 @@ STensor Graph::forloop_accum(STensor const &input,
 }
 
 STensor *Graph::forloop_accum(STensor const *input,
-                              mirage::type::TBOperatorType type) {
+                              yirage::type::TBOperatorType type) {
   TBOperator *op = create_forloop_accum_op(*input, type);
   assert(op != nullptr);
   operators.push_back(op);
@@ -37,7 +37,7 @@ STensor *Graph::forloop_accum(STensor const *input,
 }
 
 TBOperator *Graph::create_forloop_accum_op(STensor const &input,
-                                           mirage::type::TBOperatorType type) {
+                                           yirage::type::TBOperatorType type) {
   // Input stensor must be before accumulation (i.e., inside forloop)
   if (input.after_accum) {
     return nullptr;
@@ -45,7 +45,7 @@ TBOperator *Graph::create_forloop_accum_op(STensor const &input,
   TBForloopAccumOp *op = new TBForloopAccumOp(this, input, type);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -56,7 +56,7 @@ TBOperator *Graph::create_forloop_accum_op(STensor const &input,
 
 STensor Graph::forloop_accum_rescale(STensor const &input,
                                      STensor const &rescale,
-                                     mirage::type::TBOperatorType type) {
+                                     yirage::type::TBOperatorType type) {
   TBOperator *op = create_forloop_accum_rescale_op(input, rescale, type);
   assert(op != nullptr);
   operators.push_back(op);
@@ -65,7 +65,7 @@ STensor Graph::forloop_accum_rescale(STensor const &input,
 
 STensor *Graph::forloop_accum_rescale(STensor const *input,
                                       STensor const *rescale,
-                                      mirage::type::TBOperatorType type) {
+                                      yirage::type::TBOperatorType type) {
   TBOperator *op = create_forloop_accum_rescale_op(*input, *rescale, type);
   assert(op != nullptr);
   operators.push_back(op);
@@ -75,7 +75,7 @@ STensor *Graph::forloop_accum_rescale(STensor const *input,
 TBOperator *
     Graph::create_forloop_accum_rescale_op(STensor const &input,
                                            STensor const &rescale,
-                                           mirage::type::TBOperatorType type) {
+                                           yirage::type::TBOperatorType type) {
   // Input stensor must be before accumulation (i.e., inside forloop)
   if (input.after_accum) {
     return nullptr;
@@ -83,7 +83,7 @@ TBOperator *
   TBForloopAccumOp *op = new TBForloopAccumOp(this, input, rescale, type);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -112,10 +112,10 @@ TBOperator *Graph::create_forloop_accum_max_op(STensor const &input) {
     return nullptr;
   }
   TBForloopAccumOp *op =
-      new TBForloopAccumOp(this, input, mirage::type::TB_FORLOOP_ACCUM_MAX_OP);
+      new TBForloopAccumOp(this, input, yirage::type::TB_FORLOOP_ACCUM_MAX_OP);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -126,26 +126,26 @@ TBOperator *Graph::create_forloop_accum_max_op(STensor const &input) {
 
 TBForloopAccumOp::TBForloopAccumOp(Graph *_graph,
                                    STensor const &input,
-                                   mirage::type::TBOperatorType type)
+                                   yirage::type::TBOperatorType type)
     : TBOperator(_graph, type, input) {
-  assert(type >= mirage::type::TB_FORLOOP_ACCUM_FIRST_OP);
-  assert(type < mirage::type::TB_FORLOOP_ACCUM_LAST_OP);
+  assert(type >= yirage::type::TB_FORLOOP_ACCUM_FIRST_OP);
+  assert(type < yirage::type::TB_FORLOOP_ACCUM_LAST_OP);
   assert(!input.after_accum);
   STensor output = input;
   switch (type) {
-    case mirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
-    case mirage::type::TB_FORLOOP_ACCUM_MAX_OP: {
+    case yirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
+    case yirage::type::TB_FORLOOP_ACCUM_MAX_OP: {
       // Do nothing
       break;
     }
-    case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
-    case mirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
-    case mirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP: {
+    case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
+    case yirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
+    case yirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP: {
       // Reduce the last dim to 1
       output.dim[output.num_dims - 1] = 1;
       break;
     }
-    case mirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
+    case yirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
       // Reduce the last dim to reduction_dimx
       output.dim[output.num_dims - 1] = bgraph->reduction_dimx;
       break;
@@ -165,18 +165,18 @@ TBForloopAccumOp::TBForloopAccumOp(Graph *_graph,
 TBForloopAccumOp::TBForloopAccumOp(Graph *_graph,
                                    STensor const &input,
                                    STensor const &rescale,
-                                   mirage::type::TBOperatorType type)
+                                   yirage::type::TBOperatorType type)
     : TBOperator(_graph, type, input, rescale) {
-  assert(type == mirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP ||
-         type == mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP);
+  assert(type == yirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP ||
+         type == yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP);
   assert(!input.after_accum);
   STensor output = input;
   switch (type) {
-    case mirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
+    case yirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
       // Do nothing
       break;
     }
-    case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+    case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
       // Reduce the last dim to 1
       output.dim[output.num_dims - 1] = 1;
       break;
@@ -204,4 +204,4 @@ TBForloopAccumOp::operator json() const {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

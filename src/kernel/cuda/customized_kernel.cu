@@ -13,46 +13,46 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/customized.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/threadblock/cuda/concat.h"
-#include "mirage/threadblock/cuda/element_binary.h"
-#include "mirage/threadblock/cuda/element_unary.h"
-#include "mirage/threadblock/cuda/forloop_accum.h"
-#include "mirage/threadblock/cuda/input_loader.h"
-#include "mirage/threadblock/cuda/matmul.h"
-#include "mirage/threadblock/cuda/output_saver.h"
-#include "mirage/threadblock/cuda/reduction.h"
-#include "mirage/threadblock/cuda/rms_norm.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/serializer/concat_serializer.h"
-#include "mirage/threadblock/serializer/element_binary_serializer.h"
-#include "mirage/threadblock/serializer/element_unary_serializer.h"
-#include "mirage/threadblock/serializer/forloop_accum_serializer.h"
-#include "mirage/threadblock/serializer/input_loader_serializer.h"
-#include "mirage/threadblock/serializer/matmul_serializer.h"
-#include "mirage/threadblock/serializer/output_saver_serializer.h"
-#include "mirage/threadblock/serializer/reduction_serializer.h"
-#include "mirage/threadblock/serializer/rms_norm_serializer.h"
-#include "mirage/utils/cuda_helper.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/warp/cuda/matmul.h"
+#include "yirage/kernel/customized.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/threadblock/cuda/concat.h"
+#include "yirage/threadblock/cuda/element_binary.h"
+#include "yirage/threadblock/cuda/element_unary.h"
+#include "yirage/threadblock/cuda/forloop_accum.h"
+#include "yirage/threadblock/cuda/input_loader.h"
+#include "yirage/threadblock/cuda/matmul.h"
+#include "yirage/threadblock/cuda/output_saver.h"
+#include "yirage/threadblock/cuda/reduction.h"
+#include "yirage/threadblock/cuda/rms_norm.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/serializer/concat_serializer.h"
+#include "yirage/threadblock/serializer/element_binary_serializer.h"
+#include "yirage/threadblock/serializer/element_unary_serializer.h"
+#include "yirage/threadblock/serializer/forloop_accum_serializer.h"
+#include "yirage/threadblock/serializer/input_loader_serializer.h"
+#include "yirage/threadblock/serializer/matmul_serializer.h"
+#include "yirage/threadblock/serializer/output_saver_serializer.h"
+#include "yirage/threadblock/serializer/reduction_serializer.h"
+#include "yirage/threadblock/serializer/rms_norm_serializer.h"
+#include "yirage/utils/cuda_helper.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/warp/cuda/matmul.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
 __global__ void compute_customizedop_fingerprint(
-    mirage::threadblock::NewKernelParams new_params,
+    yirage::threadblock::NewKernelParams new_params,
     int forloop_range,
     char *dmem_fp_ptr,
     char *stensor_fp_base_ptr,
-    mirage::type::FPType *exp_lookup_table,
-    mirage::type::FPType *div_p_lookup_table,
-    mirage::type::FPType *div_q_lookup_table,
-    mirage::type::FPType *sqrt_p_lookup_table,
-    mirage::type::FPType *sqrt_q_lookup_table) {
+    yirage::type::FPType *exp_lookup_table,
+    yirage::type::FPType *div_p_lookup_table,
+    yirage::type::FPType *div_q_lookup_table,
+    yirage::type::FPType *sqrt_p_lookup_table,
+    yirage::type::FPType *sqrt_q_lookup_table) {
   // since we are using cutlass, we group all threads within a threadblock
   // as a 1-D list of threads, therefore blockDim.y and blockDim.z must be
   // 1
@@ -60,7 +60,7 @@ __global__ void compute_customizedop_fingerprint(
   int64_t thread_block_idx =
       blockIdx.x * gridDim.y * gridDim.z + blockIdx.y * gridDim.z + blockIdx.z;
   char *smem_buffer =
-      stensor_fp_base_ptr + thread_block_idx * mirage::config::MAX_SMEM_FP_SIZE;
+      stensor_fp_base_ptr + thread_block_idx * yirage::config::MAX_SMEM_FP_SIZE;
   assert(blockDim.y == 1);
   assert(blockDim.z == 1);
 
@@ -79,9 +79,9 @@ __global__ void compute_customizedop_fingerprint(
         skip_operator_after_forloop_accum = true;
       }
       switch (new_params.operator_types[op]) {
-        case mirage::type::TB_INPUT_OP: {
-          mirage::type::FPType *dtensor_ptr =
-              (mirage::type::FPType *)(dmem_fp_ptr +
+        case yirage::type::TB_INPUT_OP: {
+          yirage::type::FPType *dtensor_ptr =
+              (yirage::type::FPType *)(dmem_fp_ptr +
                                        new_params.dmem_input_offsets[op]);
           int3 input_matrix_row_offset_block_stride;
           int3 input_matrix_column_offset_block_stride;
@@ -91,9 +91,9 @@ __global__ void compute_customizedop_fingerprint(
           int global_offset_forloop_stride;
           int2 dtensor_matrix_shape, stensor_matrix_shape;
           int input_smem_offset;
-          mirage::layout::DmemLayout dtensor_layout;
-          mirage::layout::SmemLayout stensor_layout;
-          mirage::threadblock::deserialize_input_loader_parameters(
+          yirage::layout::DmemLayout dtensor_layout;
+          yirage::layout::SmemLayout stensor_layout;
+          yirage::threadblock::deserialize_input_loader_parameters(
               new_params.parameters,
               param_idx,
               input_matrix_row_offset_block_stride,
@@ -127,9 +127,9 @@ __global__ void compute_customizedop_fingerprint(
                               i * global_offset_forloop_stride;
           cutlass::MatrixCoord matrix_offset = {tb_offset_row,
                                                 tb_offset_column};
-          mirage::type::FPType *stensor_ptr =
-              (mirage::type::FPType *)(smem_buffer + input_smem_offset);
-          mirage::threadblock::TBInputLoaderFingerprinter fp(
+          yirage::type::FPType *stensor_ptr =
+              (yirage::type::FPType *)(smem_buffer + input_smem_offset);
+          yirage::threadblock::TBInputLoaderFingerprinter fp(
               dtensor_ptr,
               stensor_ptr,
               dtensor_matrix_shape,
@@ -143,14 +143,14 @@ __global__ void compute_customizedop_fingerprint(
           __syncthreads();
           break;
         }
-        case mirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
-        case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
-        case mirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
-        case mirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP:
-        case mirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
+        case yirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
+        case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
+        case yirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
+        case yirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP:
+        case yirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
           int input_smem_offset, accum_smem_offset;
           int accum_num_elements, per_iter_reduction_degree, inner_range;
-          mirage::threadblock::deserialize_forloop_accum_parameters(
+          yirage::threadblock::deserialize_forloop_accum_parameters(
               new_params.parameters,
               param_idx,
               accum_num_elements,
@@ -161,13 +161,13 @@ __global__ void compute_customizedop_fingerprint(
           // Forloop accum is NOT after forloop accum: since we should
           // accumulate in each iteration
           assert(!skip_operator_after_forloop_accum);
-          mirage::type::FPType *input_stensor_ptr =
-              (mirage::type::FPType *)(smem_buffer + input_smem_offset);
-          mirage::type::FPType *accum_stensor_ptr =
-              (mirage::type::FPType *)(smem_buffer + accum_smem_offset);
+          yirage::type::FPType *input_stensor_ptr =
+              (yirage::type::FPType *)(smem_buffer + input_smem_offset);
+          yirage::type::FPType *accum_stensor_ptr =
+              (yirage::type::FPType *)(smem_buffer + accum_smem_offset);
           bool reset_output = (i == 0);
           bool post_process = (i == (forloop_range - 1));
-          mirage::threadblock::TBForloopAccumFingerprinter fp(
+          yirage::threadblock::TBForloopAccumFingerprinter fp(
               new_params.operator_types[op],
               input_stensor_ptr,
               accum_stensor_ptr,
@@ -186,7 +186,7 @@ __global__ void compute_customizedop_fingerprint(
           __syncthreads();
           break;
         }
-        case mirage::type::TB_OUTPUT_OP: {
+        case yirage::type::TB_OUTPUT_OP: {
           int3 output_matrix_row_offset_block_stride;
           int3 output_matrix_column_offset_block_stride;
           int output_matrix_row_offset_forloop_stride;
@@ -195,10 +195,10 @@ __global__ void compute_customizedop_fingerprint(
           int global_offset_forloop_stride;
           int2 dtensor_matrix_shape, stensor_matrix_shape;
           int input_smem_offset;
-          mirage::layout::DmemLayout dtensor_layout;
-          mirage::layout::SmemLayout stensor_layout;
-          mirage::type::TBEpilogueType epilogue;
-          mirage::threadblock::deserialize_output_saver_parameters(
+          yirage::layout::DmemLayout dtensor_layout;
+          yirage::layout::SmemLayout stensor_layout;
+          yirage::type::TBEpilogueType epilogue;
+          yirage::threadblock::deserialize_output_saver_parameters(
               new_params.parameters,
               param_idx,
               output_matrix_row_offset_block_stride,
@@ -225,14 +225,14 @@ __global__ void compute_customizedop_fingerprint(
               (global_offset_forloop_stride > 0)) {
             non_zero_forloop_strides = true;
           }
-          mirage::type::FPType *input_stensor_ptr =
-              (mirage::type::FPType *)(smem_buffer + input_smem_offset);
+          yirage::type::FPType *input_stensor_ptr =
+              (yirage::type::FPType *)(smem_buffer + input_smem_offset);
           // Step 2: Save final output to dmem if (1) this is the last forloop
           // or (2) we don't accum output since the forloop strides are non-zero
           if ((i == forloop_range - 1) || non_zero_forloop_strides) {
             assert(op >= output_saver_start_idx);
-            mirage::type::FPType *dtensor_ptr =
-                (mirage::type::FPType
+            yirage::type::FPType *dtensor_ptr =
+                (yirage::type::FPType
                      *)(dmem_fp_ptr +
                         new_params
                             .dmem_output_offsets[op - output_saver_start_idx]);
@@ -256,7 +256,7 @@ __global__ void compute_customizedop_fingerprint(
                                 i * global_offset_forloop_stride;
             cutlass::MatrixCoord matrix_offset = {tb_offset_row,
                                                   tb_offset_column};
-            mirage::threadblock::TBOutputSaverFingerprinter fp(
+            yirage::threadblock::TBOutputSaverFingerprinter fp(
                 dtensor_ptr,
                 input_stensor_ptr,
                 dtensor_matrix_shape,
@@ -272,10 +272,10 @@ __global__ void compute_customizedop_fingerprint(
           }
           break;
         }
-        case mirage::type::TB_MATMUL_OP: {
+        case yirage::type::TB_MATMUL_OP: {
           int m, n, k;
           int A_smem_offset, B_smem_offset, C_smem_offset;
-          mirage::threadblock::deserialize_matmul_op_parameters(
+          yirage::threadblock::deserialize_matmul_op_parameters(
               new_params.parameters,
               param_idx,
               m,
@@ -290,37 +290,37 @@ __global__ void compute_customizedop_fingerprint(
           if (skip_operator_after_forloop_accum) {
             continue;
           }
-          mirage::type::FPType *A_ptr =
-              (mirage::type::FPType *)(smem_buffer + A_smem_offset);
-          mirage::type::FPType *B_ptr =
-              (mirage::type::FPType *)(smem_buffer + B_smem_offset);
-          mirage::type::FPType *C_ptr =
-              (mirage::type::FPType *)(smem_buffer + C_smem_offset);
+          yirage::type::FPType *A_ptr =
+              (yirage::type::FPType *)(smem_buffer + A_smem_offset);
+          yirage::type::FPType *B_ptr =
+              (yirage::type::FPType *)(smem_buffer + B_smem_offset);
+          yirage::type::FPType *C_ptr =
+              (yirage::type::FPType *)(smem_buffer + C_smem_offset);
 
-          mirage::threadblock::TBMatmulFingerprinter fp(
+          yirage::threadblock::TBMatmulFingerprinter fp(
               A_ptr, B_ptr, C_ptr, m, n, k, threadIdx.x, blockDim.x);
           __syncthreads();
           break;
         }
-        case mirage::type::TB_EXP_OP:
-        case mirage::type::TB_SQUARE_OP:
-        case mirage::type::TB_SQRT_OP:
-        case mirage::type::TB_SILU_OP:
-        case mirage::type::TB_GELU_OP:
-        case mirage::type::TB_RELU_OP:
-        case mirage::type::TB_CLAMP_OP: {
+        case yirage::type::TB_EXP_OP:
+        case yirage::type::TB_SQUARE_OP:
+        case yirage::type::TB_SQRT_OP:
+        case yirage::type::TB_SILU_OP:
+        case yirage::type::TB_GELU_OP:
+        case yirage::type::TB_RELU_OP:
+        case yirage::type::TB_CLAMP_OP: {
           int smem_offset, num_elements;
-          mirage::threadblock::deserialize_elementunary_op_parameters(
+          yirage::threadblock::deserialize_elementunary_op_parameters(
               new_params.parameters, param_idx, smem_offset, num_elements);
-          mirage::type::FPType *base_ptr =
-              (mirage::type::FPType *)(smem_buffer + smem_offset);
+          yirage::type::FPType *base_ptr =
+              (yirage::type::FPType *)(smem_buffer + smem_offset);
           // Skip the current operator's fingerprint calculation
           // since it is after forloop accum and we are not at the
           // last iteration yet
           if (skip_operator_after_forloop_accum) {
             continue;
           }
-          mirage::threadblock::TBElementUnaryFingerPrinter fp(
+          yirage::threadblock::TBElementUnaryFingerPrinter fp(
               new_params.operator_types[op],
               exp_lookup_table /*lookup_table*/,
               sqrt_p_lookup_table,
@@ -332,13 +332,13 @@ __global__ void compute_customizedop_fingerprint(
           __syncthreads();
           break;
         }
-        case mirage::type::TB_ADD_OP:
-        case mirage::type::TB_MUL_OP:
-        case mirage::type::TB_DIV_OP:
-        case mirage::type::TB_POW_OP: {
+        case yirage::type::TB_ADD_OP:
+        case yirage::type::TB_MUL_OP:
+        case yirage::type::TB_DIV_OP:
+        case yirage::type::TB_POW_OP: {
           int3 input1_shape, input2_shape;
           int input1_smem_offset, input2_smem_offset, output_smem_offset;
-          mirage::threadblock::deserialize_elementbinary_op_parameters(
+          yirage::threadblock::deserialize_elementbinary_op_parameters(
               new_params.parameters,
               param_idx,
               input1_shape,
@@ -346,19 +346,19 @@ __global__ void compute_customizedop_fingerprint(
               input1_smem_offset,
               input2_smem_offset,
               output_smem_offset);
-          mirage::type::FPType *input1_ptr =
-              (mirage::type::FPType *)(smem_buffer + input1_smem_offset);
-          mirage::type::FPType *input2_ptr =
-              (mirage::type::FPType *)(smem_buffer + input2_smem_offset);
-          mirage::type::FPType *output_ptr =
-              (mirage::type::FPType *)(smem_buffer + output_smem_offset);
+          yirage::type::FPType *input1_ptr =
+              (yirage::type::FPType *)(smem_buffer + input1_smem_offset);
+          yirage::type::FPType *input2_ptr =
+              (yirage::type::FPType *)(smem_buffer + input2_smem_offset);
+          yirage::type::FPType *output_ptr =
+              (yirage::type::FPType *)(smem_buffer + output_smem_offset);
           // Skip the current operator's fingerprint calculation
           // since it is after forloop accum and we are not at the
           // last iteration yet
           if (skip_operator_after_forloop_accum) {
             continue;
           }
-          mirage::threadblock::TBElementBinaryFingerPrinter fp(
+          yirage::threadblock::TBElementBinaryFingerPrinter fp(
               new_params.operator_types[op],
               div_p_lookup_table /*div_p_lookup*/,
               div_q_lookup_table /*div_q_lookup*/,
@@ -372,15 +372,15 @@ __global__ void compute_customizedop_fingerprint(
           __syncthreads();
           break;
         }
-        case mirage::type::TB_REDUCTION_0_OP:
-        case mirage::type::TB_REDUCTION_1_OP:
-        case mirage::type::TB_REDUCTION_2_OP:
-        case mirage::type::TB_REDUCTION_0_TO_DIMX_OP:
-        case mirage::type::TB_REDUCTION_1_TO_DIMX_OP:
-        case mirage::type::TB_REDUCTION_2_TO_DIMX_OP: {
+        case yirage::type::TB_REDUCTION_0_OP:
+        case yirage::type::TB_REDUCTION_1_OP:
+        case yirage::type::TB_REDUCTION_2_OP:
+        case yirage::type::TB_REDUCTION_0_TO_DIMX_OP:
+        case yirage::type::TB_REDUCTION_1_TO_DIMX_OP:
+        case yirage::type::TB_REDUCTION_2_TO_DIMX_OP: {
           int output_num_elements, reduction_degree, inner_range;
           int input_smem_offset, output_smem_offset;
-          mirage::threadblock::deserialize_reduction_op_parameters(
+          yirage::threadblock::deserialize_reduction_op_parameters(
               new_params.parameters,
               param_idx,
               output_num_elements,
@@ -388,17 +388,17 @@ __global__ void compute_customizedop_fingerprint(
               inner_range,
               input_smem_offset,
               output_smem_offset);
-          mirage::type::FPType *output_ptr =
-              (mirage::type::FPType *)(smem_buffer + output_smem_offset);
-          mirage::type::FPType *input_ptr =
-              (mirage::type::FPType *)(smem_buffer + input_smem_offset);
+          yirage::type::FPType *output_ptr =
+              (yirage::type::FPType *)(smem_buffer + output_smem_offset);
+          yirage::type::FPType *input_ptr =
+              (yirage::type::FPType *)(smem_buffer + input_smem_offset);
           // Skip the current operator's fingerprint calculation
           // since it is after forloop accum and we are not at the
           // last iteration yet
           if (skip_operator_after_forloop_accum) {
             continue;
           }
-          mirage::threadblock::TBReductionFingerprinter fp(
+          yirage::threadblock::TBReductionFingerprinter fp(
               new_params.operator_types[op],
               input_ptr,
               output_ptr,
@@ -410,21 +410,21 @@ __global__ void compute_customizedop_fingerprint(
           __syncthreads();
           break;
         }
-        case mirage::type::TB_RMS_NORM_OP: {
+        case yirage::type::TB_RMS_NORM_OP: {
           int output_num_elements, norm_size;
           int input_smem_offset, output_smem_offset;
-          mirage::threadblock::deserialize_rms_norm_op_parameters(
+          yirage::threadblock::deserialize_rms_norm_op_parameters(
               new_params.parameters,
               param_idx,
               output_num_elements,
               norm_size,
               input_smem_offset,
               output_smem_offset);
-          mirage::type::FPType *output_ptr =
-              (mirage::type::FPType *)(smem_buffer + output_smem_offset);
-          mirage::type::FPType *input_ptr =
-              (mirage::type::FPType *)(smem_buffer + input_smem_offset);
-          mirage::threadblock::TBRmsNormFingerPrinter fp(input_ptr,
+          yirage::type::FPType *output_ptr =
+              (yirage::type::FPType *)(smem_buffer + output_smem_offset);
+          yirage::type::FPType *input_ptr =
+              (yirage::type::FPType *)(smem_buffer + input_smem_offset);
+          yirage::threadblock::TBRmsNormFingerPrinter fp(input_ptr,
                                                          output_ptr,
                                                          div_p_lookup_table,
                                                          div_q_lookup_table,
@@ -437,13 +437,13 @@ __global__ void compute_customizedop_fingerprint(
           __syncthreads();
           break;
         }
-        case mirage::type::TB_CONCAT_0_OP:
-        case mirage::type::TB_CONCAT_1_OP:
-        case mirage::type::TB_CONCAT_2_OP: {
+        case yirage::type::TB_CONCAT_0_OP:
+        case yirage::type::TB_CONCAT_1_OP:
+        case yirage::type::TB_CONCAT_2_OP: {
           int output_num_elements, A_concat_dim_size, B_concat_dim_size,
               inner_size;
           int A_smem_offset, B_smem_offset, output_smem_offset;
-          mirage::threadblock::deserialize_concat_op_parameters(
+          yirage::threadblock::deserialize_concat_op_parameters(
               new_params.parameters,
               param_idx,
               output_num_elements,
@@ -453,19 +453,19 @@ __global__ void compute_customizedop_fingerprint(
               A_smem_offset,
               B_smem_offset,
               output_smem_offset);
-          mirage::type::FPType *A_ptr =
-              (mirage::type::FPType *)(smem_buffer + A_smem_offset);
-          mirage::type::FPType *B_ptr =
-              (mirage::type::FPType *)(smem_buffer + B_smem_offset);
-          mirage::type::FPType *output_ptr =
-              (mirage::type::FPType *)(smem_buffer + output_smem_offset);
+          yirage::type::FPType *A_ptr =
+              (yirage::type::FPType *)(smem_buffer + A_smem_offset);
+          yirage::type::FPType *B_ptr =
+              (yirage::type::FPType *)(smem_buffer + B_smem_offset);
+          yirage::type::FPType *output_ptr =
+              (yirage::type::FPType *)(smem_buffer + output_smem_offset);
           // Skip the current operator's fingerprint calculation
           // since it is after forloop accum and we are not at the
           // last iteration yet
           if (skip_operator_after_forloop_accum) {
             continue;
           }
-          mirage::threadblock::TBConcatFingerprinter fp(A_ptr,
+          yirage::threadblock::TBConcatFingerprinter fp(A_ptr,
                                                         B_ptr,
                                                         output_ptr,
                                                         output_num_elements,
@@ -487,13 +487,13 @@ __global__ void compute_customizedop_fingerprint(
 }
 
 __global__ void
-    compute_epilogue_fingerprint(mirage::utils::FpPointerList fp_ptr_list,
-                                 mirage::type::TBEpilogueType type,
+    compute_epilogue_fingerprint(yirage::utils::FpPointerList fp_ptr_list,
+                                 yirage::type::TBEpilogueType type,
                                  int num_gpus,
                                  int num_elements) {
-  if (type == mirage::type::TB_EPILOGUE_NONE) {
+  if (type == yirage::type::TB_EPILOGUE_NONE) {
     // Do nothing
-  } else if (type == mirage::type::TB_EPILOGUE_ALLREDUCE) {
+  } else if (type == yirage::type::TB_EPILOGUE_ALLREDUCE) {
     int i = threadIdx.x + blockIdx.x * blockDim.x;
     if (i < num_elements) {
       FPType x = 0;
@@ -510,20 +510,20 @@ __global__ void
 }
 
 bool KNCustomizedOp::fingerprint(void) {
-  // mirage::threadblock::KernelParams params = bgraph.get_kernel_params();
-  mirage::threadblock::NewKernelParams new_params =
+  // yirage::threadblock::KernelParams params = bgraph.get_kernel_params();
+  yirage::threadblock::NewKernelParams new_params =
       bgraph.get_new_kernel_params(true /*fingerprint_kernel*/);
   // assume that we only parallelize along the x dimension
   assert(kgraph->gpu_dim.y == 1);
   assert(kgraph->gpu_dim.z == 1);
 
-  assert(bgraph.smem_offset <= mirage::config::MAX_SMEM_FP_SIZE);
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  assert(bgraph.smem_offset <= yirage::config::MAX_SMEM_FP_SIZE);
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
 
   // Make sure we don't launch more threadblocks than allowed
   assert(bgraph.grid_dim.x * bgraph.grid_dim.y * bgraph.grid_dim.z <=
-         mirage::config::MAX_NUM_THREADBLOCKS_PER_KERNEL);
+         yirage::config::MAX_NUM_THREADBLOCKS_PER_KERNEL);
 
   for (int gpu_id = 0; gpu_id < kgraph->gpu_dim.x; gpu_id++) {
     compute_customizedop_fingerprint<<<bgraph.grid_dim, bgraph.block_dim>>>(
@@ -540,13 +540,13 @@ bool KNCustomizedOp::fingerprint(void) {
   checkCUDA(cudaDeviceSynchronize());
   // Process epilogue
   for (auto const &op : bgraph.operators) {
-    if (op->op_type == mirage::type::TB_OUTPUT_OP) {
-      mirage::threadblock::TBOutputOp const *output_op =
-          static_cast<mirage::threadblock::TBOutputOp const *>(op);
-      if (output_op->epilogue != mirage::type::TB_EPILOGUE_NONE) {
-        mirage::utils::FpPointerList fp_ptr_list;
+    if (op->op_type == yirage::type::TB_OUTPUT_OP) {
+      yirage::threadblock::TBOutputOp const *output_op =
+          static_cast<yirage::threadblock::TBOutputOp const *>(op);
+      if (output_op->epilogue != yirage::type::TB_EPILOGUE_NONE) {
+        yirage::utils::FpPointerList fp_ptr_list;
         for (int gpu_id = 0; gpu_id < kgraph->gpu_dim.x; gpu_id++) {
-          fp_ptr_list.ptrs[gpu_id] = reinterpret_cast<mirage::type::FPType *>(
+          fp_ptr_list.ptrs[gpu_id] = reinterpret_cast<yirage::type::FPType *>(
               dmm->fp_base_ptr[gpu_id] + output_op->dtensor.fp_offset);
         }
         int num_elements = output_op->dtensor.num_elements();
@@ -561,7 +561,7 @@ bool KNCustomizedOp::fingerprint(void) {
   }
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

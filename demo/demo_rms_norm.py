@@ -1,16 +1,16 @@
-import mirage as mi
+import yirage as yr
 import numpy as np
 import torch
 
 if __name__ == "__main__":
-    mi.set_gpu_device_id(7)
-    mirage_dtype = mi.bfloat16
-    torch_dtype = mi.convert_dtype_to_torch_type(mirage_dtype)
+    yr.set_gpu_device_id(7)
+    yirage_dtype = yr.bfloat16
+    torch_dtype = yr.convert_dtype_to_torch_type(yirage_dtype)
     for _ in range(10):
-        graph = mi.new_kernel_graph()
-        X = graph.new_input(dims=(1, 7168), dtype=mirage_dtype)
-        #G = graph.new_input(dims=(1, 7168), dtype=mirage_dtype)
-        W = graph.new_input(dims=(7168, 16384), dtype=mirage_dtype)
+        graph = yr.new_kernel_graph()
+        X = graph.new_input(dims=(1, 7168), dtype=yirage_dtype)
+        #G = graph.new_input(dims=(1, 7168), dtype=yirage_dtype)
+        W = graph.new_input(dims=(7168, 16384), dtype=yirage_dtype)
         D = graph.rms_norm(X, normalized_shape=(7168,))
         #D = graph.mul(D, G)
         O = graph.matmul(D, W)

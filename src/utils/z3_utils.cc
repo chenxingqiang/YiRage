@@ -1,8 +1,8 @@
-#include "mirage/utils/z3_utils.h"
+#include "yirage/utils/z3_utils.h"
 
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 
 z3::expr_vector to_expr_vector(std::vector<z3::expr> const &_vec) {
   assert(!_vec.empty());
@@ -33,4 +33,4 @@ z3::expr_vector get_free_vars(std::vector<z3::expr> const &e,
   return vars;
 }
 
-} // namespace mirage
+} // namespace yirage

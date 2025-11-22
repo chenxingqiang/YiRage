@@ -1,6 +1,6 @@
-#include "mirage/search/config.h"
+#include "yirage/search/config.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 GeneratorConfig GeneratorConfig::get_default_config() {
@@ -144,12 +144,12 @@ void TBGraphConfig::show() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage
 
 namespace std {
 
-size_t hash<mirage::search::TBGraphConfig>::operator()(
-    mirage::search::TBGraphConfig const &config) const {
+size_t hash<yirage::search::TBGraphConfig>::operator()(
+    yirage::search::TBGraphConfig const &config) const {
   size_t hash = 0;
   hash_combine(hash, config.grid_dim);
   hash_combine(hash, config.block_dim);

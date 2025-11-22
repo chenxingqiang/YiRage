@@ -2,8 +2,8 @@
 #pragma once
 
 #include "../../lib.h"
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/type.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/type.h"
 
 ADD_TESTCASE(Testcase("tb_elemwise_bcast_correctness", {"threadblock", "correctness"}, "threadblock-level elementwise op broadcasting correctness test", [](Testcase* this_testcase) {
 	struct SubcaseConfig {

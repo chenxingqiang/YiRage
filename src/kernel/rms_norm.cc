@@ -13,18 +13,18 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/rms_norm.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/layout.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/rms_norm.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/layout.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
+using namespace yirage::type;
 
 DTensor Graph::rms_norm(DTensor const &input,
                         std::vector<int> const &normalized_shape) {
@@ -93,7 +93,8 @@ KNOperator *
                               DTensor const &elementwise_affine,
                               std::vector<int> const &normalized_shape) {
   // We currently only allow normalizing the last dimension
-  assert(false && "To be implemented");
+  KNOperator *op = new KNRMSNormOp(this, input, normalized_shape);
+  return op;
 }
 
 KNRMSNormOp::KNRMSNormOp(Graph *_kgraph,
@@ -124,7 +125,7 @@ KNRMSNormOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 bool KNRMSNormOp::fingerprint(void) {
   int num_samples = output_tensors[0].num_elements() / normalized_size;
   kernel::DeviceMemoryManager *dmm =
@@ -150,4 +151,4 @@ bool KNRMSNormOp::fingerprint(void) {
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

@@ -194,7 +194,7 @@ void launch_linear_swapAB(void *input_ptr,
         smem_size);
   }
 
-#ifndef MIRAGE_PROFILE_HOPPER
+#ifndef YIRAGE_PROFILE_HOPPER
   if (residual_ptr != nullptr) {
 
     linear_kernel_swapAB_hopper_wrapper<T,
@@ -559,7 +559,7 @@ void linear_swapAB_kernel(torch::Tensor input,
 //         smem_size);
 //   }
 
-// #ifndef MIRAGE_PROFILE_HOPPER
+// #ifndef YIRAGE_PROFILE_HOPPER
 //   if (residual_ptr != nullptr) {
 
 //     linear_kernel_hopper_wrapper<T,
@@ -1151,7 +1151,7 @@ void linear_swapAB_kernel(torch::Tensor input,
 //       cudaFuncAttributeMaxDynamicSharedMemorySize,
 //       smem_size);
 
-// #ifndef MIRAGE_PROFILE_HOPPER
+// #ifndef YIRAGE_PROFILE_HOPPER
 //   multitoken_paged_attention_wrapper_hopper<T,
 //                                             NUM_QO_HEADS,
 //                                             NUM_KV_HEADS,

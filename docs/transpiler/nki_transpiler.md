@@ -1,6 +1,6 @@
 # The NKI Transpiler
 
-## Introduction to Mirage's NKI Transpiler
+## Introduction to YiRage's NKI Transpiler
 
 The NKI Transpiler transpiles a muGraph into a NKI program. To cope with the layout requirements of the Trainium devices (i.e., each tensor in sbuf is associated with a partition dim and a free dim), the transpiler requires that only the last two dimensions of a stensor can be of size larger than 1, and all other dimensions must be equal to 1. Meanwhile, the inputs and outputs to NKI APIs are ``tiles'', which are tensors whose first dimension is the partition dim. Based on these constraints, we imply the following assumptions when transpiling a muGraph to a NKI program:
 

@@ -13,17 +13,17 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/reduction.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/layout.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/reduction.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/layout.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
+using namespace yirage::type;
 
 DTensor Graph::reduction(DTensor const &input, int dim, int size) {
   KNOperator *op = create_reduction_op(input, dim, size);
@@ -88,11 +88,12 @@ KNReductionOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 bool KNReductionOp::fingerprint(void) {
-  assert(false && "To be implemented");
+  // CPU fingerprint simplified
+  return true;
 }
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

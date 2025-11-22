@@ -1,8 +1,8 @@
-#include "mirage/search/range_propagation/range.h"
+#include "yirage/search/range_propagation/range.h"
 
 #include <algorithm>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 Range::Range(bool valid) : valid(valid) {}
@@ -116,4 +116,4 @@ std::ostream &operator<<(std::ostream &os, Range const &range) {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

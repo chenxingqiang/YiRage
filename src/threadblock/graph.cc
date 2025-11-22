@@ -13,19 +13,19 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/serializer/concat_serializer.h"
-#include "mirage/threadblock/serializer/element_binary_serializer.h"
-#include "mirage/threadblock/serializer/element_unary_serializer.h"
-#include "mirage/threadblock/serializer/forloop_accum_serializer.h"
-#include "mirage/threadblock/serializer/input_loader_serializer.h"
-#include "mirage/threadblock/serializer/matmul_serializer.h"
-#include "mirage/threadblock/serializer/output_saver_serializer.h"
-#include "mirage/threadblock/serializer/reduction_serializer.h"
-#include "mirage/threadblock/serializer/rms_norm_serializer.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/serializer/concat_serializer.h"
+#include "yirage/threadblock/serializer/element_binary_serializer.h"
+#include "yirage/threadblock/serializer/element_unary_serializer.h"
+#include "yirage/threadblock/serializer/forloop_accum_serializer.h"
+#include "yirage/threadblock/serializer/input_loader_serializer.h"
+#include "yirage/threadblock/serializer/matmul_serializer.h"
+#include "yirage/threadblock/serializer/output_saver_serializer.h"
+#include "yirage/threadblock/serializer/reduction_serializer.h"
+#include "yirage/threadblock/serializer/rms_norm_serializer.h"
+#include "yirage/utils/hash_utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 Graph::Graph()
@@ -42,7 +42,7 @@ Graph::Graph(dim3 _grid_dim,
   // otherwise we don't have enough buffers in device memory for saving
   // fingerprints
   assert(grid_dim.x * grid_dim.y * grid_dim.z <=
-         mirage::config::MAX_NUM_THREADBLOCKS_PER_KERNEL);
+         yirage::config::MAX_NUM_THREADBLOCKS_PER_KERNEL);
   assert(reduction_dimx > 0);
 }
 
@@ -68,7 +68,7 @@ off_t Graph::allocate_fingerprint(STensor const &tensor) {
 
   // We no longer need to check fingerprints' smem usage since
   // we allocate a buffer in device memory for saving fingerprints
-  // assert(smem_offset <= (off_t)mirage::config::MAX_SMEM_SIZE);
+  // assert(smem_offset <= (off_t)yirage::config::MAX_SMEM_SIZE);
   allocated_tensors.push_back(std::make_pair(ret, aligns_size));
   return ret;
 }
@@ -97,31 +97,31 @@ size_t Graph::calculate_shared_memory_usage(TBOperator *new_op) {
   // TODO: replace the following with a transpiler-based method
   for (auto const &op : operators) {
     switch (op->op_type) {
-      case mirage::type::TB_INPUT_OP:
-      case mirage::type::TB_OUTPUT_OP:
-      case mirage::type::TB_MATMUL_OP:
+      case yirage::type::TB_INPUT_OP:
+      case yirage::type::TB_OUTPUT_OP:
+      case yirage::type::TB_MATMUL_OP:
       // Element-wise binary
-      case mirage::type::TB_DIV_OP:
-      case mirage::type::TB_ADD_OP:
-      case mirage::type::TB_MUL_OP:
-      case mirage::type::TB_SUB_OP:
-      case mirage::type::TB_POW_OP:
+      case yirage::type::TB_DIV_OP:
+      case yirage::type::TB_ADD_OP:
+      case yirage::type::TB_MUL_OP:
+      case yirage::type::TB_SUB_OP:
+      case yirage::type::TB_POW_OP:
       // Reduction
-      case mirage::type::TB_REDUCTION_0_OP:
-      case mirage::type::TB_REDUCTION_1_OP:
-      case mirage::type::TB_REDUCTION_2_OP:
-      case mirage::type::TB_REDUCTION_0_TO_DIMX_OP:
-      case mirage::type::TB_REDUCTION_1_TO_DIMX_OP:
-      case mirage::type::TB_REDUCTION_2_TO_DIMX_OP:
-      case mirage::type::TB_REDUCTION_0_MAX_OP:
-      case mirage::type::TB_REDUCTION_1_MAX_OP:
-      case mirage::type::TB_REDUCTION_2_MAX_OP:
+      case yirage::type::TB_REDUCTION_0_OP:
+      case yirage::type::TB_REDUCTION_1_OP:
+      case yirage::type::TB_REDUCTION_2_OP:
+      case yirage::type::TB_REDUCTION_0_TO_DIMX_OP:
+      case yirage::type::TB_REDUCTION_1_TO_DIMX_OP:
+      case yirage::type::TB_REDUCTION_2_TO_DIMX_OP:
+      case yirage::type::TB_REDUCTION_0_MAX_OP:
+      case yirage::type::TB_REDUCTION_1_MAX_OP:
+      case yirage::type::TB_REDUCTION_2_MAX_OP:
       // Normalization
-      case mirage::type::TB_RMS_NORM_OP:
+      case yirage::type::TB_RMS_NORM_OP:
       // Concat
-      case mirage::type::TB_CONCAT_0_OP:
-      case mirage::type::TB_CONCAT_1_OP:
-      case mirage::type::TB_CONCAT_2_OP: {
+      case yirage::type::TB_CONCAT_0_OP:
+      case yirage::type::TB_CONCAT_1_OP:
+      case yirage::type::TB_CONCAT_2_OP: {
         for (size_t i = 0; i < op->output_tensors.size(); i++) {
           // Do not store in smem when store_in_demm is set
           if (op->output_tensors[i].store_in_dmem) {
@@ -132,23 +132,23 @@ size_t Graph::calculate_shared_memory_usage(TBOperator *new_op) {
         break;
       }
       // Element-wise unary
-      case mirage::type::TB_EXP_OP:
-      case mirage::type::TB_SQUARE_OP:
-      case mirage::type::TB_SQRT_OP:
-      case mirage::type::TB_SILU_OP:
-      case mirage::type::TB_GELU_OP:
-      case mirage::type::TB_RELU_OP:
-      case mirage::type::TB_CLAMP_OP:
-      case mirage::type::TB_MUL_SCALAR_OP: {
+      case yirage::type::TB_EXP_OP:
+      case yirage::type::TB_SQUARE_OP:
+      case yirage::type::TB_SQRT_OP:
+      case yirage::type::TB_SILU_OP:
+      case yirage::type::TB_GELU_OP:
+      case yirage::type::TB_RELU_OP:
+      case yirage::type::TB_CLAMP_OP:
+      case yirage::type::TB_MUL_SCALAR_OP: {
         // inplace optimization for element-wise unary
         break;
       }
       // Forloop accumulator
-      case mirage::type::TB_FORLOOP_ACCUM_NO_RED_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_NO_RED_OP: {
         // inplace optimization for non-reduction accum
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP: {
         // we will inline accumulation but need to perform
         // a redue_sum
         assert(op->output_tensors.size() == 1);
@@ -157,7 +157,7 @@ size_t Graph::calculate_shared_memory_usage(TBOperator *new_op) {
         usage += op->output_tensors[0].size();
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP: {
         // we will inline accumulation but need to perform
         // a reduction
         assert(op->output_tensors.size() == 1);
@@ -166,7 +166,7 @@ size_t Graph::calculate_shared_memory_usage(TBOperator *new_op) {
         usage += op->output_tensors[0].size();
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP: {
         // This operator will be transpiled to the following operators:
         // 1. square (element-wise unary)
         // 2. mul_scalar (element-wise unary)
@@ -179,7 +179,7 @@ size_t Graph::calculate_shared_memory_usage(TBOperator *new_op) {
         usage += op->output_tensors[0].size();
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
         // we will inline accumulation but need to perform
         // a reduuction_to_dimx
         assert(op->output_tensors.size() == 1);
@@ -188,21 +188,21 @@ size_t Graph::calculate_shared_memory_usage(TBOperator *new_op) {
         usage += op->output_tensors[0].size();
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
         // we will inline accumulation but need to perform
         // a rescale
         assert(op->output_tensors.size() == 1);
         usage += op->output_tensors[0].size();
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
         // we will inline accumulation but need to perform
         // a rescale
         assert(op->output_tensors.size() == 1);
         usage += op->output_tensors[0].size();
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_MAX_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_MAX_OP: {
         assert(op->output_tensors.size() == 1);
         usage += op->output_tensors[0].size();
         break;
@@ -219,7 +219,7 @@ size_t Graph::calculate_shared_memory_usage(TBOperator *new_op) {
   return usage;
 }
 
-#ifdef MIRAGE_BACKEND_USE_CUDA
+#ifdef YIRAGE_BACKEND_USE_CUDA
 NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
   NewKernelParams params;
   params.num_operators = operators.size();
@@ -232,7 +232,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
   // and that output savers are the last operators
   for (size_t i = 0; i < operators.size(); i++) {
     params.operator_types[i] = operators[i]->op_type;
-    if (operators[i]->op_type == mirage::type::TB_INPUT_OP) {
+    if (operators[i]->op_type == yirage::type::TB_INPUT_OP) {
       // We set input saver's operator_after_accum to be false
       params.operator_after_accum[i] = false;
     } else {
@@ -247,9 +247,9 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
       }
     }
     switch (operators[i]->op_type) {
-      case mirage::type::TB_INPUT_OP: {
+      case yirage::type::TB_INPUT_OP: {
         TBInputOp *input_op = static_cast<TBInputOp *>(operators[i]);
-        mirage::kernel::DTensor dtensor = input_op->dtensor;
+        yirage::kernel::DTensor dtensor = input_op->dtensor;
         int3 input_map = input_op->input_map;
         int forloop_dim = input_op->forloop_dim;
         if (fingerprint) {
@@ -260,7 +260,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
               input_op->dtensor.data_offset;
         }
         // Serialize parameters for input loader
-        mirage::threadblock::STensor stensor = operators[i]->output_tensors[0];
+        yirage::threadblock::STensor stensor = operators[i]->output_tensors[0];
         // Assert that stensor and dtensor have the same num of dims
         int num_dims = stensor.num_dims;
         assert(num_dims == dtensor.num_dims);
@@ -270,8 +270,8 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
         stensor_matrix_shape = {stensor.dim[num_dims - 2],
                                 stensor.dim[num_dims - 1]};
         int input_smem_offset = stensor.smem_offset;
-        mirage::layout::DmemLayout dtensor_layout = dtensor.layout;
-        mirage::layout::SmemLayout stensor_layout = stensor.layout;
+        yirage::layout::DmemLayout dtensor_layout = dtensor.layout;
+        yirage::layout::SmemLayout stensor_layout = stensor.layout;
         int3 input_matrix_row_offset_block_stride = {
             (input_map.x == num_dims - 2 ? stensor.dim[num_dims - 2] : 0) *
                 (forloop_dim == num_dims - 2 ? this->forloop_range : 1),
@@ -333,7 +333,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
                 stensor.dim[forloop_dim] * strides[forloop_dim];
           }
         } // if (num_dims > 2)
-        mirage::threadblock::serialize_input_loader_parameters(
+        yirage::threadblock::serialize_input_loader_parameters(
             params.parameters,
             params.num_parameters,
             input_matrix_row_offset_block_stride,
@@ -349,9 +349,9 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             input_smem_offset);
         break;
       }
-      case mirage::type::TB_OUTPUT_OP: {
+      case yirage::type::TB_OUTPUT_OP: {
         TBOutputOp *output_op = static_cast<TBOutputOp *>(operators[i]);
-        mirage::kernel::DTensor dtensor = output_op->dtensor;
+        yirage::kernel::DTensor dtensor = output_op->dtensor;
         int3 output_map = output_op->output_map;
         int forloop_dim = output_op->forloop_dim;
         if (fingerprint) {
@@ -364,9 +364,9 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
         // Serialize parameters for input loader
         assert(operators[i]->input_tensors.size() == 1);
         assert(operators[i]->output_tensors.size() == 0);
-        mirage::threadblock::STensor input_stensor =
+        yirage::threadblock::STensor input_stensor =
             operators[i]->input_tensors[0];
-        // mirage::threadblock::STensor accum_stensor =
+        // yirage::threadblock::STensor accum_stensor =
         //     operators[i]->output_tensors[0];
         //  Assert that stensor and dtensor have the same num of dims
         int num_dims = input_stensor.num_dims;
@@ -379,8 +379,8 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
                                 input_stensor.dim[num_dims - 1]};
         int input_smem_offset = input_stensor.smem_offset;
         // int accum_smem_offset = accum_stensor.smem_offset;
-        mirage::layout::DmemLayout dtensor_layout = dtensor.layout;
-        mirage::layout::SmemLayout stensor_layout = input_stensor.layout;
+        yirage::layout::DmemLayout dtensor_layout = dtensor.layout;
+        yirage::layout::SmemLayout stensor_layout = input_stensor.layout;
         int3 output_matrix_row_offset_block_stride = {
             (output_map.x == num_dims - 2 ? input_stensor.dim[num_dims - 2]
                                           : 0) *
@@ -438,7 +438,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
                 input_stensor.dim[forloop_dim] * strides[forloop_dim];
           }
         }
-        mirage::threadblock::serialize_output_saver_parameters(
+        yirage::threadblock::serialize_output_saver_parameters(
             params.parameters,
             params.num_parameters,
             output_matrix_row_offset_block_stride,
@@ -455,16 +455,16 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             output_op->epilogue);
         break;
       }
-      case mirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP:
-      case mirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
+      case yirage::type::TB_FORLOOP_ACCUM_NO_RED_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP:
+      case yirage::type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
         // TODO: currently assuming we only reduce along the last dim
         assert(operators[i]->input_tensors.size() == 1);
         assert(operators[i]->output_tensors.size() == 1);
-        mirage::threadblock::STensor input = operators[i]->input_tensors[0];
-        mirage::threadblock::STensor accum = operators[i]->output_tensors[0];
+        yirage::threadblock::STensor input = operators[i]->input_tensors[0];
+        yirage::threadblock::STensor accum = operators[i]->output_tensors[0];
         assert(input.num_dims == accum.num_dims);
         int per_iter_reduction_degree =
             input.num_elements() / accum.num_elements();
@@ -474,7 +474,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
           }
         }
         int inner_range = accum.dim[accum.num_dims - 1];
-        mirage::threadblock::serialize_forloop_accum_parameters(
+        yirage::threadblock::serialize_forloop_accum_parameters(
             params.parameters,
             params.num_parameters,
             (int)accum.num_elements(),
@@ -484,12 +484,12 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             accum.smem_offset);
         break;
       }
-      case mirage::type::TB_MATMUL_OP: {
+      case yirage::type::TB_MATMUL_OP: {
         assert(operators[i]->input_tensors.size() == 2);
         assert(operators[i]->output_tensors.size() == 1);
-        mirage::threadblock::STensor A = operators[i]->input_tensors[0];
-        mirage::threadblock::STensor B = operators[i]->input_tensors[1];
-        mirage::threadblock::STensor C = operators[i]->output_tensors[0];
+        yirage::threadblock::STensor A = operators[i]->input_tensors[0];
+        yirage::threadblock::STensor B = operators[i]->input_tensors[1];
+        yirage::threadblock::STensor C = operators[i]->output_tensors[0];
         int num_dims = A.num_dims;
         assert(B.num_dims == num_dims);
         assert(C.num_dims == num_dims);
@@ -505,7 +505,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
         assert(B.dim[num_dims - 2] == k);
         assert(C.dim[num_dims - 2] == m);
         assert(C.dim[num_dims - 1] == n);
-        mirage::threadblock::serialize_matmul_op_parameters(
+        yirage::threadblock::serialize_matmul_op_parameters(
             params.parameters,
             params.num_parameters,
             m,
@@ -516,38 +516,38 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             C.smem_offset);
         break;
       }
-      case mirage::type::TB_EXP_OP:
-      case mirage::type::TB_SQUARE_OP:
-      case mirage::type::TB_SQRT_OP:
-      case mirage::type::TB_SILU_OP:
-      case mirage::type::TB_GELU_OP:
-      case mirage::type::TB_RELU_OP:
-      case mirage::type::TB_CLAMP_OP:
-      case mirage::type::TB_MUL_SCALAR_OP: {
+      case yirage::type::TB_EXP_OP:
+      case yirage::type::TB_SQUARE_OP:
+      case yirage::type::TB_SQRT_OP:
+      case yirage::type::TB_SILU_OP:
+      case yirage::type::TB_GELU_OP:
+      case yirage::type::TB_RELU_OP:
+      case yirage::type::TB_CLAMP_OP:
+      case yirage::type::TB_MUL_SCALAR_OP: {
         assert(operators[i]->input_tensors.size() == 1);
         assert(operators[i]->output_tensors.size() == 1);
-        mirage::threadblock::STensor input = operators[i]->input_tensors[0];
-        mirage::threadblock::STensor output = operators[i]->output_tensors[0];
+        yirage::threadblock::STensor input = operators[i]->input_tensors[0];
+        yirage::threadblock::STensor output = operators[i]->output_tensors[0];
         // assert inplace
         assert(input.smem_offset == output.smem_offset);
         assert(input.num_elements() == output.num_elements());
-        mirage::threadblock::serialize_elementunary_op_parameters(
+        yirage::threadblock::serialize_elementunary_op_parameters(
             params.parameters,
             params.num_parameters,
             input.smem_offset,
             (int)input.num_elements());
         break;
       }
-      case mirage::type::TB_DIV_OP:
-      case mirage::type::TB_MUL_OP:
-      case mirage::type::TB_ADD_OP:
-      case mirage::type::TB_SUB_OP:
-      case mirage::type::TB_POW_OP: {
+      case yirage::type::TB_DIV_OP:
+      case yirage::type::TB_MUL_OP:
+      case yirage::type::TB_ADD_OP:
+      case yirage::type::TB_SUB_OP:
+      case yirage::type::TB_POW_OP: {
         assert(operators[i]->input_tensors.size() == 2);
         assert(operators[i]->output_tensors.size() == 1);
-        mirage::threadblock::STensor input1 = operators[i]->input_tensors[0];
-        mirage::threadblock::STensor input2 = operators[i]->input_tensors[1];
-        mirage::threadblock::STensor output = operators[i]->output_tensors[0];
+        yirage::threadblock::STensor input1 = operators[i]->input_tensors[0];
+        yirage::threadblock::STensor input2 = operators[i]->input_tensors[1];
+        yirage::threadblock::STensor output = operators[i]->output_tensors[0];
         int3 input1_shape = {1, 1, 1}, input2_shape = {1, 1, 1};
         // assert that only the last three dimensions can be larger than 1
         // since we only serialize these
@@ -569,7 +569,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             input2.num_dims > 1 ? input2.dim[input2.num_dims - 2] : 1;
         input2_shape.x =
             input2.num_dims > 2 ? input2.dim[input2.num_dims - 3] : 1;
-        mirage::threadblock::serialize_elementbinary_op_parameters(
+        yirage::threadblock::serialize_elementbinary_op_parameters(
             params.parameters,
             params.num_parameters,
             input1_shape,
@@ -579,24 +579,24 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             output.smem_offset);
         break;
       }
-      case mirage::type::TB_REDUCTION_0_OP:
-      case mirage::type::TB_REDUCTION_1_OP:
-      case mirage::type::TB_REDUCTION_2_OP:
-      case mirage::type::TB_REDUCTION_0_TO_DIMX_OP:
-      case mirage::type::TB_REDUCTION_1_TO_DIMX_OP:
-      case mirage::type::TB_REDUCTION_2_TO_DIMX_OP: {
+      case yirage::type::TB_REDUCTION_0_OP:
+      case yirage::type::TB_REDUCTION_1_OP:
+      case yirage::type::TB_REDUCTION_2_OP:
+      case yirage::type::TB_REDUCTION_0_TO_DIMX_OP:
+      case yirage::type::TB_REDUCTION_1_TO_DIMX_OP:
+      case yirage::type::TB_REDUCTION_2_TO_DIMX_OP: {
         assert(operators[i]->input_tensors.size() == 1);
         assert(operators[i]->output_tensors.size() == 1);
-        mirage::threadblock::STensor input = operators[i]->input_tensors[0];
-        mirage::threadblock::STensor output = operators[i]->output_tensors[0];
-        mirage::type::TBOperatorType type = operators[i]->op_type;
+        yirage::threadblock::STensor input = operators[i]->input_tensors[0];
+        yirage::threadblock::STensor output = operators[i]->output_tensors[0];
+        yirage::type::TBOperatorType type = operators[i]->op_type;
         int reduction_dim = -1;
-        if (type >= mirage::type::TB_REDUCTION_0_TO_DIMX_OP &&
-            type <= mirage::type::TB_REDUCTION_2_TO_DIMX_OP) {
-          reduction_dim = type - mirage::type::TB_REDUCTION_0_TO_DIMX_OP;
-        } else if (type >= mirage::type::TB_REDUCTION_0_OP &&
-                   type <= mirage::type::TB_REDUCTION_2_OP) {
-          reduction_dim = type - mirage::type::TB_REDUCTION_0_OP;
+        if (type >= yirage::type::TB_REDUCTION_0_TO_DIMX_OP &&
+            type <= yirage::type::TB_REDUCTION_2_TO_DIMX_OP) {
+          reduction_dim = type - yirage::type::TB_REDUCTION_0_TO_DIMX_OP;
+        } else if (type >= yirage::type::TB_REDUCTION_0_OP &&
+                   type <= yirage::type::TB_REDUCTION_2_OP) {
+          reduction_dim = type - yirage::type::TB_REDUCTION_0_OP;
         } else {
           assert(false);
         }
@@ -613,7 +613,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
         for (int i = reduction_dim; i < output.num_dims; i++) {
           inner_range *= output.dim[i];
         }
-        mirage::threadblock::serialize_reduction_op_parameters(
+        yirage::threadblock::serialize_reduction_op_parameters(
             params.parameters,
             params.num_parameters,
             (int)output.num_elements(),
@@ -623,16 +623,16 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             output.smem_offset);
         break;
       }
-      case mirage::type::TB_RMS_NORM_OP: {
+      case yirage::type::TB_RMS_NORM_OP: {
         assert(operators[i]->input_tensors.size() == 1);
         assert(operators[i]->output_tensors.size() == 1);
-        mirage::threadblock::STensor input = operators[i]->input_tensors[0];
-        mirage::threadblock::STensor output = operators[i]->output_tensors[0];
+        yirage::threadblock::STensor input = operators[i]->input_tensors[0];
+        yirage::threadblock::STensor output = operators[i]->output_tensors[0];
         int norm_size = output.dim[output.num_dims - 1];
         // printf("norm_size(%d) num_elements(%d)\n", norm_size,
         // (int)output.num_elements());
         assert(input.num_elements() == output.num_elements());
-        mirage::threadblock::serialize_rms_norm_op_parameters(
+        yirage::threadblock::serialize_rms_norm_op_parameters(
             params.parameters,
             params.num_parameters,
             (int)output.num_elements(),
@@ -641,15 +641,15 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             output.smem_offset);
         break;
       }
-      case mirage::type::TB_CONCAT_0_OP:
-      case mirage::type::TB_CONCAT_1_OP:
-      case mirage::type::TB_CONCAT_2_OP: {
+      case yirage::type::TB_CONCAT_0_OP:
+      case yirage::type::TB_CONCAT_1_OP:
+      case yirage::type::TB_CONCAT_2_OP: {
         assert(operators[i]->input_tensors.size() == 2);
         assert(operators[i]->output_tensors.size() == 1);
-        mirage::threadblock::STensor A = operators[i]->input_tensors[0];
-        mirage::threadblock::STensor B = operators[i]->input_tensors[1];
-        mirage::threadblock::STensor output = operators[i]->output_tensors[0];
-        int concat_dim = operators[i]->op_type - mirage::type::TB_CONCAT_0_OP;
+        yirage::threadblock::STensor A = operators[i]->input_tensors[0];
+        yirage::threadblock::STensor B = operators[i]->input_tensors[1];
+        yirage::threadblock::STensor output = operators[i]->output_tensors[0];
+        int concat_dim = operators[i]->op_type - yirage::type::TB_CONCAT_0_OP;
         assert(A.num_dims == B.num_dims);
         assert(A.num_dims == output.num_dims);
         int inner_size = 1;
@@ -664,7 +664,7 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
             inner_size = inner_size * output.dim[i];
           }
         }
-        mirage::threadblock::serialize_concat_op_parameters(
+        yirage::threadblock::serialize_concat_op_parameters(
             params.parameters,
             params.num_parameters,
             (int)output.num_elements(),
@@ -684,12 +684,12 @@ NewKernelParams Graph::get_new_kernel_params(bool fingerprint) const {
   // Our serializer assumes that input loaders are the first operators
   // and that output savers are the last operators
   for (int i = 0; i < params.num_dmem_inputs; i++) {
-    assert(params.operator_types[i] == mirage::type::TB_INPUT_OP);
+    assert(params.operator_types[i] == yirage::type::TB_INPUT_OP);
   }
   for (int i = params.num_operators - params.num_dmem_outputs;
        i < params.num_operators;
        i++) {
-    assert(params.operator_types[i] == mirage::type::TB_OUTPUT_OP);
+    assert(params.operator_types[i] == yirage::type::TB_OUTPUT_OP);
   }
   return params;
 }
@@ -718,7 +718,7 @@ KernelParams Graph::get_kernel_params() {
           operators[i]->output_tensors[j];
       assert(params.num_smem_outputs <= KernelParams::MAX_TOTAL_SMEM_OUTPUTS);
     }
-    if (operators[i]->op_type == mirage::type::TB_INPUT_OP) {
+    if (operators[i]->op_type == yirage::type::TB_INPUT_OP) {
       TBInputOp *input_op = static_cast<TBInputOp *>(operators[i]);
       params.input_map[params.num_dmem_inputs] = input_op->input_map;
       params.forloop_dim[params.num_dmem_inputs] = input_op->forloop_dim;
@@ -726,7 +726,7 @@ KernelParams Graph::get_kernel_params() {
       // printf("sizeof(dtensor) = %zu\n", sizeof(input_op->dtensor));
       assert(params.num_dmem_inputs <= KernelParams::MAX_NUM_DMEM_INPUTS);
     }
-    if (operators[i]->op_type == mirage::type::TB_OUTPUT_OP) {
+    if (operators[i]->op_type == yirage::type::TB_OUTPUT_OP) {
       TBOutputOp *output_op = static_cast<TBOutputOp *>(operators[i]);
       params.output_map = output_op->output_map;
       params.dmem_outputs[params.num_dmem_outputs++] = output_op->dtensor;
@@ -742,7 +742,7 @@ int Graph::get_smem_size_with_pipeline() const {
   int ret = smem_offset;
   // For pipelining, we use double buffers for all input loaders
   for (size_t i = 0; i < operators.size(); i++) {
-    if (operators[i]->op_type == mirage::type::TB_INPUT_OP) {
+    if (operators[i]->op_type == yirage::type::TB_INPUT_OP) {
       STensor stensor = operators[i]->output_tensors[0];
       ret += stensor.size();
     }
@@ -930,4 +930,4 @@ void from_json(json const &j, Graph &graph) {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

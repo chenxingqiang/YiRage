@@ -1,4 +1,4 @@
-#include "mirage/search/abstract_expr/abstract_expr.h"
+#include "yirage/search/abstract_expr/abstract_expr.h"
 #include <atomic>
 #include <cassert>
 #include <cmath>
@@ -6,11 +6,11 @@
 #include <thread>
 #include <vector>
 
-#include "mirage/search/symbolic_graph/tensor_dim_expr.h"
-#include "mirage/utils/containers.h"
-#include "mirage/utils/z3_utils.h"
+#include "yirage/search/symbolic_graph/tensor_dim_expr.h"
+#include "yirage/utils/containers.h"
+#include "yirage/utils/z3_utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 void initialize_final_expr(std::shared_ptr<AbstractExpr const> expr) {
@@ -343,4 +343,4 @@ std::shared_ptr<AbstractExpr const>
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

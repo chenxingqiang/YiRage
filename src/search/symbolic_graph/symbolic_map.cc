@@ -1,6 +1,6 @@
-#include "mirage/search/symbolic_graph/symbolic_map.h"
+#include "yirage/search/symbolic_graph/symbolic_map.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 SymbolicMap::SymbolicMap(std::vector<SymbolicTensorDim> const &device_dims,
@@ -37,4 +37,4 @@ SymbolicMap::operator json() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

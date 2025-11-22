@@ -13,17 +13,18 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/matmul.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/layout.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/matmul.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/layout.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
+
 
 DTensor Graph::matmul(DTensor const &A, DTensor const &B) {
   KNOperator *op = create_matmul_op(A, B);
@@ -70,7 +71,7 @@ KNOperator *Graph::create_matmul_op(DTensor const &A, DTensor const &B) {
 }
 
 KNMatmulOp::KNMatmulOp(Graph *_kgraph, DTensor const &A, DTensor const &B)
-    : KNOperator(_kgraph, mirage::type::KN_MATMUL_OP, A, B) {
+    : KNOperator(_kgraph, yirage::type::KN_MATMUL_OP, A, B) {
   DTensor C;
   assert(A.num_dims == B.num_dims);
   assert(A.dim[A.num_dims - 1] == B.dim[B.num_dims - 2]);
@@ -84,7 +85,7 @@ KNMatmulOp::KNMatmulOp(Graph *_kgraph, DTensor const &A, DTensor const &B)
     C.dim[i] = A.dim[i];
   }
   C.dim[C.num_dims - 1] = B.dim[C.num_dims - 1];
-  C.layout = mirage::layout::DmemRowMajor;
+  C.layout = yirage::layout::DmemRowMajor;
   C.data_type = A.data_type;
   C.owner_op = this;
   C.owner_ts_idx = 0;
@@ -112,7 +113,7 @@ void from_json(json const &j, KNMatmulOp &op) {
   j.at("output_tensors").get_to(op.output_tensors);
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 bool KNMatmulOp::fingerprint(void) {
   DeviceMemoryManager *dmm = DeviceMemoryManager::get_instance();
 
@@ -136,7 +137,7 @@ bool KNMatmulOp::fingerprint(void) {
 
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

@@ -26,11 +26,11 @@ RUN wget -q https://developer.download.nvidia.com/compute/cuda/12.2.0/local_inst
     cp -R cudnn-linux-x86_64-9.5.0.50_cuda12-archive/lib/* /usr/local/cuda-12.2/lib64/ && \
     rm -rf cuda_12.2.0_535.54.03_linux.run cudnn-linux-x86_64-9.5.0.50_cuda12-archive.tar.xz cudnn-linux-x86_64-9.5.0.50_cuda12-archive
 
-# Clone mirage from GitHub
-RUN git clone --recurse-submodules https://github.com/mirage-project/mirage.git
+# Clone yirage from GitHub
+RUN git clone --recurse-submodules https://github.com/yirage-project/yirage.git
 
 # Install Python requirements
-WORKDIR /root/mirage
+WORKDIR /root/yirage
 RUN /opt/python/cp38-cp38/bin/pip install -r requirements.txt && \
     /opt/python/cp39-cp39/bin/pip install -r requirements.txt && \
     /opt/python/cp310-cp310/bin/pip install -r requirements.txt && \

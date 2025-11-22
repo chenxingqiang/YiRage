@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import torch
 import flashinfer
 
@@ -11,28 +11,28 @@ num_kv_tokens = 4096
 batch_size = 8
 
 def get_rms_linear():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=mi.float16)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=yr.float16)
     D = graph.rms_norm(X, normalized_shape=(4096,))
     O = graph.matmul(D, W)
     graph.mark_output(O)
     return graph.superoptimize(config="mlp", previous_checkpoint=f"chameleon_rms_linear_bs{batch_size}.json")
 
 def get_rms_linear2():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=mi.float16)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=yr.float16)
     D = graph.rms_norm(X, normalized_shape=(4096,))
     O = graph.matmul(D, W)
     graph.mark_output(O)
     return graph.superoptimize(config="mlp", previous_checkpoint=f"chameleon_rms_linear2_bs{batch_size}.json")
 
 def get_chameleon_attention():
-    graph = mi.new_kernel_graph()
-    Q = graph.new_input(dims=(n_local_kv_heads, num_tokens, 128), dtype=mi.float16)
-    K = graph.new_input(dims=(n_local_kv_heads, 128, num_kv_tokens), dtype=mi.float16)
-    V = graph.new_input(dims=(n_local_kv_heads, num_kv_tokens, 128), dtype=mi.float16)
+    graph = yr.new_kernel_graph()
+    Q = graph.new_input(dims=(n_local_kv_heads, num_tokens, 128), dtype=yr.float16)
+    K = graph.new_input(dims=(n_local_kv_heads, 128, num_kv_tokens), dtype=yr.float16)
+    V = graph.new_input(dims=(n_local_kv_heads, num_kv_tokens, 128), dtype=yr.float16)
     A = graph.matmul(Q, K)
     E = graph.exp(A)
     S = graph.reduction(E, 2)
@@ -41,7 +41,7 @@ def get_chameleon_attention():
     graph.mark_output(O)
     return graph.superoptimize(config="attention", previous_checkpoint="chameleon_attention_bs{batch_size}.json")
 
-def mirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
+def yirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
     func = kernels[0]
     outputs = func(inputs=[X, Wqkv])
     Xqkv = outputs[0]
@@ -69,13 +69,13 @@ def mirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
     return output
 
 if __name__ == "__main__":
-    X = torch.randn(batch_size * num_tokens, 4096, dtype=torch.float16, device='cuda:0')
-    Wqkv = torch.randn(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim, dtype=torch.float16, device='cuda:0')
-    Wo = torch.randn(n_local_heads * head_dim, 4096, dtype=torch.float16, device='cuda:0')
-    W13 = torch.randn(4096, intermediate_size * 2, dtype=torch.float16, device='cuda:0')
-    W2 = torch.rand(intermediate_size, 4096, dtype=torch.float16, device='cuda:0')
-    Kcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device='cuda:0')
-    Vcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device='cuda:0')
+    X = torch.randn(batch_size * num_tokens, 4096, dtype=torch.float16, device=device)
+    Wqkv = torch.randn(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim, dtype=torch.float16, device=device)
+    Wo = torch.randn(n_local_heads * head_dim, 4096, dtype=torch.float16, device=device)
+    W13 = torch.randn(4096, intermediate_size * 2, dtype=torch.float16, device=device)
+    W2 = torch.rand(intermediate_size, 4096, dtype=torch.float16, device=device)
+    Kcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device=device)
+    Vcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device=device)
 
     k1 = get_rms_linear()
     k2 = get_rms_linear2()
@@ -84,17 +84,31 @@ if __name__ == "__main__":
     kernels = [k1, k2]
 
     for _ in range(16):
-        mirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
-    torch.cuda.synchronize()
+        yirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+    if device.startswith('cuda'):
+        torch.cuda.synchronize()
+    elif device == 'mps' and hasattr(torch.mps, 'synchronize'):
+        torch.mps.synchronize()
 
-    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    if device.startswith('cuda'):
+        starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     repetitions = 1000
-    starter.record()
+    if device.startswith('cuda'):
+        starter.record()
     for rep in range(repetitions):
-        mirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+        yirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
 
     ender.record()
-    torch.cuda.synchronize()
+        torch.cuda.synchronize()
+        curr_time = starter.elapsed_time(ender)
+    else:
+        start_time = time.perf_counter()
+        # Execute operations (copy from above)
+        # ...
+    if device.startswith('cuda'):
+        torch.cuda.synchronize()
+    elif device == 'mps' and hasattr(torch.mps, 'synchronize'):
+        torch.mps.synchronize()
     curr_time = starter.elapsed_time(ender)
 
     mean_syn = curr_time / 1000

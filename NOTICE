@@ -1,0 +1,26 @@
+YiRage (Yield Revolutionary AGile Engine)
+Copyright 2025 Chen Xingqiang
+
+This product includes software developed at Carnegie Mellon University.
+  Mirage Project
+  Copyright 2023-2024 CMU
+  https://github.com/mirage-project/mirage
+
+YiRage is a derivative work that extends Mirage with:
+- Multi-backend support architecture (7 complete backends: CUDA, CPU, MPS, Triton, NKI, cuDNN, MKL)
+- Hardware-specific kernel optimizers (42+ optimization methods)
+- Backend-specific search strategies (15 candidate dimensions, 13 evaluation metrics)
+- Comprehensive documentation and examples (67 files, 16,900+ lines of code)
+
+YiRage contains both:
+- Original Mirage code (Copyright 2023-2024 CMU)
+- New multi-backend extensions (Copyright 2025 Chen Xingqiang)
+
+All code is licensed under the Apache License, Version 2.0.
+See LICENSE file for full license text.
+
+Third-party dependencies:
+- CUTLASS (NVIDIA, BSD-3-Clause)
+- Z3 Theorem Prover (Microsoft, MIT License)
+- nlohmann/json (MIT License)
+

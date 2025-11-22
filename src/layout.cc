@@ -1,6 +1,6 @@
-#include "mirage/layout.h"
+#include "yirage/layout.h"
 
-namespace mirage {
+namespace yirage {
 namespace layout {
 
 CmemLayout dmemlayout_to_cmemlayout(DmemLayout dmem_layout) {
@@ -15,4 +15,4 @@ CmemLayout dmemlayout_to_cmemlayout(DmemLayout dmem_layout) {
 }
 
 } // namespace layout
-} // namespace mirage
+} // namespace yirage

@@ -1,8 +1,10 @@
-#include "mirage/search/dim_strategy.h"
-#include "mirage/config.h"
-#include "mirage/utils/containers.h"
+#include "yirage/search/dim_strategy.h"
+#include <algorithm>
+#include <random>
+#include "yirage/config.h"
+#include "yirage/utils/containers.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 DimStrategy::DimStrategy(GeneratorConfig const &config) : config(config) {}
@@ -10,7 +12,9 @@ DimStrategy::DimStrategy(GeneratorConfig const &config) : config(config) {}
 std::vector<type::KNOperatorType> DimStrategy::get_knop_cand() {
   std::vector<type::KNOperatorType> cands = config.knop_to_explore;
   if (config.randomized_branches) {
-    std::random_shuffle(cands.begin(), cands.end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(cands.begin(), cands.end(), g);
   }
   return cands;
 }
@@ -22,7 +26,9 @@ std::vector<type::TBOperatorType> DimStrategy::get_tbop_cand() {
     cands = deduplicate(cands);
   }
   if (config.randomized_branches) {
-    std::random_shuffle(cands.begin(), cands.end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(cands.begin(), cands.end(), g);
   }
   return cands;
 }
@@ -32,14 +38,14 @@ std::vector<dim3>
 
   auto generate_1d_grids = [&](std::vector<int> const &dims) {
     std::vector<dim3> cands;
-#ifdef MIRAGE_BACKEND_USE_CUDA
+#ifdef YIRAGE_BACKEND_USE_CUDA
     for (size_t x = 8; x <= 256; x *= 2) {
 #else
     for (size_t x = 128; x <= 8192; x *= 2) {
 #endif
       for (int dim : dims) {
         if (dim % x == 0) {
-          cands.push_back({dim / x, 1, 1});
+          cands.push_back({static_cast<unsigned int>(dim / x), 1, 1});
         }
       }
     }
@@ -48,14 +54,14 @@ std::vector<dim3>
 
   auto generate_2d_grids_with_x = [&](int x, std::vector<int> const &dims) {
     std::vector<dim3> cands;
-#ifdef MIRAGE_BACKEND_USE_CUDA
+#ifdef YIRAGE_BACKEND_USE_CUDA
     for (size_t y : {8, 64, 128, 256}) {
 #else
     for (size_t y = 128; y <= 8192; y *= 2) {
 #endif
       for (int dim : dims) {
         if (dim % y == 0) {
-          cands.push_back({x, dim / y, 1});
+          cands.push_back({static_cast<unsigned int>(x), static_cast<unsigned int>(dim / y), 1});
         }
       }
     }
@@ -75,7 +81,7 @@ std::vector<dim3>
     for (size_t x : dim_to_try) {
       for (size_t y : dim_to_try) {
         if (x >= y) {
-          cands.push_back({x, y, 1});
+          cands.push_back({static_cast<unsigned int>(x), static_cast<unsigned int>(y), 1});
         }
       }
     }
@@ -114,14 +120,14 @@ std::vector<dim3>
   std::vector<dim3> cands = config.grid_dim_to_explore;
   int batch = get_batch();
 
-#ifdef MIRAGE_BACKEND_USE_CUDA
+#ifdef YIRAGE_BACKEND_USE_CUDA
   cands = vector_concat(cands, generate_1d_grids(get_dims()));
   if (config._enable_attention_specific_optimization) {
     if (batch != -1) {
       cands = vector_concat(cands, generate_2d_grids_with_x(batch, get_dims()));
     }
     if (tensors.size() > 2) {
-      cands.push_back({batch, 16, 4});
+      cands.push_back({static_cast<unsigned int>(batch), 16, 4});
     }
   }
   cands = filter(cands, [](dim3 const &dim) {
@@ -131,7 +137,7 @@ std::vector<dim3>
   });
 
   if (batch != -1 && batch <= config::MAX_NUM_THREADBLOCKS_PER_KERNEL) {
-    cands.push_back({batch, 1, 1});
+    cands.push_back({static_cast<unsigned int>(batch), 1, 1});
   }
 #else
   cands = vector_concat(cands, generate_1d_grids(get_dims()));
@@ -141,7 +147,9 @@ std::vector<dim3>
   cands = deduplicate(cands);
 
   if (config.randomized_branches) {
-    std::random_shuffle(cands.begin(), cands.end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(cands.begin(), cands.end(), g);
   }
   return cands;
 }
@@ -152,7 +160,9 @@ std::vector<dim3>
   std::vector<dim3> cands = config.block_dim_to_explore;
   cands.push_back({128, 1, 1});
   if (config.randomized_branches) {
-    std::random_shuffle(cands.begin(), cands.end());
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(cands.begin(), cands.end(), g);
   }
   return cands;
 }
@@ -270,7 +280,7 @@ std::vector<std::vector<int3>>
     generate_input_map_cand(tensors, grid_dim, imap_to_explore, {}, results);
   }
   if (config.randomized_branches) {
-    std::random_shuffle(results.begin(), results.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(results.begin(), results.end(), g);
   }
   return results;
 }
@@ -321,7 +331,7 @@ std::vector<int3>
     }
   }
   if (config.randomized_branches) {
-    std::random_shuffle(results.begin(), results.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(results.begin(), results.end(), g);
   }
   return results;
 }
@@ -355,7 +365,7 @@ std::vector<std::vector<int>> DimStrategy::get_forloop_dim_cand(
   }
   generate_forloop_dim(input_tensors, fmap_to_explore, {}, results);
   if (config.randomized_branches) {
-    std::random_shuffle(results.begin(), results.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(results.begin(), results.end(), g);
   }
   return results;
 }
@@ -377,7 +387,7 @@ std::vector<int> DimStrategy::get_forloop_range_cand(
   }
 
   std::vector<int> forloop_range_to_explore = config.frange_to_explore;
-#ifdef MIRAGE_BACKEND_USE_NKI
+#ifdef YIRAGE_BACKEND_USE_NKI
   forloop_range_to_explore.clear();
   for (size_t i = 0; i < input_tensors.size(); ++i) {
     if (forloop_dim[i] == -1) {
@@ -431,7 +441,7 @@ std::vector<int> DimStrategy::get_forloop_range_cand(
     }
   }
   if (config.randomized_branches) {
-    std::random_shuffle(results.begin(), results.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(results.begin(), results.end(), g);
   }
   return results;
 }
@@ -442,7 +452,7 @@ std::vector<std::vector<int>> DimStrategy::get_unary_input(int num_tensors) {
     result.push_back({i});
   }
   if (config.randomized_branches) {
-    std::random_shuffle(result.begin(), result.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(result.begin(), result.end(), g);
   }
   return result;
 }
@@ -455,7 +465,7 @@ std::vector<std::vector<int>> DimStrategy::get_binary_input(int num_tensors) {
     }
   }
   if (config.randomized_branches) {
-    std::random_shuffle(result.begin(), result.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(result.begin(), result.end(), g);
   }
   return result;
 }
@@ -481,9 +491,9 @@ std::vector<std::vector<int>> DimStrategy::get_nary_input(int num_tensors,
                                                           int n) {
   std::vector<std::vector<int>> result;
   std::vector<int> cur;
-  mirage::search::get_nary_input(n, num_tensors, cur, result);
+  yirage::search::get_nary_input(n, num_tensors, cur, result);
   if (config.randomized_branches) {
-    std::random_shuffle(result.begin(), result.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(result.begin(), result.end(), g);
   }
   return result;
 }
@@ -531,7 +541,7 @@ std::vector<std::vector<int3>> DimStrategy::get_input_map_cand(
   };
   generate_input_map_cand(tensors, imap_to_explore, {}, results);
   if (config.randomized_branches) {
-    std::random_shuffle(results.begin(), results.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(results.begin(), results.end(), g);
   }
   return results;
 }
@@ -552,7 +562,7 @@ std::vector<int3>
   }
   omap_to_explore = deduplicate(omap_to_explore);
   if (config.randomized_branches) {
-    std::random_shuffle(results.begin(), results.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(results.begin(), results.end(), g);
   }
   return results;
 }
@@ -582,7 +592,7 @@ std::vector<std::vector<int>> DimStrategy::get_forloop_dim_cand(
   }
   generate_forloop_dim(input_tensers, fmap_to_explore, {}, results);
   if (config.randomized_branches) {
-    std::random_shuffle(results.begin(), results.end());
+    std::random_device rd; std::mt19937 g(rd()); std::shuffle(results.begin(), results.end(), g);
   }
   return results;
 }
@@ -599,4 +609,4 @@ std::vector<std::vector<int>> DimStrategy::get_customized_input_cand_idx(
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

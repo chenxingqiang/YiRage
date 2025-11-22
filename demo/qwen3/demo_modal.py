@@ -1,15 +1,15 @@
 import modal
 
-app = modal.App("mirage-example")
+app = modal.App("yirage-example")
 
 image = (
     modal.Image.from_registry("nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04", add_python="3.12")
     .env({"DEBIAN_FRONTEND": "noninteractive", "TZ": "UTC"})
     .apt_install("wget", "sudo", "binutils", "git", "libmpich-dev", "libopenmpi-dev")
-    .run_commands("git clone --recursive --branch mpk https://www.github.com/mirage-project/mirage")
-    .env({"MIRAGE_HOME": "/mirage"})
-    .run_commands("cd mirage && uv pip install --system -e . -v transformers torch==2.6.0 mpi4py")
-    .run_commands("cd mirage && uv pip install --system flashinfer-python -i https://flashinfer.ai/whl/cu124/torch2.6")
+    .run_commands("git clone --recursive --branch ypk https://www.github.com/yirage-project/yirage")
+    .env({"YIRAGE_HOME": "/yirage"})
+    .run_commands("cd yirage && uv pip install --system -e . -v transformers torch==2.6.0 mpi4py")
+    .run_commands("cd yirage && uv pip install --system flashinfer-python -i https://flashinfer.ai/whl/cu124/torch2.6")
 )
 
 hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
@@ -19,6 +19,6 @@ hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=Tru
 def f():
     import subprocess
 
-    subprocess.run("python /mirage/demo/qwen3/demo.py", check=True, shell=True)
-    subprocess.run("python /mirage/demo/qwen3/demo.py --use-mirage", check=True, shell=True)
+    subprocess.run("python /yirage/demo/qwen3/demo.py", check=True, shell=True)
+    subprocess.run("python /yirage/demo/qwen3/demo.py --use-yirage", check=True, shell=True)
     return

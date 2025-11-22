@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import argparse
 import os
 import torch
@@ -13,10 +13,10 @@ num_kv_tokens = 4096
 
 silu = torch.nn.SiLU()
 def get_rms_linear():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(384,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(384,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW = tb_graph.new_input(dtensor=W, input_map=(1, -1, -1), forloop_dim=0)
     tM = tb_graph.matmul(tX, tW)
@@ -28,10 +28,10 @@ def get_rms_linear():
     return graph, O
 
 def get_rms_linear2():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(344,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(344,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW = tb_graph.new_input(dtensor=W, input_map=(1, -1, -1), forloop_dim=0)
     tM = tb_graph.matmul(tX, tW)
@@ -43,11 +43,11 @@ def get_rms_linear2():
     return graph, O
 
 def get_chameleon_attention():
-    graph = mi.new_kernel_graph()
-    Q = graph.new_input(dims=(n_local_kv_heads, num_tokens, 128), dtype=mi.float16)
-    K = graph.new_input(dims=(n_local_kv_heads, 128, num_kv_tokens), dtype=mi.float16)
-    V = graph.new_input(dims=(n_local_kv_heads, num_kv_tokens, 128), dtype=mi.float16)
-    tbgraph1 = mi.new_threadblock_graph(grid_dim=(n_local_kv_heads,16,1), block_dim=(128,1,1), forloop_range=4, reduction_dimx=128)
+    graph = yr.new_kernel_graph()
+    Q = graph.new_input(dims=(n_local_kv_heads, num_tokens, 128), dtype=yr.float16)
+    K = graph.new_input(dims=(n_local_kv_heads, 128, num_kv_tokens), dtype=yr.float16)
+    V = graph.new_input(dims=(n_local_kv_heads, num_kv_tokens, 128), dtype=yr.float16)
+    tbgraph1 = yr.new_threadblock_graph(grid_dim=(n_local_kv_heads,16,1), block_dim=(128,1,1), forloop_range=4, reduction_dimx=128)
     bQ = tbgraph1.new_input(dtensor=Q, input_map=(0, -1, 1), forloop_dim=-1)
     bK = tbgraph1.new_input(dtensor=K, input_map=(0, 2, -1), forloop_dim=2)
     bV = tbgraph1.new_input(dtensor=V, input_map=(0, 1, -1), forloop_dim=1)
@@ -61,7 +61,7 @@ def get_chameleon_attention():
     tbgraph1.new_output(stensor=bO2, output_map=(0, 2, 1))
     O = graph.customized([Q, K, V], tbgraph1)
 
-    tbgraph2 = mi.new_threadblock_graph(grid_dim=(n_local_kv_heads,2,1), block_dim=(128,1,1), forloop_range=1, reduction_dimx=128)
+    tbgraph2 = yr.new_threadblock_graph(grid_dim=(n_local_kv_heads,2,1), block_dim=(128,1,1), forloop_range=1, reduction_dimx=128)
     bA = tbgraph2.new_input(dtensor=O[0], input_map=(0, 1, -1), forloop_dim=-1)
     bB = tbgraph2.new_input(dtensor=O[1], input_map=(0, 1, -1), forloop_dim=-1)
     bA = tbgraph2.forloop_accum(bA, "sum_todimx")
@@ -71,7 +71,7 @@ def get_chameleon_attention():
     O = graph.customized(O, tbgraph2)
     return graph, O
 
-def mirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
+def yirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
     func, outputs = kernels[0]
     outputs = func(inputs=[X, Wqkv], outputs=outputs)
     Xqkv = outputs[0]
@@ -114,14 +114,14 @@ if __name__ == "__main__":
     kernels = [k1, k2, k3]
 
     for _ in range(16):
-        mirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+        yirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
     torch.cuda.synchronize()
 
     starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     repetitions = 1000
     starter.record()
     for rep in range(repetitions):
-        mirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+        yirage_chameleon(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
 
     ender.record()
     torch.cuda.synchronize()

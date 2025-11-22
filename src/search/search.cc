@@ -1,20 +1,20 @@
-#include "mirage/search/search.h"
-#include "mirage/kernel/customized.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/search/abstract_expr/abstract_expr_eval.h"
-#include "mirage/search/dim_strategy.h"
-#include "mirage/search/op_utils.h"
-#include "mirage/search/symbolic_graph/op_args.h"
-#include "mirage/search/verification/formal_verifier.h"
-#include "mirage/search/verification/probabilistic_verifier.h"
-#include "mirage/utils/containers.h"
-#include "mirage/utils/json_utils.h"
+#include "yirage/search/search.h"
+#include "yirage/kernel/customized.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/search/abstract_expr/abstract_expr_eval.h"
+#include "yirage/search/dim_strategy.h"
+#include "yirage/search/op_utils.h"
+#include "yirage/search/symbolic_graph/op_args.h"
+#include "yirage/search/verification/formal_verifier.h"
+#include "yirage/search/verification/probabilistic_verifier.h"
+#include "yirage/utils/containers.h"
+#include "yirage/utils/json_utils.h"
 
 #include <fstream>
 #include <iostream>
 #include <thread>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 KernelGraphGenerator::KernelGraphGenerator(
@@ -143,7 +143,7 @@ void KernelGraphGenerator::generate_next_operator(
 
   if (!is_a_new_thread_start && search_depth <= multithread_threshold_depth) {
     SearchContext c_copied = SerializedSearchContext(c).deserialize();
-#if !defined(MIRAGE_FINGERPRINT_USE_CPU) || defined(MIRAGE_USE_FORMAL_VERIFIER)
+#if !defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_USE_FORMAL_VERIFIER)
 #pragma omp task
 #endif
     {
@@ -311,7 +311,7 @@ void KernelGraphGenerator::generate_next_operator(
             c.tb_graph->create_output_op(stensor,
                                          output_map,
                                          -1 /*forloop_dim*/,
-                                         mirage::type::TB_EPILOGUE_NONE);
+                                         yirage::type::TB_EPILOGUE_NONE);
         if (!new_op) {
           return false;
         }
@@ -407,11 +407,11 @@ void KernelGraphGenerator::generate_kernel_graphs() {
   std::vector<SerializedSearchContext> verified_graphs;
 
   printf("num_thread = %d\n", num_thread);
-#if !defined(MIRAGE_FINGERPRINT_USE_CPU) || defined(MIRAGE_USE_FORMAL_VERIFIER)
+#if !defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_USE_FORMAL_VERIFIER)
 #pragma omp parallel num_threads(num_thread)
 #endif
   {
-#if !defined(MIRAGE_FINGERPRINT_USE_CPU) || defined(MIRAGE_USE_FORMAL_VERIFIER)
+#if !defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_USE_FORMAL_VERIFIER)
 #pragma omp single
 #endif
     {
@@ -542,7 +542,7 @@ bool KernelGraphGenerator::verify(kernel::Graph &g) {
     };
 
     auto save_graph = [&]() {
-#if !defined(MIRAGE_FINGERPRINT_USE_CPU) || defined(MIRAGE_USE_FORMAL_VERIFIER)
+#if !defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_USE_FORMAL_VERIFIER)
 #pragma omp critical
 #endif
       { generated_graphs.push_back(json(g)); }
@@ -595,7 +595,7 @@ void KernelGraphGenerator::generate_next_symbolic_operator(
     if (tb_graph) {
       tb_graph_copy = std::make_shared<SymbolicTBGraph>(*tb_graph);
     }
-#if !defined(MIRAGE_FINGERPRINT_USE_CPU) || defined(MIRAGE_USE_FORMAL_VERIFIER)
+#if !defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_USE_FORMAL_VERIFIER)
 #pragma omp task
 #endif
     generate_next_symbolic_operator(kn_graph_copy,
@@ -747,7 +747,7 @@ void KernelGraphGenerator::generate_next_symbolic_operator(
                 output_index,
                 output_map,
                 -1,
-                mirage::type::TBEpilogueType::TB_EPILOGUE_NONE)) {
+                yirage::type::TBEpilogueType::TB_EPILOGUE_NONE)) {
           return false;
         }
       }
@@ -918,4 +918,4 @@ bool KernelGraphGenerator::instantiate_symbolic_graph(
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

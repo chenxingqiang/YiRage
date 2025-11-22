@@ -32,11 +32,11 @@ RUN /opt/conda/bin/conda install -c conda-forge numpy
 RUN /opt/conda/bin/conda install -c anaconda cython
 
 ENV PATH /opt/conda/bin:$PATH
-ENV MIRAGE_HOME /usr/mirage/
-ENV LD_LIBRARY_PATH /usr/mirage/deps/z3/build/:$LD_LIBRARY_PATH
+ENV YIRAGE_HOME /usr/yirage/
+ENV LD_LIBRARY_PATH /usr/yirage/deps/z3/build/:$LD_LIBRARY_PATH
 
-COPY install_mirage.sh /install/install_mirage.sh
-RUN bash /install/install_mirage.sh
+COPY install_yirage.sh /install/install_yirage.sh
+RUN bash /install/install_yirage.sh
 
-WORKDIR /usr/mirage
-#RUN chmod -R a+w /usr/mirage
+WORKDIR /usr/yirage
+#RUN chmod -R a+w /usr/yirage

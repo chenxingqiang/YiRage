@@ -13,59 +13,59 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/element_unary.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
+#include "yirage/threadblock/element_unary.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 STensor Graph::exp(STensor const &input) {
-  return elementunary(input, mirage::type::TB_EXP_OP);
+  return elementunary(input, yirage::type::TB_EXP_OP);
 }
 
 STensor *Graph::exp(STensor const *input) {
-  return elementunary(input, mirage::type::TB_EXP_OP);
+  return elementunary(input, yirage::type::TB_EXP_OP);
 }
 
 STensor Graph::square(STensor const &input) {
-  return elementunary(input, mirage::type::TB_SQUARE_OP);
+  return elementunary(input, yirage::type::TB_SQUARE_OP);
 }
 
 STensor *Graph::square(STensor const *input) {
-  return elementunary(input, mirage::type::TB_SQUARE_OP);
+  return elementunary(input, yirage::type::TB_SQUARE_OP);
 }
 
 STensor Graph::sqrt(STensor const &input) {
-  return elementunary(input, mirage::type::TB_SQRT_OP);
+  return elementunary(input, yirage::type::TB_SQRT_OP);
 }
 
 STensor *Graph::sqrt(STensor const *input) {
-  return elementunary(input, mirage::type::TB_SQRT_OP);
+  return elementunary(input, yirage::type::TB_SQRT_OP);
 }
 
 STensor Graph::silu(STensor const &input) {
-  return elementunary(input, mirage::type::TB_SILU_OP);
+  return elementunary(input, yirage::type::TB_SILU_OP);
 }
 
 STensor *Graph::silu(STensor const *input) {
-  return elementunary(input, mirage::type::TB_SILU_OP);
+  return elementunary(input, yirage::type::TB_SILU_OP);
 }
 
 STensor Graph::gelu(STensor const &input) {
-  return elementunary(input, mirage::type::TB_GELU_OP);
+  return elementunary(input, yirage::type::TB_GELU_OP);
 }
 
 STensor *Graph::gelu(STensor const *input) {
-  return elementunary(input, mirage::type::TB_GELU_OP);
+  return elementunary(input, yirage::type::TB_GELU_OP);
 }
 
 STensor Graph::relu(STensor const &input) {
-  return elementunary(input, mirage::type::TB_RELU_OP);
+  return elementunary(input, yirage::type::TB_RELU_OP);
 }
 
 STensor *Graph::relu(STensor const *input) {
-  return elementunary(input, mirage::type::TB_RELU_OP);
+  return elementunary(input, yirage::type::TB_RELU_OP);
 }
 
 STensor Graph::clamp(STensor const &input,
@@ -110,15 +110,15 @@ TBOperator *Graph::create_elementunary_clamp_op(STensor const &input,
 }
 
 STensor Graph::mul_scalar(STensor const &input, float const &scalar) {
-  return elementunary(input, mirage::type::TB_MUL_SCALAR_OP, scalar);
+  return elementunary(input, yirage::type::TB_MUL_SCALAR_OP, scalar);
 }
 
 STensor *Graph::mul_scalar(STensor const *input, float const &scalar) {
-  return elementunary(input, mirage::type::TB_MUL_SCALAR_OP, scalar);
+  return elementunary(input, yirage::type::TB_MUL_SCALAR_OP, scalar);
 }
 
 STensor Graph::elementunary(STensor const &input,
-                            mirage::type::TBOperatorType type,
+                            yirage::type::TBOperatorType type,
                             float const &scalar) {
   TBOperator *op = create_elementunary_op(input, type, scalar);
   assert(op != nullptr);
@@ -127,7 +127,7 @@ STensor Graph::elementunary(STensor const &input,
 }
 
 STensor *Graph::elementunary(STensor const *input,
-                             mirage::type::TBOperatorType type,
+                             yirage::type::TBOperatorType type,
                              float const &scalar) {
   TBOperator *op = create_elementunary_op(*input, type, scalar);
   assert(op != nullptr);
@@ -136,7 +136,7 @@ STensor *Graph::elementunary(STensor const *input,
 }
 
 TBOperator *Graph::create_elementunary_op(STensor const &input,
-                                          mirage::type::TBOperatorType _type,
+                                          yirage::type::TBOperatorType _type,
                                           float const &scalar) {
   TBElementUnaryOp *op = new TBElementUnaryOp(this, input, _type, scalar);
   return op;
@@ -146,12 +146,12 @@ TBClampUnaryOp::TBClampUnaryOp(Graph *_graph,
                                STensor const &input,
                                float const &min_val,
                                float const &max_val)
-    : TBElementUnaryOp(_graph, input, mirage::type::TB_CLAMP_OP, 0.0f),
+    : TBElementUnaryOp(_graph, input, yirage::type::TB_CLAMP_OP, 0.0f),
       min_val(min_val), max_val(max_val) {}
 
 TBElementUnaryOp::TBElementUnaryOp(Graph *_graph,
                                    STensor const &input,
-                                   mirage::type::TBOperatorType _type,
+                                   yirage::type::TBOperatorType _type,
                                    float const &scalar)
     : TBOperator(_graph, _type, input), scalar(scalar) {
   STensor output = input;
@@ -178,4 +178,4 @@ TBElementUnaryOp::operator json() const {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

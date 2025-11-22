@@ -2,7 +2,7 @@
 #pragma once
 
 #include "../../lib.h"
-#include "mirage/threadblock/smem_tensor.h"
+#include "yirage/threadblock/smem_tensor.h"
 
 ADD_TESTCASE(Testcase("tb_elemwise_correctness", {"threadblock", "correctness"}, "threadblock-level elementwise op correctness test", [](Testcase* this_testcase) {
 	struct SubcaseConfig {
@@ -65,7 +65,7 @@ ADD_TESTCASE(Testcase("tb_elemwise_correctness", {"threadblock", "correctness"},
 			{3, 1, 0},
 			-1, 1
 		},
-		// Commented out because of currently Mirage does support output forloop
+		// Commented out because of currently YiRage does support output forloop
 		// dim other than -1
 		// {
 		// 	"forloop, 2d grid",

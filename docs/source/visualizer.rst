@@ -5,7 +5,7 @@ Overview
 --------
 
 The visualizer is designed to render and visualize μGraph, the
-multi-level hierarchical graph representation used in Mirage to specify
+multi-level hierarchical graph representation used in YiRage to specify
 GPU tensor program execution. It leverages ``graphviz`` to visualize
 these representations, producing ``.dot`` and ``.png`` files that
 illustrate the hierarchy of operations at the kernel and block levels in
@@ -28,7 +28,7 @@ There are two ways to use visualizer:
    across kernel and block levels. The JSON format is shown in the
    appendix part.
 
-2. **[Recommended] Direct Integration in Mirage:** The Mirage Python
+2. **[Recommended] Direct Integration in YiRage:** The YiRage Python
    interface has integrated the visualizer, allowing seamless
    visualization without external JSON files. Users can simply call
    ``graph.visualize("filename")`` to produce ``.dot`` and ``.png``
@@ -37,7 +37,7 @@ There are two ways to use visualizer:
 Usage Example
 -------------
 
-After building mirage, you can try visualizer by running
+After building yirage, you can try visualizer by running
 ``python3 demo/reference_mugraphs/lora.py`` or
 ``python3 demo/reference_mugraphs/gated_mlp.py``. Take the latter one as
 an example, related codes are:
@@ -45,11 +45,11 @@ an example, related codes are:
 .. code:: python
 
        # Make a new graph
-       graph = mi.new_kernel_graph() 
+       graph = yr.new_kernel_graph() 
 
        # Building the structure of the graph
-       X = graph.new_input(dims=(16, 4096), dtype=mi.float16)
-       W1 = graph.new_input(dims=(4096, 4096), dtype=mi.float16)
+       X = graph.new_input(dims=(16, 4096), dtype=yr.float16)
+       W1 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
        # ... More building procedure
 
        # Generate .png and .dot visualized files

@@ -8,6 +8,7 @@
 *.so
 *.dylib
 *.dll
+*.log
 
 # Compiled executables
 *.exe
@@ -38,7 +39,7 @@ dist/
 wheelhouse/
 
 # Cython
-/python/mirage/_cython/core.cpp
+/python/yirage/_cython/core.cpp
 
 # Mac OS .DS_Store
 .DS_Store
@@ -49,7 +50,7 @@ wheelhouse/
 !docs/**/*.png
 
 # Triton transpiler
-demo/mirage_search_checkpoint.json
+demo/yirage_search_checkpoint.json
 demo/*generated*
 benchmark/*generated*
 

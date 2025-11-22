@@ -9,7 +9,7 @@
 # ./analyze.sh matmul.ncu-rep matmul_kernel python my_app.py
 
 set -e
-export MIRAGE_HOME=$(pwd)
+export YIRAGE_HOME=$(pwd)
 
 function collect_ncu() {  
   local report_file=$1; shift
@@ -25,7 +25,7 @@ function collect_ncu() {
   echo "Profiling kernel: $kernel_name"
 
   sudo env \
-    MIRAGE_HOME="$MIRAGE_HOME" \
+    YIRAGE_HOME="$YIRAGE_HOME" \
     TMPDIR="./ncu_tmp" \
     VIRTUAL_ENV="$VIRTUAL_ENV" \
     PATH="$VIRTUAL_ENV/bin:$PATH" \

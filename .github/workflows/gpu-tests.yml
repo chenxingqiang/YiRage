@@ -29,20 +29,20 @@ jobs:
         with:
           submodules: recursive
           
-      - name: Install conda and Mirage dependencies
+      - name: Install conda and YiRage dependencies
         uses: conda-incubator/setup-miniconda@v3
         with:
           miniconda-version: "latest"
-          activate-environment: mirage
-          environment-file: conda/mirage.yml
+          activate-environment: yirage
+          environment-file: conda/yirage.yml
           auto-activate-base: false
           auto-update-conda: false
           
       - name: Install Dependencies
         run: .github/workflows/helpers/install_dependencies.sh
 
-      - name: Build Mirage from Source
-        run: .github/workflows/helpers/build_mirage_from_source.sh
+      - name: Build YiRage from Source
+        run: .github/workflows/helpers/build_yirage_from_source.sh
 
       - name: Run performance test
         run: |

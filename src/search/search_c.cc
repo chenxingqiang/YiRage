@@ -1,21 +1,21 @@
-#include "mirage/search/search_c.h"
-#include "mirage/kernel/customized.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/search/dim_strategy.h"
-#include "mirage/search/op_utils.h"
-#include "mirage/search/search.h"
-#include "mirage/utils/containers.h"
+#include "yirage/search/search_c.h"
+#include "yirage/kernel/customized.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/search/dim_strategy.h"
+#include "yirage/search/op_utils.h"
+#include "yirage/search/search.h"
+#include "yirage/utils/containers.h"
 
 #include <fstream>
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace search_c {
 
-int cython_search(mirage::kernel::Graph const *input_graph,
+int cython_search(yirage::kernel::Graph const *input_graph,
                   char const *backend,
                   int max_num_graphs,
-                  mirage::kernel::Graph **new_graphs,
+                  yirage::kernel::Graph **new_graphs,
                   std::vector<MInt3> imap_to_explore,
                   std::vector<MInt3> omap_to_explore,
                   std::vector<MDim3> grid_dim_to_explore,
@@ -99,7 +99,7 @@ int cython_search(mirage::kernel::Graph const *input_graph,
       }
     }
     char const *result_filename =
-        filename ? filename : "mirage_search_checkpoint.json";
+        filename ? filename : "yirage_search_checkpoint.json";
     search::KernelGraphGenerator gen(
         *input_graph, config, result_filename, verbose);
     gen.config.show();
@@ -115,7 +115,7 @@ int cython_search(mirage::kernel::Graph const *input_graph,
   }
 }
 
-void cython_to_json(mirage::kernel::Graph const *input_graph,
+void cython_to_json(yirage::kernel::Graph const *input_graph,
                     char const *filename) {
   json j;
   to_json(j, *input_graph);
@@ -123,14 +123,14 @@ void cython_to_json(mirage::kernel::Graph const *input_graph,
   ofs << j;
 }
 
-mirage::kernel::Graph *cython_from_json(char const *filename) {
+yirage::kernel::Graph *cython_from_json(char const *filename) {
   std::ifstream graph_file(filename, std::ifstream::binary);
   json j;
   graph_file >> j;
-  mirage::kernel::Graph *new_graph = new mirage::kernel::Graph();
+  yirage::kernel::Graph *new_graph = new yirage::kernel::Graph();
   from_json(j, *new_graph);
   return new_graph;
 }
 
 } // namespace search_c
-} // namespace mirage
+} // namespace yirage

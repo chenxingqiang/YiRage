@@ -1,7 +1,7 @@
-#include "mirage/search/symbolic_graph/symbolic_op.h"
-#include "mirage/search/symbolic_graph/op_args.h"
+#include "yirage/search/symbolic_graph/symbolic_op.h"
+#include "yirage/search/symbolic_graph/op_args.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 SymbolicKNOp::SymbolicKNOp(type::KNOperatorType op_type,
@@ -33,4 +33,4 @@ SymbolicTBOp::operator json() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import numpy as np
 import torch
 import pytest
@@ -42,11 +42,11 @@ def is_closed(A, B):
     ],
 )
 def test_gated_mlp(test_config):
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=test_config["input_size"], dtype=mi.float16)
-    W1 = graph.new_input(dims=test_config["weight1_size"], dtype=mi.float16)
-    W2 = graph.new_input(dims=test_config["weight2_size"], dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=test_config["input_size"], dtype=yr.float16)
+    W1 = graph.new_input(dims=test_config["weight1_size"], dtype=yr.float16)
+    W2 = graph.new_input(dims=test_config["weight2_size"], dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(
         test_config["grid_dim"],
         test_config["block_dim"],
         test_config["forloop_range"],
@@ -100,7 +100,7 @@ def test_gated_mlp(test_config):
     ]
 
     input_strides = [tensor.stride() for tensor in input_tensors]
-    # p = mi.generate_cuda_program(
+    # p = yr.generate_cuda_program(
     #     graph.cygraph, target_cc=86, input_strides=input_strides
     # )
     # print(p["code"])
@@ -146,11 +146,11 @@ def test_gated_mlp(test_config):
     ],
 )
 def test_group_query_attention(test_config):
-    graph = mi.new_kernel_graph()
-    Q = graph.new_input(dims=test_config["query_size"], dtype=mi.float16)
-    K = graph.new_input(dims=test_config["key_size"], dtype=mi.float16)
-    V = graph.new_input(dims=test_config["value_size"], dtype=mi.float16)
-    tbgraph1 = mi.new_threadblock_graph(
+    graph = yr.new_kernel_graph()
+    Q = graph.new_input(dims=test_config["query_size"], dtype=yr.float16)
+    K = graph.new_input(dims=test_config["key_size"], dtype=yr.float16)
+    V = graph.new_input(dims=test_config["value_size"], dtype=yr.float16)
+    tbgraph1 = yr.new_threadblock_graph(
         grid_dim=test_config["tb1_grid_dim"],
         block_dim=test_config["tb1_block_dim"],
         forloop_range=test_config["tb1_forloop_range"],
@@ -181,7 +181,7 @@ def test_group_query_attention(test_config):
     tbgraph1.new_output(stensor=bO2, output_map=test_config["tb1_outout_map2"])
     O = graph.customized([Q, K, V], tbgraph1)
 
-    tbgraph2 = mi.new_threadblock_graph(
+    tbgraph2 = yr.new_threadblock_graph(
         grid_dim=test_config["tb2_grid_dim"],
         block_dim=test_config["tb2_block_dim"],
         forloop_range=test_config["tb2_forloop_range"],
@@ -230,7 +230,7 @@ def test_group_query_attention(test_config):
     ]
 
     input_strides = [tensor.stride() for tensor in input_tensors]
-    # p = mi.generate_cuda_program(
+    # p = yr.generate_cuda_program(
     #     graph.cygraph, target_cc=86, input_strides=input_strides
     # )
     # print(p["code"])
@@ -277,10 +277,10 @@ def test_lora():
     ],
 )
 def test_rms_norm(test_config):
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(test_config["input_size"], (1, 8), dtype=mi.float16)
-    W = graph.new_input(test_config["weight_size"],(1, 4096), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(test_config["input_size"], (1, 8), dtype=yr.float16)
+    W = graph.new_input(test_config["weight_size"],(1, 4096), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(
         grid_dim=test_config["grid_dim"],
         block_dim=test_config["block_dim"],
         forloop_range=test_config["forloop_range"],
@@ -320,7 +320,7 @@ def test_rms_norm(test_config):
     ]
 
     input_strides = [tensor.stride() for tensor in input_tensors]
-    # p = mi.generate_cuda_program(
+    # p = yr.generate_cuda_program(
     #     graph.cygraph, target_cc=86, input_strides=input_strides
     # )
     # print(p["code"])

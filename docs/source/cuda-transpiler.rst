@@ -1,11 +1,11 @@
 The CUDA Transpiler
 ===================
 
-Introduction to Mirage’s CUDA Transpiler
+Introduction to YiRage’s CUDA Transpiler
 -----------------------------------
 
-The CUDA transpiler is a key component of Mirage. It is responsible for
-translating the (optimized) computation graph produced by Mirage into
+The CUDA transpiler is a key component of YiRage. It is responsible for
+translating the (optimized) computation graph produced by YiRage into
 efficient CUDA code.
 
 It is not easy to write a transpiler. You should ensure both the
@@ -27,9 +27,9 @@ Architecture
 The transpiler has two crucial components: the “Transpiler” and the
 “Runtime”.
 
-The “Transpiler” is a part of Mirage’s codebase (under
+The “Transpiler” is a part of YiRage’s codebase (under
 ``src/transpiler``). It exposes an interface called ``transpile``, which
-takes a Mirage’s computational graph as input and returns the generated
+takes a YiRage’s computational graph as input and returns the generated
 CUDA code. Here is an example of a piece of generated code:
 
 .. code-block:: cpp
@@ -54,7 +54,7 @@ CUDA code. Here is an example of a piece of generated code:
 
 The “Runtime” is a header-only library that provides a set of useful
 kernels & device functions for the transpiled code. Although it’s
-located at ``include/mirage/transpiler/runtime``, code in Mirage does
+located at ``include/yirage/transpiler/runtime``, code in YiRage does
 not include it. Instead, the generated code will include the “Runtime”
 library (``runtime.h``), and can call various functions inside it (like
 we called ``kn::gemm`` in the example above). It’s the joint effort of
@@ -81,7 +81,7 @@ but it’s poorly written. If you speak Chinese (or you are good at Google
 Translate), you can refer to `these series of
 blogs <https://zhuanlan.zhihu.com/p/661182311>`__ for a better
 understanding. - We suppose you have a basic understanding of **the
-Mirage project**, particularly, what ``DTensor``, ``STensor``, “kernel
+YiRage project**, particularly, what ``DTensor``, ``STensor``, “kernel
 graph”, “kernel operator”, “threadblock graph”, “threadblock operator”
 mean.
 

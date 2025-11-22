@@ -16,7 +16,7 @@ cuda_library_dirs = [
     os.path.join(cuda_home, "lib64", "stubs"),
 ]
 
-macros=[("MIRAGE_BACKEND_USE_CUDA", None), ("MIRAGE_FINGERPRINT_USE_CUDA", None)]
+macros=[("YIRAGE_BACKEND_USE_CUDA", None), ("YIRAGE_FINGERPRINT_USE_CUDA", None)]
 
 setup(
     name='runtime_kernel_blackwell',
@@ -27,15 +27,15 @@ setup(
                 os.path.join(this_dir, 'runtime_kernel_wrapper_sm100.cu'),
             ],
             depends=[
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/tasks/blackwell/topk_softmax_sm100.cuh'),
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/tasks/blackwell/moe_linear_sm100.cuh'),
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/tasks/blackwell/mul_sum_add_sm100.cuh'),
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/tasks/blackwell/utils.cuh'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/tasks/blackwell/topk_softmax_sm100.cuh'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/tasks/blackwell/moe_linear_sm100.cuh'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/tasks/blackwell/mul_sum_add_sm100.cuh'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/tasks/blackwell/utils.cuh'),
             ],
             define_macros=macros,
             include_dirs=[
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/'),
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/tasks/'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/tasks/'),
                 os.path.join(this_dir, '../../../../include'),
                 os.path.join(this_dir, '../../../../deps/cutlass/include'),
                 os.path.join(this_dir, '../../../../deps/cutlass/tools/util/include'),
@@ -43,12 +43,12 @@ setup(
             libraries=["cuda"],
             library_dirs=cuda_library_dirs,
             extra_compile_args={
-                'cxx': ['-DMIRAGE_GRACE_BLACKWELL'],
+                'cxx': ['-DYIRAGE_GRACE_BLACKWELL'],
                 'nvcc': [
                     '-O3',
                     '-gencode=arch=compute_100a,code=sm_100a',
-                    '-DMIRAGE_GRACE_BLACKWELL',
-                    '-DMPK_ENABLE_TMA',
+                    '-DYIRAGE_GRACE_BLACKWELL',
+                    '-DYPK_ENABLE_TMA',
                 ]
             }
         )

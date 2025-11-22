@@ -1,10 +1,10 @@
-#include "mirage/search/verification/formal_verifier.h"
-#include "mirage/search/op_utils.h"
-#include "mirage/utils/containers.h"
+#include "yirage/search/verification/formal_verifier.h"
+#include "yirage/search/op_utils.h"
+#include "yirage/utils/containers.h"
 
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 std::mutex FormalVerifier::formal_verifier_mutex;
@@ -480,4 +480,4 @@ std::vector<std::string>
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

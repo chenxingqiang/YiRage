@@ -1,16 +1,16 @@
 import torch
-import mirage as mi
+import yirage as yr
 import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--profiling", action="store_true", help="Enable mirage profiling mode")
+    parser.add_argument("--profiling", action="store_true", help="Enable yirage profiling mode")
     args = parser.parse_args()
     
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(64, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, 4096), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(384,1,1), forloop_range=64, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(64, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(384,1,1), forloop_range=64, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW = tb_graph.new_input(dtensor=W, input_map=(1, -1, -1), forloop_dim=0)
     tM = tb_graph.matmul(tX, tW)

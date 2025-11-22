@@ -1,7 +1,7 @@
-#include "mirage/search/symbolic_graph/dim_var_assignments.h"
-#include "mirage/search/symbolic_graph/symbolic_tensor_dim.h"
+#include "yirage/search/symbolic_graph/dim_var_assignments.h"
+#include "yirage/search/symbolic_graph/symbolic_tensor_dim.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 DimVarAssignments::DimVarAssignments(
@@ -44,4 +44,4 @@ DimVarAssignments combine_assignments(DimVarAssignments const &lhs,
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

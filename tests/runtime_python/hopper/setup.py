@@ -22,7 +22,7 @@ cuda_library_dirs = [
 
 hopper_task_dir = os.path.join(
     this_dir,
-    '../../../../include/mirage/persistent_kernel/tasks/hopper',
+    '../../../../include/yirage/persistent_kernel/tasks/hopper',
 )
 hopper_depends = sorted(
     glob(os.path.join(hopper_task_dir, '**', '*.cuh'), recursive=True)
@@ -38,22 +38,22 @@ setup(
             ],
             depends=hopper_depends,
             include_dirs=[
-                os.path.join(this_dir, '../../../include/mirage/persistent_kernel'),
+                os.path.join(this_dir, '../../../include/yirage/persistent_kernel'),
                 os.path.join(this_dir, '../../../include'),
             ],
             libraries=["cuda"],
             library_dirs=cuda_library_dirs,
             extra_compile_args={
-                'cxx': ['-DMIRAGE_GRACE_HOPPER',
-                '-DMIRAGE_BACKEND_USE_CUDA',
-                '-DMPK_TARGET_CC=90'],
+                'cxx': ['-DYIRAGE_GRACE_HOPPER',
+                '-DYIRAGE_BACKEND_USE_CUDA',
+                '-DYPK_TARGET_CC=90'],
                 'nvcc': [
                     '-O3',
                     '-gencode=arch=compute_90a,code=sm_90a',
-                    '-DMIRAGE_BACKEND_USE_CUDA',
-                    '-DMIRAGE_GRACE_HOPPER',
-                    '-DMIRAGE_BACKEND_USE_CUDA',
-                    # '-DMIRAGE_PROFILE_HOPPER',
+                    '-DYIRAGE_BACKEND_USE_CUDA',
+                    '-DYIRAGE_GRACE_HOPPER',
+                    '-DYIRAGE_BACKEND_USE_CUDA',
+                    # '-DYIRAGE_PROFILE_HOPPER',
                 ]
             }
         )

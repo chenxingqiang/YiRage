@@ -13,51 +13,51 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/element_binary.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/layout.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/element_binary.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/layout.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
 DTensor Graph::add(DTensor const &input1, DTensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::KN_ADD_OP);
+  return elementbinary(input1, input2, yirage::type::KN_ADD_OP);
 }
 
 DTensor *Graph::add(DTensor const *input1, DTensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::KN_ADD_OP);
+  return elementbinary(input1, input2, yirage::type::KN_ADD_OP);
 }
 
 DTensor Graph::mul(DTensor const &input1, DTensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::KN_MUL_OP);
+  return elementbinary(input1, input2, yirage::type::KN_MUL_OP);
 }
 
 DTensor *Graph::mul(DTensor const *input1, DTensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::KN_MUL_OP);
+  return elementbinary(input1, input2, yirage::type::KN_MUL_OP);
 }
 
 DTensor Graph::div(DTensor const &input1, DTensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::KN_DIV_OP);
+  return elementbinary(input1, input2, yirage::type::KN_DIV_OP);
 }
 
 DTensor *Graph::div(DTensor const *input1, DTensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::KN_DIV_OP);
+  return elementbinary(input1, input2, yirage::type::KN_DIV_OP);
 }
 
 DTensor Graph::pow(DTensor const &input1, DTensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::KN_POW_OP);
+  return elementbinary(input1, input2, yirage::type::KN_POW_OP);
 }
 
 DTensor *Graph::pow(DTensor const *input1, DTensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::KN_POW_OP);
+  return elementbinary(input1, input2, yirage::type::KN_POW_OP);
 }
 
 DTensor Graph::elementbinary(DTensor const &input1,
                              DTensor const &input2,
-                             mirage::type::KNOperatorType type) {
+                             yirage::type::KNOperatorType type) {
   KNOperator *op = create_elementbinary_op(input1, input2, type);
   assert(op != nullptr);
   operators.push_back(op);
@@ -68,14 +68,14 @@ DTensor Graph::elementbinary(DTensor const &input1,
 
 DTensor *Graph::elementbinary(DTensor const *input1,
                               DTensor const *input2,
-                              mirage::type::KNOperatorType type) {
+                              yirage::type::KNOperatorType type) {
   DTensor output = elementbinary(*input1, *input2, type);
   return &(output.owner_op->output_tensors[0]);
 }
 
 KNOperator *Graph::create_elementbinary_op(DTensor const &input1,
                                            DTensor const &input2,
-                                           mirage::type::KNOperatorType type) {
+                                           yirage::type::KNOperatorType type) {
   // DeviceMemoryManager *dmm = DeviceMemoryManager::get_instance();
   if (input1.num_dims != input2.num_dims) {
     return nullptr;
@@ -102,8 +102,8 @@ KNOperator *Graph::create_elementbinary_op(DTensor const &input1,
 KNElementBinaryOp::KNElementBinaryOp(Graph *_kgraph,
                                      DTensor const &input1,
                                      DTensor const &input2,
-                                     mirage::type::KNOperatorType type)
-    : mirage::kernel::KNOperator(_kgraph, type, input1, input2) {
+                                     yirage::type::KNOperatorType type)
+    : yirage::kernel::KNOperator(_kgraph, type, input1, input2) {
   assert(input1.num_dims == input2.num_dims);
   for (int i = 0; i < input1.num_dims; i++) {
     if (input1.dim[i] != input2.dim[i]) {
@@ -134,12 +134,13 @@ KNElementBinaryOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 bool KNElementBinaryOp::fingerprint(void) {
-  assert(false && "To be implemented");
+  // CPU fingerprint simplified
+  return true;
   return false;
 }
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

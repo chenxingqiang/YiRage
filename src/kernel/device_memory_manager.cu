@@ -13,21 +13,21 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/utils/cuda_helper.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/utils/cuda_helper.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
-using namespace mirage::config;
+using namespace yirage::type;
+using namespace yirage::config;
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
 DeviceMemoryManager::DeviceMemoryManager(int _num_gpus, int _gpu_id)
     : num_devices(_num_gpus), gpu_id(_gpu_id) {
   // fingerprint related fields
   checkCUDA(cudaSetDevice(gpu_id));
-  printf("Mirage::DeviceMemoryManager: gpu_id(%d) num_gpus(%d)",
+  printf("YiRage::DeviceMemoryManager: gpu_id(%d) num_gpus(%d)",
          gpu_id,
          num_devices);
   // Part 1: exponential lookup table
@@ -133,12 +133,12 @@ DeviceMemoryManager::DeviceMemoryManager(int _num_gpus, int _gpu_id)
     if (i == 0) {
       for (int k = 0; k < num_devices; k++) {
         checkCUDA(
-            cudaMalloc(&fp_base_ptr[k], mirage::config::MAX_DMEM_FP_SIZE));
+            cudaMalloc(&fp_base_ptr[k], yirage::config::MAX_DMEM_FP_SIZE));
       }
       checkCUDA(
           cudaMalloc(&stensor_fp_base_ptr,
-                     mirage::config::MAX_SMEM_FP_SIZE *
-                         mirage::config::MAX_NUM_THREADBLOCKS_PER_KERNEL));
+                     yirage::config::MAX_SMEM_FP_SIZE *
+                         yirage::config::MAX_NUM_THREADBLOCKS_PER_KERNEL));
     }
   }
 }
@@ -180,7 +180,7 @@ void DeviceMemoryManager::set_gpu_device_id(int gpu_id) {
 void cython_set_gpu_device_id(int gpu_id) {
   DeviceMemoryManager::set_gpu_device_id(gpu_id);
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

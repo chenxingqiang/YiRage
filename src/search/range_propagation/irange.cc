@@ -1,10 +1,10 @@
-#include "mirage/search/range_propagation/irange.h"
-#include "mirage/kernel/rms_norm.h"
-#include "mirage/utils/containers.h"
+#include "yirage/search/range_propagation/irange.h"
+#include "yirage/kernel/rms_norm.h"
+#include "yirage/utils/containers.h"
 
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 IKNRange::IKNRange(RangeSet<KNRange, size_t> const &range_set)
@@ -1155,4 +1155,4 @@ std::vector<std::vector<IKNRange>> get_interact_ranges(
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

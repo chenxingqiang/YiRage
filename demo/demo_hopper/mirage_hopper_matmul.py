@@ -1,12 +1,12 @@
-import mirage as mi
+import yirage as yr
 import argparse
 import os
 import torch
 
 
 datatype = {
-  "e4m3": (mi.float8_e4m3, torch.float8_e4m3fn),
-  "e5m2": (mi.float8_e5m2, torch.float8_e5m2),
+  "e4m3": (yr.float8_e4m3, torch.float8_e4m3fn),
+  "e5m2": (yr.float8_e5m2, torch.float8_e5m2),
 }
 
 config = {
@@ -16,12 +16,12 @@ config = {
 }
 
 def matmul_fp8(M, N, K):
-  kn_graph = mi.new_kernel_graph()
-  X = kn_graph.new_input(dims=(M, K), dtype=mi.float8_e4m3)
-  W = kn_graph.new_input(dims=(K, N), dtype=mi.float8_e4m3)
+  kn_graph = yr.new_kernel_graph()
+  X = kn_graph.new_input(dims=(M, K), dtype=yr.float8_e4m3)
+  W = kn_graph.new_input(dims=(K, N), dtype=yr.float8_e4m3)
 
   # launch 64x1x1 blocks, each running a warp group (128 threads)
-  tb_graph = mi.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(128,1,1), forloop_range=64, reduction_dimx=64)
+  tb_graph = yr.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(128,1,1), forloop_range=64, reduction_dimx=64)
   tX = tb_graph.new_input(dtensor=X, input_map=(-1,-1,-1), forloop_dim=1)
   tW = tb_graph.new_input(dtensor=W, input_map=( 1,-1,-1), forloop_dim=0)
   tM = tb_graph.matmul(tX, tW)
@@ -46,7 +46,7 @@ if __name__ == "__main__":
   
   # debug: view transpiled CUDA code
   # input_strides = [tensor.stride() for tensor in input_tensors]
-  # p = mi.generate_cuda_program(mm.cygraph, target_cc=86, input_strides=input_strides)
+  # p = yr.generate_cuda_program(mm.cygraph, target_cc=86, input_strides=input_strides)
   
   # run kernel graph
   output = mm(inputs=input_tensors)[0]

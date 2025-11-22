@@ -13,18 +13,18 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/graph.h"
-#include "mirage/kernel/task_register.h"
-#include "mirage/transpiler/utils.h"
-#include "mirage/utils/json_utils.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/task_register.h"
+#include "yirage/transpiler/utils.h"
+#include "yirage/utils/json_utils.h"
 #include <queue>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::runtime;
-namespace kn = mirage::kernel;
-namespace tb = mirage::threadblock;
+using namespace yirage::runtime;
+namespace kn = yirage::kernel;
+namespace tb = yirage::threadblock;
 
 size_t get_event_id(int my_gpu_id, size_t event_pos, bool nvshmem_event) {
   size_t event_id = ((static_cast<size_t>(my_gpu_id) << 32) | event_pos);
@@ -67,7 +67,7 @@ void dfs_create_events_add_tasks(
     std::vector<FullTaskDesc> const &cur_op_tasks,
     std::map<dim3, TaskId, Dim3Comparator> const &pre_task_map,
     std::map<dim3, TaskId, Dim3Comparator> &cur_task_map) {
-  if (depth >= mirage::config::MAX_TENSOR_DIMS) {
+  if (depth >= yirage::config::MAX_TENSOR_DIMS) {
     EventDesc event_desc;
     event_desc.num_triggers = 0;
     event_desc.first_task_id = all_tasks.size();
@@ -159,7 +159,7 @@ void dfs_create_events_add_tasks(
 }
 
 void register_mugraph(
-    mirage::kernel::Graph const &graph,
+    yirage::kernel::Graph const &graph,
     int num_gpus,
     int my_gpu_id,
     std::vector<FullTaskDesc> &all_tasks,
@@ -204,7 +204,7 @@ void register_mugraph(
     int variant_id = std::get<3>(task_config);
     assert(bgraph.operators.size() == (size_t)num_inputs + num_outputs);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == mirage::type::TB_INPUT_OP);
+      assert(op->op_type == yirage::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -444,8 +444,8 @@ void register_mugraph(
       }
     } else {
       // Step 2.1: analyze dependencies between thread blocks of the two ops
-      std::vector<int> producer_partition(mirage::config::MAX_TENSOR_DIMS, 1);
-      std::vector<int> consumer_partition(mirage::config::MAX_TENSOR_DIMS, 1);
+      std::vector<int> producer_partition(yirage::config::MAX_TENSOR_DIMS, 1);
+      std::vector<int> consumer_partition(yirage::config::MAX_TENSOR_DIMS, 1);
       int num_shared_tensors = 0;
       int3 input_map, output_map;
       for (auto const &input : input_ops) {
@@ -459,7 +459,7 @@ void register_mugraph(
       }
       // assert that their is at least a single tensor shared between ops
       assert(num_shared_tensors >= 1);
-      for (int d = 0; d < mirage::config::MAX_TENSOR_DIMS; d++) {
+      for (int d = 0; d < yirage::config::MAX_TENSOR_DIMS; d++) {
         if (d == input_map.x) {
           consumer_partition[d] = bgraph.grid_dim.x;
         }
@@ -481,8 +481,8 @@ void register_mugraph(
       }
       // Step 2.2: create events and add tasks
       // number of events is the product of gcd of producer/consumer
-      std::vector<int> event_dims(mirage::config::MAX_TENSOR_DIMS, 1);
-      for (int d = 0; d < mirage::config::MAX_TENSOR_DIMS; d++) {
+      std::vector<int> event_dims(yirage::config::MAX_TENSOR_DIMS, 1);
+      for (int d = 0; d < yirage::config::MAX_TENSOR_DIMS; d++) {
         event_dims[d] = std::gcd(producer_partition[d], consumer_partition[d]);
       }
       dfs_create_events_add_tasks(0,                       /*depth*/
@@ -537,7 +537,7 @@ void register_mugraph(
   }
 }
 
-bool sanity_check(mirage::kernel::Graph const &graph,
+bool sanity_check(yirage::kernel::Graph const &graph,
                   std::vector<FullTaskDesc> const &all_tasks,
                   std::vector<EventDesc> const &all_events,
                   std::vector<TaskId> const &first_tasks) {
@@ -600,7 +600,7 @@ bool sanity_check(mirage::kernel::Graph const &graph,
 }
 
 TaskGraphResult print_task_graph(
-    mirage::kernel::Graph const &graph,
+    yirage::kernel::Graph const &graph,
     int num_gpus,
     int my_gpu_id,
     std::vector<FullTaskDesc> const &all_tasks,
@@ -610,11 +610,11 @@ TaskGraphResult print_task_graph(
         &all_task_maps,
     std::unordered_map<kn::KNOperator const *,
                        std::tuple<int, int, TaskType, int>> const &task_configs,
-    std::map<mirage::type::GuidType, IODesc> const &io_configs,
+    std::map<yirage::type::GuidType, IODesc> const &io_configs,
     bool use_json_format) {
-  using mirage::runtime::IODesc;
-  mirage::transpiler::CodeKeeper code;
-  mirage::transpiler::CodeKeeper tgbody;
+  using yirage::runtime::IODesc;
+  yirage::transpiler::CodeKeeper code;
+  yirage::transpiler::CodeKeeper tgbody;
   tgbody.inc_indent();
   code.e("#include \"persistent_kernel.cuh\"");
   if (use_json_format) {
@@ -623,7 +623,7 @@ TaskGraphResult print_task_graph(
     code.e("#include <filesystem>");
     code.e("using json = nlohmann::json;");
   }
-  code.e("using namespace mirage::runtime;");
+  code.e("using namespace yirage::runtime;");
   code.e("size_t get_event_id(int my_gpu_id, size_t event_pos, bool "
          "nvshmem_event) {");
   code.e("size_t event_id = ((static_cast<size_t>(my_gpu_id) << 32) | "
@@ -712,7 +712,7 @@ TaskGraphResult print_task_graph(
     code.e("}");
 
     // create TMA desc for each task
-    code.e("#ifdef MPK_ENABLE_TMA");
+    code.e("#ifdef YPK_ENABLE_TMA");
     // Hopper Tasks
     code.e("if (task.at(\"task_type\") > TASK_HOPPER_TASK_BEGIN && "
            "task.at(\"task_type\") < TASK_HOPPER_TASK_END) {");
@@ -777,7 +777,7 @@ TaskGraphResult print_task_graph(
       }
       case IODesc::CUDAMallocTensor: {
         code.e("void *$;", desc.name);
-        size_t size = mirage::type::get_datatype_size(
+        size_t size = yirage::type::get_datatype_size(
             static_cast<type::DataType>(desc.tensor.data_type));
         for (int i = 0; i < desc.tensor.num_dims; i++) {
           size *= desc.tensor.dim[i];
@@ -789,7 +789,7 @@ TaskGraphResult print_task_graph(
         break;
       }
       case IODesc::NVSHMEMMallocTensor: {
-        size_t size = mirage::type::get_datatype_size(
+        size_t size = yirage::type::get_datatype_size(
             static_cast<type::DataType>(desc.tensor.data_type));
         for (int i = 0; i < desc.tensor.num_dims; i++) {
           size *= desc.tensor.dim[i];
@@ -803,7 +803,7 @@ TaskGraphResult print_task_graph(
       }
       case IODesc::ShuffledTorchTensor: {
         code.e("char *$;", desc.name);
-        size_t size = mirage::type::get_datatype_size(
+        size_t size = yirage::type::get_datatype_size(
             static_cast<type::DataType>(desc.tensor.data_type));
         for (int i = 0; i < desc.tensor.num_dims; i++) {
           size *= desc.tensor.dim[i];
@@ -897,7 +897,7 @@ TaskGraphResult print_task_graph(
     // int num_outputs = std::get<1>(task_config);
     TaskType task_type = std::get<2>(task_config);
     for (auto const &op : bgraph.operators) {
-      assert(op->op_type == mirage::type::TB_INPUT_OP);
+      assert(op->op_type == yirage::type::TB_INPUT_OP);
       if (input_ops.size() < (size_t)num_inputs) {
         input_ops.push_back(static_cast<tb::TBInputOp *>(op));
       } else {
@@ -1454,14 +1454,14 @@ namespace runtime {
 
 IODesc::IODesc(IOType _type,
                std::string _name,
-               mirage::kernel::DTensor const &_tensor,
+               yirage::kernel::DTensor const &_tensor,
                void *_torch_data_ptr)
     : type(_type), name(_name), torch_data_ptr(_torch_data_ptr) {
   tensor.num_dims = _tensor.num_dims;
   tensor.data_type = _tensor.data_type;
-  assert(_tensor.owner_op->op_type == mirage::type::KN_INPUT_OP);
-  mirage::kernel::KNInputOp const *op =
-      static_cast<mirage::kernel::KNInputOp const *>(_tensor.owner_op);
+  assert(_tensor.owner_op->op_type == yirage::type::KN_INPUT_OP);
+  yirage::kernel::KNInputOp const *op =
+      static_cast<yirage::kernel::KNInputOp const *>(_tensor.owner_op);
   for (int i = 0; i < tensor.num_dims; i++) {
     tensor.dim[i] = _tensor.dim[i];
     tensor.stride[i] = op->input_strides[i];
@@ -1469,4 +1469,4 @@ IODesc::IODesc(IOType _type,
 }
 
 } // namespace runtime
-} // namespace mirage
+} // namespace yirage

@@ -1,15 +1,15 @@
-#include "mirage/threadblock/operator.h"
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/transpiler/sched_tb_graph.h"
-#include "mirage/transpiler/structs.h"
-#include "mirage/transpiler/transpiler.h"
-#include "mirage/type.h"
+#include "yirage/threadblock/operator.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/transpiler/sched_tb_graph.h"
+#include "yirage/transpiler/structs.h"
+#include "yirage/transpiler/transpiler.h"
+#include "yirage/type.h"
 
 #include <limits>
 #include <set>
 #include <unordered_set>
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 namespace memory_planner {
@@ -534,10 +534,10 @@ TBMemoryPlan Transpiler::get_threadblock_memory_plan(tb::Graph const &tb_graph,
     }
   }
 
-  if (plan.smem_size > mirage::config::MAX_SMEM_SIZE) {
+  if (plan.smem_size > yirage::config::MAX_SMEM_SIZE) {
     printf("Warning: planned smem_size(%zu) exceeds MAX_SMEM_SIZE(%zu)\n",
            plan.smem_size,
-           mirage::config::MAX_SMEM_SIZE);
+           yirage::config::MAX_SMEM_SIZE);
     // for (const auto &kv : plan.addrs)
     //   printf("sguid(%zu) offset(%zu)\n", kv.first, kv.second);
   }
@@ -546,4 +546,4 @@ TBMemoryPlan Transpiler::get_threadblock_memory_plan(tb::Graph const &tb_graph,
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

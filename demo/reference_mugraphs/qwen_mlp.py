@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import numpy as np
 import torch
 torch.set_printoptions(sci_mode=False)
@@ -13,10 +13,10 @@ def torch_qwen_mlp(X, G, W):
     return O
 
 if __name__ == "__main__":
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(1, 3584), dtype=mi.bfloat16)
-    G = graph.new_input(dims=(1, 3584), dtype=mi.bfloat16)
-    W = graph.new_input(dims=(3584, 2*18944), strides=(1, 3584), dtype=mi.bfloat16)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(1, 3584), dtype=yr.bfloat16)
+    G = graph.new_input(dims=(1, 3584), dtype=yr.bfloat16)
+    W = graph.new_input(dims=(3584, 2*18944), strides=(1, 3584), dtype=yr.bfloat16)
     D = graph.rms_norm(X, normalized_shape=(3584,))
     D = graph.mul(D, G)
     O = graph.matmul(D, W)
@@ -39,7 +39,7 @@ if __name__ == "__main__":
         input_strides.append(optimized_graph.cygraph.get_input_dtensor_layout(dtensors[i]))
 
     # input_strides = [tensor.stride() for tensor in input_tensors]
-    p = mi.generate_cuda_program(optimized_graph.cygraph, target_cc=86, input_strides=input_strides)
+    p = yr.generate_cuda_program(optimized_graph.cygraph, target_cc=86, input_strides=input_strides)
     print(p["code"])
 
     outputs = optimized_graph(inputs=input_tensors)

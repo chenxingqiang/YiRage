@@ -1,12 +1,12 @@
 #include "common.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/search/search.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/search/search.h"
+#include "yirage/threadblock/graph.h"
 
-using namespace mirage;
+using namespace yirage;
 
 int main(int argc, char **argv) {
-  int batch_size = miragetest::BATCH_SIZE;
+  int batch_size = yiragetest::BATCH_SIZE;
   kernel::Graph ref_graph;
   {
     kernel::DTensor Q = ref_graph.new_input({32 * batch_size, 256, 64},
@@ -37,7 +37,7 @@ int main(int argc, char **argv) {
     }
     printf("[cudnn kernel graph] Total runtime = %.4lfms\n", total_runtime);
   }
-  mirage::cpu::CTensor ref_fp = ref_graph.operators.back()
+  yirage::cpu::CTensor ref_fp = ref_graph.operators.back()
                                     ->output_tensors[0]
                                     .copy_fingerprint_to_ctensor();
 
@@ -57,11 +57,11 @@ int main(int argc, char **argv) {
   std::vector<kernel::DTensor> outputs;
   {
     threadblock::ExecutionPlan plan;
-    plan.ops.push_back({mirage::type::TB_MATMUL_OP, {{0, 0}, {1, 0}}});
-    // plan.ops.push_back({mirage::type::TB_MATMUL_OP, {{3, 0}, {2, 0}}});
-    plan.ops.push_back({mirage::type::TB_EXP_OP, {{3, 0}}});
-    plan.ops.push_back({mirage::type::TB_MATMUL_OP, {{4, 0}, {2, 0}}});
-    plan.ops.push_back({mirage::type::TB_REDUCTION_2_OP, {{4, 0}}});
+    plan.ops.push_back({yirage::type::TB_MATMUL_OP, {{0, 0}, {1, 0}}});
+    // plan.ops.push_back({yirage::type::TB_MATMUL_OP, {{3, 0}, {2, 0}}});
+    plan.ops.push_back({yirage::type::TB_EXP_OP, {{3, 0}}});
+    plan.ops.push_back({yirage::type::TB_MATMUL_OP, {{4, 0}, {2, 0}}});
+    plan.ops.push_back({yirage::type::TB_REDUCTION_2_OP, {{4, 0}}});
     plan.input_map.push_back({0, -1, 1});
     plan.input_map.push_back({0, 2, -1});
     plan.input_map.push_back({0, 1, -1});
@@ -91,9 +91,9 @@ int main(int argc, char **argv) {
   }
   {
     threadblock::ExecutionPlan plan;
-    plan.ops.push_back({mirage::type::TB_REDUCTION_2_TO_DIMX_OP, {{0, 0}}});
-    plan.ops.push_back({mirage::type::TB_REDUCTION_2_OP, {{1, 0}}});
-    plan.ops.push_back({mirage::type::TB_DIV_OP, {{2, 0}, {3, 0}}});
+    plan.ops.push_back({yirage::type::TB_REDUCTION_2_TO_DIMX_OP, {{0, 0}}});
+    plan.ops.push_back({yirage::type::TB_REDUCTION_2_OP, {{1, 0}}});
+    plan.ops.push_back({yirage::type::TB_DIV_OP, {{2, 0}, {3, 0}}});
     plan.input_map.push_back({0, 1, -1});
     plan.input_map.push_back({0, 1, -1});
     plan.input_smem_layouts = {

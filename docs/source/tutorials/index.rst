@@ -2,7 +2,7 @@
 Tutorials
 =========
 
-Below is a set of tutorials for superoptimizing DNNs with Mirage.
+Below is a set of tutorials for superoptimizing DNNs with YiRage.
 
 .. toctree::
    rms-norm-linear

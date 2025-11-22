@@ -14,43 +14,43 @@
  */
 
 #include "cutlass/fast_math.h"
-#include "mirage/config.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/element_binary.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/utils/cuda_helper.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/config.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/element_binary.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/utils/cuda_helper.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 #include <cmath>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
-using namespace mirage::config;
-using namespace mirage::utils;
+using namespace yirage::type;
+using namespace yirage::config;
+using namespace yirage::utils;
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
 
 __global__ void
-    compute_elementbinary_fingerprint(mirage::type::KNOperatorType type,
+    compute_elementbinary_fingerprint(yirage::type::KNOperatorType type,
                                       char *dmem_fp_ptr,
                                       FPType *div_p_lookup_table,
                                       FPType *div_q_lookup_table,
-                                      mirage::kernel::DTensor input1,
-                                      mirage::kernel::DTensor input2,
-                                      mirage::kernel::DTensor output,
+                                      yirage::kernel::DTensor input1,
+                                      yirage::kernel::DTensor input2,
+                                      yirage::kernel::DTensor output,
                                       int num_elements) {
-  mirage::type::FPType *input1_fp_ptr =
-      reinterpret_cast<mirage::type::FPType *>(dmem_fp_ptr + input1.fp_offset);
-  mirage::type::FPType *input2_fp_ptr =
-      reinterpret_cast<mirage::type::FPType *>(dmem_fp_ptr + input2.fp_offset);
-  mirage::type::FPType *output_fp_ptr =
-      reinterpret_cast<mirage::type::FPType *>(dmem_fp_ptr + output.fp_offset);
+  yirage::type::FPType *input1_fp_ptr =
+      reinterpret_cast<yirage::type::FPType *>(dmem_fp_ptr + input1.fp_offset);
+  yirage::type::FPType *input2_fp_ptr =
+      reinterpret_cast<yirage::type::FPType *>(dmem_fp_ptr + input2.fp_offset);
+  yirage::type::FPType *output_fp_ptr =
+      reinterpret_cast<yirage::type::FPType *>(dmem_fp_ptr + output.fp_offset);
 
   int i = threadIdx.x + blockIdx.x * blockDim.x;
-  if (type == mirage::type::KN_ADD_OP) {
+  if (type == yirage::type::KN_ADD_OP) {
     if (i < num_elements) {
       int input1_stride = 1, input1_idx = 0;
       int input2_stride = 1, input2_idx = 0;
@@ -69,7 +69,7 @@ __global__ void
       //     threadIdx.x + blockIdx.x * blockDim.x, z % FP_PQ,
       //     input1_idx, x, input2_idx, y);
     }
-  } else if (type == mirage::type::KN_MUL_OP) {
+  } else if (type == yirage::type::KN_MUL_OP) {
     if (i < num_elements) {
       int input1_stride = 1, input1_idx = 0;
       int input2_stride = 1, input2_idx = 0;
@@ -88,7 +88,7 @@ __global__ void
       //     threadIdx.x + blockIdx.x * blockDim.x, z % FP_PQ,
       //     input1_idx, x, input2_idx, y);
     }
-  } else if (type == mirage::type::KN_DIV_OP) {
+  } else if (type == yirage::type::KN_DIV_OP) {
     if (i < num_elements) {
       int input1_stride = 1, input1_idx = 0;
       int input2_stride = 1, input2_idx = 0;
@@ -108,7 +108,7 @@ __global__ void
       //     threadIdx.x + blockIdx.x * blockDim.x, z % FP_PQ,
       //     input1_idx, x, input2_idx, y);
     }
-  } else if (type == mirage::type::KN_POW_OP) {
+  } else if (type == yirage::type::KN_POW_OP) {
     if (i < num_elements) {
       int input1_stride = 1, input1_idx = 0;
       int input2_stride = 1, input2_idx = 0;
@@ -150,8 +150,8 @@ bool KNElementBinaryOp::fingerprint(void) {
   int const num_threads_per_blk = 1024;
   int num_blocks =
       (num_elements + num_threads_per_blk - 1) / num_threads_per_blk;
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
   // Use GPU dmm->gpu_id for computing fingerprint
   checkCUDA(cudaSetDevice(dmm->gpu_id));
   for (int gpu_id = 0; gpu_id < kgraph->gpu_dim.x; gpu_id++) {
@@ -168,7 +168,7 @@ bool KNElementBinaryOp::fingerprint(void) {
   }
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

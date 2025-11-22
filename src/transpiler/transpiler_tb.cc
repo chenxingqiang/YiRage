@@ -13,29 +13,29 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/element_unary.h"
-#include "mirage/threadblock/forloop_accum.h"
-#include "mirage/threadblock/operator.h"
-#include "mirage/threadblock/reduction.h"
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/transpiler/common.h"
-#include "mirage/transpiler/structs.h"
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/threadblock/element_unary.h"
+#include "yirage/threadblock/forloop_accum.h"
+#include "yirage/threadblock/operator.h"
+#include "yirage/threadblock/reduction.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/transpiler/common.h"
+#include "yirage/transpiler/structs.h"
+#include "yirage/transpiler/transpiler.h"
 
 #include <algorithm>
 #include <unordered_set>
 
-#include "mirage/threadblock/graph.h"
-#include "mirage/transpiler/sched_tb_graph.h"
-#include "mirage/transpiler/utils.h"
-#include "mirage/type.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/transpiler/sched_tb_graph.h"
+#include "yirage/transpiler/utils.h"
+#include "yirage/type.h"
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 using std::string;
-namespace kn = mirage::kernel;
-namespace tb = mirage::threadblock;
+namespace kn = yirage::kernel;
+namespace tb = yirage::threadblock;
 
 namespace get_layout_detail {
 
@@ -947,7 +947,7 @@ CustomOPTranspileResult
           assert(sched_node.ops.size() == 1); // Should not be fused
           tb::TBOutputOp const *cur_op =
               dynamic_cast<tb::TBOutputOp const *>(op);
-          // Currently in Mirage core, an output op must have forloop_dim = -1
+          // Currently in YiRage core, an output op must have forloop_dim = -1
           assert(!is_in_loop);
           assert(cur_op->forloop_dim == -1);
           if (cur_op->forloop_dim >= 0) {
@@ -1541,4 +1541,4 @@ CustomOPTranspileResult
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

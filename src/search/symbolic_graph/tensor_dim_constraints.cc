@@ -1,9 +1,9 @@
-#include "mirage/search/symbolic_graph/tensor_dim_constraints.h"
-#include "mirage/search/symbolic_graph/dim_var_assignments.h"
+#include "yirage/search/symbolic_graph/tensor_dim_constraints.h"
+#include "yirage/search/symbolic_graph/dim_var_assignments.h"
 
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 bool TensorDimConstraints::revert() {
@@ -53,4 +53,4 @@ TensorDimConstraints::operator json() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

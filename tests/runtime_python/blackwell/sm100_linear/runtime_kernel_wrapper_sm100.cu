@@ -189,7 +189,7 @@ void launch_linear_sm100_mpk(void *input_ptr,
 
   size_t i_smem_repeat_col =
       (TILE_SIZE + TMA_CP_ASYNC_SIZE - 1) / TMA_CP_ASYNC_SIZE;
-  mirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
+  yirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
       &host_i_desc,
       static_cast<bfloat16 *>(input_ptr),
       i_gmem_shape,
@@ -206,7 +206,7 @@ void launch_linear_sm100_mpk(void *input_ptr,
                               static_cast<uint32_t>(TMA_CP_ASYNC_SIZE)};
   size_t w_smem_repeat_col =
       (TILE_SIZE + TMA_CP_ASYNC_SIZE - 1) / TMA_CP_ASYNC_SIZE;
-  mirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
+  yirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
       &host_w_desc,
       static_cast<bfloat16 *>(weight_ptr),
       w_gmem_shape,
@@ -223,7 +223,7 @@ void launch_linear_sm100_mpk(void *input_ptr,
   uint32_t o_smem_shape[2] = {static_cast<uint32_t>(MMA_N),
                               static_cast<uint32_t>(MMA_M)};
   size_t o_smem_repeat_col = 1;
-  mirage::runtime::fill_tma_desc<bfloat16, 0, M, S, 2>(
+  yirage::runtime::fill_tma_desc<bfloat16, 0, M, S, 2>(
       &host_o_desc,
       static_cast<bfloat16 *>(output_ptr),
       o_gmem_shape,
@@ -498,7 +498,7 @@ void launch_linear_splitk_sm100(void *input_ptr,
 
   size_t i_smem_repeat_col =
       (TILE_SIZE + TMA_CP_ASYNC_SIZE - 1) / TMA_CP_ASYNC_SIZE;
-  mirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
+  yirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
       &host_i_desc,
       static_cast<bfloat16 *>(input_ptr),
       i_gmem_shape,
@@ -515,7 +515,7 @@ void launch_linear_splitk_sm100(void *input_ptr,
                               static_cast<uint32_t>(TMA_CP_ASYNC_SIZE)};
   size_t w_smem_repeat_col =
       (TILE_SIZE + TMA_CP_ASYNC_SIZE - 1) / TMA_CP_ASYNC_SIZE;
-  mirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
+  yirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
       &host_w_desc,
       static_cast<bfloat16 *>(weight_ptr),
       w_gmem_shape,
@@ -532,7 +532,7 @@ void launch_linear_splitk_sm100(void *input_ptr,
   uint32_t o_smem_shape[2] = {static_cast<uint32_t>(MMA_N),
                               static_cast<uint32_t>(MMA_M)};
   size_t o_smem_repeat_col = 1;
-  mirage::runtime::fill_tma_desc<bfloat16, 0, M, S, 2>(
+  yirage::runtime::fill_tma_desc<bfloat16, 0, M, S, 2>(
       &host_o_desc,
       static_cast<bfloat16 *>(output_ptr),
       o_gmem_shape,
@@ -659,7 +659,7 @@ void linear_splitk_sm100_kernel(torch::Tensor input,
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   m.def(
-      "linear_sm100_mpk", &linear_sm100_mpk_kernel, "Linear kernel SM100 MPK");
+      "linear_sm100_mpk", &linear_sm100_mpk_kernel, "Linear kernel SM100 YPK");
   m.def("linear_splitk_sm100",
         &linear_splitk_sm100_kernel,
         "Linear kernel SM100 SplitK");

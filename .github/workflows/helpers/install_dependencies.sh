@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to install system dependencies required by Mirage
+# Script to install system dependencies required by YiRage
 sudo apt update
 sudo apt install -y software-properties-common lsb-release wget python3-pip g++ make libboost-all-dev
 

@@ -1,13 +1,13 @@
-import mirage as mi
+import yirage as yr
 import argparse
 import os
 import torch
 
 def optimize_llama_70B(checkpoint):
-    graph = mi.new_kernel_graph()
-    Q = graph.new_input(dims=(2, 256, 64), dtype=mi.float16)
-    K = graph.new_input(dims=(2, 64, 4096), dtype=mi.float16)
-    V = graph.new_input(dims=(2, 4096, 64), dtype=mi.float16)
+    graph = yr.new_kernel_graph()
+    Q = graph.new_input(dims=(2, 256, 64), dtype=yr.float16)
+    K = graph.new_input(dims=(2, 64, 4096), dtype=yr.float16)
+    V = graph.new_input(dims=(2, 4096, 64), dtype=yr.float16)
     A = graph.matmul(Q, K)
     E = graph.exp(A)
     S = graph.reduction(E, 2)

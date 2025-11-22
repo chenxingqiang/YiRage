@@ -1,6 +1,6 @@
-#include "mirage/search/range_propagation/tbrange.h"
+#include "yirage/search/range_propagation/tbrange.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 TBRange::TBRange() {}
@@ -65,4 +65,4 @@ std::ostream &operator<<(std::ostream &os, TBRange const &range) {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

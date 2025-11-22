@@ -17,7 +17,7 @@
 IMAGE_NAME="$1"
 COMMAND="bash"
 
-WORKSPACE="/usr/mirage"
+WORKSPACE="/usr/yirage"
 
 echo "WORKSPACE: ${WORKSPACE}"
 echo "IMAGE NAME: ${IMAGE_NAME}"

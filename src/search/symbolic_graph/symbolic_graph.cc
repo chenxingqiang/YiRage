@@ -1,8 +1,8 @@
-#include "mirage/search/symbolic_graph/symbolic_graph.h"
-#include "mirage/search/op_utils.h"
-#include "mirage/search/symbolic_graph/op_args.h"
+#include "yirage/search/symbolic_graph/symbolic_graph.h"
+#include "yirage/search/op_utils.h"
+#include "yirage/search/symbolic_graph/op_args.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 SymbolicTBGraph::SymbolicTBGraph(tensor_dim_var_index_t dim_variable_index_base)
@@ -384,7 +384,7 @@ bool SymbolicTBGraph::add_input(SymbolicDTensor dtensor,
 bool SymbolicTBGraph::add_output(int input_index,
                                  int3 output_map,
                                  int forloop_dim,
-                                 mirage::type::TBEpilogueType epilogue_type) {
+                                 yirage::type::TBEpilogueType epilogue_type) {
   if (!tensors[input_index].after_accum) {
     return false;
   }
@@ -423,7 +423,7 @@ bool SymbolicTBGraph::add_output(int input_index,
   return true;
 }
 
-mirage::kernel::Graph *SymbolicKNGraph::to_kernel_graph(
+yirage::kernel::Graph *SymbolicKNGraph::to_kernel_graph(
     DimVarAssignments const &assignments) const {
   kernel::Graph *graph = new kernel::Graph();
   std::vector<kernel::DTensor> tensors_val;
@@ -679,4 +679,4 @@ SymbolicKNGraph::operator json() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

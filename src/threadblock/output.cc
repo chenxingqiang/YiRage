@@ -13,17 +13,17 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
-mirage::kernel::DTensor
+yirage::kernel::DTensor
     Graph::mark_output(STensor const &stensor,
                        int3 output_map,
                        int output_forloop_dim,
-                       mirage::type::TBEpilogueType epilogue) {
+                       yirage::type::TBEpilogueType epilogue) {
   TBOperator *op =
       create_output_op(stensor, output_map, output_forloop_dim, epilogue);
   assert(op != nullptr);
@@ -31,11 +31,11 @@ mirage::kernel::DTensor
   return static_cast<TBOutputOp *>(op)->dtensor;
 }
 
-mirage::kernel::DTensor *
+yirage::kernel::DTensor *
     Graph::new_output(STensor const *stensor,
                       int3 output_map,
                       int output_forloop_dim,
-                      mirage::type::TBEpilogueType epilogue) {
+                      yirage::type::TBEpilogueType epilogue) {
   TBOperator *op =
       create_output_op(*stensor, output_map, output_forloop_dim, epilogue);
   assert(op != nullptr);
@@ -46,7 +46,7 @@ mirage::kernel::DTensor *
 TBOperator *Graph::create_output_op(STensor const &stensor,
                                     int3 output_map,
                                     int forloop_dim,
-                                    mirage::type::TBEpilogueType epilogue) {
+                                    yirage::type::TBEpilogueType epilogue) {
   // TODO(jiazhihao): this check requires an accum operator before output saver
   // we should remove the check when generating distributed kernels
   if (!stensor.after_accum) {
@@ -61,8 +61,8 @@ TBOutputOp::TBOutputOp(Graph *_graph,
                        STensor const &input,
                        int3 _output_map,
                        int _forloop_dim,
-                       mirage::type::TBEpilogueType _epilogue)
-    : TBOperator(_graph, mirage::type::TB_OUTPUT_OP, input),
+                       yirage::type::TBEpilogueType _epilogue)
+    : TBOperator(_graph, yirage::type::TB_OUTPUT_OP, input),
       output_map(_output_map), forloop_dim(_forloop_dim), epilogue(_epilogue) {
   // Output saver should not have any output stensors
   assert(output_tensors.size() == 0);
@@ -70,7 +70,7 @@ TBOutputOp::TBOutputOp(Graph *_graph,
   dtensor.num_dims = input.num_dims;
   dtensor.data_type = input.data_type;
   // Currently assume that the output layouts are row-major
-  dtensor.layout = mirage::layout::DmemRowMajor;
+  dtensor.layout = yirage::layout::DmemRowMajor;
   for (int i = 0; i < dtensor.num_dims; i++) {
     dtensor.dim[i] = input.dim[i];
   }
@@ -119,4 +119,4 @@ size_t TBOutputOp::get_dtensor_guid() {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

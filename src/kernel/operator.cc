@@ -13,26 +13,26 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/operator.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/operator.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/utils/hash_utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-KNOperator::KNOperator(Graph *_graph, mirage::type::KNOperatorType _type)
+KNOperator::KNOperator(Graph *_graph, yirage::type::KNOperatorType _type)
     : kgraph(_graph), op_type(_type) {}
 
 KNOperator::KNOperator(Graph *_graph,
-                       mirage::type::KNOperatorType _type,
+                       yirage::type::KNOperatorType _type,
                        DTensor const &A)
     : kgraph(_graph), op_type(_type) {
   input_tensors.push_back(A);
 }
 
 KNOperator::KNOperator(Graph *_graph,
-                       mirage::type::KNOperatorType _type,
+                       yirage::type::KNOperatorType _type,
                        DTensor const &A,
                        DTensor const &B)
     : kgraph(_graph), op_type(_type) {
@@ -41,7 +41,7 @@ KNOperator::KNOperator(Graph *_graph,
 }
 
 KNOperator::KNOperator(Graph *_graph,
-                       mirage::type::KNOperatorType _type,
+                       yirage::type::KNOperatorType _type,
                        std::vector<DTensor> const &inputs)
     : kgraph(_graph), op_type(_type) {
   for (auto const &i : inputs) {
@@ -80,4 +80,4 @@ size_t KNOperator::get_owner_independent_hash() const {
 }
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

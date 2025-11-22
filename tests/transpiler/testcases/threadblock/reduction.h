@@ -26,7 +26,7 @@ ADD_TESTCASE(Testcase("tb_reduction_correctness", {"threadblock", "correctness"}
 	};
 	vector<SubcaseConfig> subcases;
 
-	vector<int> src_dims = {12, 24};	// Currently Mirage core only support 2D STensor
+	vector<int> src_dims = {12, 24};	// Currently YiRage core only support 2D STensor
 	for (int reduction_dim = 0; reduction_dim < (int)src_dims.size(); ++reduction_dim) {
 		for (int reduction_dimx : vector<int>{1, 2, 4, 6}) {
 			for (dim3 block_dim : vector<dim3>{{32, 1, 1}, {16, 4, 2}}) {

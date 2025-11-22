@@ -13,11 +13,11 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/rms_norm.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/threadblock/rms_norm.h"
+#include "yirage/threadblock/graph.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 STensor Graph::rms_norm(STensor const &input) {
@@ -38,7 +38,7 @@ TBOperator *Graph::create_rms_norm_op(STensor const &input) {
   TBOperator *op = new TBRmsNormOp(this, input);
   // check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -47,7 +47,7 @@ TBOperator *Graph::create_rms_norm_op(STensor const &input) {
 }
 
 TBRmsNormOp::TBRmsNormOp(Graph *_graph, STensor const &input)
-    : TBOperator(_graph, mirage::type::TB_RMS_NORM_OP, input) {
+    : TBOperator(_graph, yirage::type::TB_RMS_NORM_OP, input) {
   STensor output = input;
   output.owner_op = this;
   output.owner_ts_idx = 0;
@@ -69,4 +69,4 @@ TBRmsNormOp::operator json() const {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

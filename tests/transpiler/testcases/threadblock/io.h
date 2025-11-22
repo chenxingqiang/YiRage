@@ -2,7 +2,7 @@
 #pragma once
 
 #include "../../lib.h"
-#include "mirage/threadblock/smem_tensor.h"
+#include "yirage/threadblock/smem_tensor.h"
 
 ADD_TESTCASE(Testcase("tb_input_output", {"threadblock", "correctness", "perf"}, "threadblock-level input & output op test", [](Testcase* this_testcase) {
 	struct SubcaseConfig {

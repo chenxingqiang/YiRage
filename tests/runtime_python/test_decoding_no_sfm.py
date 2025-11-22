@@ -26,8 +26,8 @@ def attention_decode(q, k_cache, v_cache, valid_len):
 
 k_cache_torch = torch.empty((1, max_seq_len, head_dim), device=device, dtype=dtype)
 v_cache_torch = torch.empty((1, max_seq_len, head_dim), device=device, dtype=dtype)
-k_cache_mirage = torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
-v_cache_mirage =torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
+k_cache_yirage = torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
+v_cache_yirage =torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
 
 for i in range(512):
     seq_len = i + 1
@@ -40,19 +40,19 @@ for i in range(512):
     k_cache_torch[0, seq_len - 1] = k
     v_cache_torch[0, seq_len - 1] = v
 
-    k_cache_mirage[seq_len - 1] = k
-    v_cache_mirage[seq_len - 1] = v
+    k_cache_yirage[seq_len - 1] = k
+    v_cache_yirage[seq_len - 1] = v
 
     torch_output = attention_decode(q, k_cache_torch, v_cache_torch, seq_len)
     torch_output = torch_output.squeeze(0).squeeze(1)
 
-    # print('k_cache_mirage', v_cache_mirage)
+    # print('k_cache_yirage', v_cache_yirage)
 
-    mirage_output = torch.empty((q_heads, head_dim), device=device, dtype=dtype)
-    runtime_kernel.single_batch_gqa(qkv, k_cache_mirage, v_cache_mirage, mirage_output, seq_len)
+    yirage_output = torch.empty((q_heads, head_dim), device=device, dtype=dtype)
+    runtime_kernel.single_batch_gqa(qkv, k_cache_yirage, v_cache_yirage, yirage_output, seq_len)
     torch.cuda.synchronize()
     
-    # print('mirage_output', v_cache_mirage)
+    # print('yirage_output', v_cache_yirage)
 
-    diff = torch_output - mirage_output
+    diff = torch_output - yirage_output
     print("seq_len:", seq_len, "min:", diff.min().item(), "max:", diff.max().item())

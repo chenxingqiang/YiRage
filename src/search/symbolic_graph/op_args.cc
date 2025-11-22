@@ -1,6 +1,6 @@
-#include "mirage/search/symbolic_graph/op_args.h"
+#include "yirage/search/symbolic_graph/op_args.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 KNInputOpArgs::KNInputOpArgs(std::vector<size_t> input_strides, int3 input_map)
@@ -27,18 +27,18 @@ TBInputOpArgs::TBInputOpArgs(SymbolicDTensor dtensor, SymbolicMap const &imap)
 TBOutputOpArgs::TBOutputOpArgs(SymbolicDTensor dtensor,
                                int3 output_map,
                                int forloop_dim,
-                               mirage::type::TBEpilogueType epilogue)
+                               yirage::type::TBEpilogueType epilogue)
     : dtensor(dtensor), output_map(output_map), forloop_dim(forloop_dim),
       epilogue(epilogue) {}
 
 TBConcatOpArgs::TBConcatOpArgs(int concat_dim) : concat_dim(concat_dim) {}
 
-TBElementUnaryOpArgs::TBElementUnaryOpArgs(mirage::type::TBOperatorType op_type,
+TBElementUnaryOpArgs::TBElementUnaryOpArgs(yirage::type::TBOperatorType op_type,
                                            float scalar)
     : op_type(op_type), scalar(scalar) {}
 
 TBElementBinaryOpArgs::TBElementBinaryOpArgs(
-    mirage::type::TBOperatorType op_type)
+    yirage::type::TBOperatorType op_type)
     : op_type(op_type) {}
 
 TBReductionOpArgs::TBReductionOpArgs(int reduce_dim, int reduce_size)
@@ -97,4 +97,4 @@ TBReductionOpArgs::operator json() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

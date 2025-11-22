@@ -28,7 +28,7 @@ setup(
                 os.path.join(this_dir, 'gemm.cu'),
             ],
             include_dirs=[
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/tasks/cute/hopper'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/tasks/cute/hopper'),
                 os.path.join(this_dir, '../../../../include'),
                 os.path.join(this_dir, '../../../../deps/cutlass/include'),
                 os.path.join(this_dir, '../../../../deps/cutlass/tools/util/include'),
@@ -36,14 +36,14 @@ setup(
             libraries=["cuda"],
             library_dirs=cuda_library_dirs,
             extra_compile_args={
-                'cxx': ['-DMIRAGE_GRACE_HOPPER',
-                '-DMIRAGE_BACKEND_USE_CUDA'],
+                'cxx': ['-DYIRAGE_GRACE_HOPPER',
+                '-DYIRAGE_BACKEND_USE_CUDA'],
                 'nvcc': [
                     '-O3',
                     '-gencode=arch=compute_90a,code=sm_90a',
-                    '-DMIRAGE_GRACE_HOPPER',
-                    '-DMIRAGE_PROFILE_HOPPER',
-                    '-DMIRAGE_BACKEND_USE_CUDA',
+                    '-DYIRAGE_GRACE_HOPPER',
+                    '-DYIRAGE_PROFILE_HOPPER',
+                    '-DYIRAGE_BACKEND_USE_CUDA',
                 ]
             }
         )

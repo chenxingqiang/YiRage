@@ -242,7 +242,7 @@ void launch_multitoken_paged_attention(
   dim3 block_dim(128, 1, 1);
 
   nvtxRangePushA("MPA");
-  size_t smem_size = mirage::runtime::MAX_DYNAMIC_SHARED_MEMORY_SIZE;
+  size_t smem_size = yirage::runtime::MAX_DYNAMIC_SHARED_MEMORY_SIZE;
 
   cudaFuncSetAttribute(multitoken_paged_attention_wrapper<T,
                                                           NUM_QO_HEADS,

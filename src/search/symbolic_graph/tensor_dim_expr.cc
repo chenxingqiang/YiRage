@@ -1,7 +1,7 @@
-#include "mirage/search/symbolic_graph/tensor_dim_expr.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/search/symbolic_graph/tensor_dim_expr.h"
+#include "yirage/utils/hash_utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 TensorDimVar::TensorDimVar(tensor_dim_var_index_t index, TensorDimVarType type)
@@ -422,4 +422,4 @@ std::string TensorDimIte::to_string() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

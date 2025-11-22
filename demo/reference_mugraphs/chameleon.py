@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 from flash_attn import flash_attn_qkvpacked_func, flash_attn_func
 import numpy as np
 import torch
@@ -12,11 +12,11 @@ def torch_chameleon(Q, K, V):
     return O
 
 if __name__ == "__main__":
-    graph = mi.new_kernel_graph()
-    Q = graph.new_input(dims=(8, 128, 64), dtype=mi.float16)
-    K = graph.new_input(dims=(8, 64, 4096), dtype=mi.float16)
-    V = graph.new_input(dims=(8, 4096, 64), dtype=mi.float16)
-    tbgraph1 = mi.new_threadblock_graph(grid_dim=(8,16,4), block_dim=(128,1,1), forloop_range=4, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    Q = graph.new_input(dims=(8, 128, 64), dtype=yr.float16)
+    K = graph.new_input(dims=(8, 64, 4096), dtype=yr.float16)
+    V = graph.new_input(dims=(8, 4096, 64), dtype=yr.float16)
+    tbgraph1 = yr.new_threadblock_graph(grid_dim=(8,16,4), block_dim=(128,1,1), forloop_range=4, reduction_dimx=64)
     bQ = tbgraph1.new_input(dtensor=Q, input_map=(0, -1, 1), forloop_dim=-1)
     bK = tbgraph1.new_input(dtensor=K, input_map=(0, 2, -1), forloop_dim=2)
     bV = tbgraph1.new_input(dtensor=V, input_map=(0, 1, -1), forloop_dim=1)
@@ -31,7 +31,7 @@ if __name__ == "__main__":
     tbgraph1.new_output(stensor=bO2, output_map=(0, 2, 1))
     O = graph.customized([Q, K, V], tbgraph1)
 
-    tbgraph2 = mi.new_threadblock_graph(grid_dim=(8,16,1), block_dim=(128,1,1), forloop_range=1, reduction_dimx=64)
+    tbgraph2 = yr.new_threadblock_graph(grid_dim=(8,16,1), block_dim=(128,1,1), forloop_range=1, reduction_dimx=64)
     bA = tbgraph2.new_input(dtensor=O[0], input_map=(0, 1, -1), forloop_dim=-1)
     bB = tbgraph2.new_input(dtensor=O[1], input_map=(0, 1, -1), forloop_dim=-1)
     bA = tbgraph2.forloop_accum(bA, "sum_todimx")
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     ]
 
     input_strides = [tensor.stride() for tensor in input_tensors]
-    p = mi.generate_cuda_program(graph.cygraph, target_cc=86, input_strides=input_strides)
+    p = yr.generate_cuda_program(graph.cygraph, target_cc=86, input_strides=input_strides)
     print(p["code"])
     # warm up runs
     for _ in range(16):

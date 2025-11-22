@@ -13,29 +13,29 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/kernel/operator.h"
-#include "mirage/utils/cuda_helper.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/operator.h"
+#include "yirage/utils/cuda_helper.h"
 
 #include "cutlass/cutlass.h"
 #include "cutlass/fast_math.h"
 #include "cutlass/matrix_coord.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
-using namespace mirage::config;
+using namespace yirage::type;
+using namespace yirage::config;
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
 __global__ void init_input_fingerprint(char *fp_base_ptr,
                                        DTensor const A,
                                        size_t num_elements,
                                        int gpu_id) {
   int idx = (threadIdx.x + blockIdx.x * blockDim.x);
-  mirage::type::FPType *fp_ptr =
-      (mirage::type::FPType *)(fp_base_ptr + A.fp_offset);
+  yirage::type::FPType *fp_ptr =
+      (yirage::type::FPType *)(fp_base_ptr + A.fp_offset);
   if (idx < num_elements) {
     // FIXME: replace this with curand to generate random numbers
     fp_ptr[idx] = (idx + gpu_id * num_elements) % FP_PQ;
@@ -47,8 +47,8 @@ bool KNInputOp::fingerprint(void) {
   assert(kgraph->gpu_dim.y == 1);
   assert(kgraph->gpu_dim.z == 1);
   int const num_threads_per_blk = 1024;
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
   int num_blocks =
       (output_tensors[0].num_elements() + num_threads_per_blk - 1) /
       num_threads_per_blk;
@@ -64,7 +64,7 @@ bool KNInputOp::fingerprint(void) {
   }
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

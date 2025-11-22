@@ -1,11 +1,11 @@
-#include "mirage/nki_transpiler/utils.h"
+#include "yirage/nki_transpiler/utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace nki_transpiler {
 
-using mirage::transpiler::fmt;
+using yirage::transpiler::fmt;
 
-std::string mirage_dtype_to_nki(type::DataType dt) {
+std::string yirage_dtype_to_nki(type::DataType dt) {
   std::string nki_type;
   switch (dt) {
     case type::DataType::DT_INT4:
@@ -34,7 +34,7 @@ std::string mirage_dtype_to_nki(type::DataType dt) {
       nki_type = "nl.float32";
       break;
     default:
-      assert(false && "unsupported nki type in mirage");
+      assert(false && "unsupported nki type in yirage");
       break;
   }
   return nki_type;
@@ -53,4 +53,4 @@ std::string get_tensor_variable_name(threadblock::STensor const &tensor) {
 }
 
 } // namespace nki_transpiler
-} // namespace mirage
+} // namespace yirage

@@ -13,24 +13,24 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/operator.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
+#include "yirage/threadblock/graph.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
-TBOperator::TBOperator(Graph *_graph, mirage::type::TBOperatorType _type)
+TBOperator::TBOperator(Graph *_graph, yirage::type::TBOperatorType _type)
     : bgraph(_graph), op_type(_type) {}
 
 TBOperator::TBOperator(Graph *_graph,
-                       mirage::type::TBOperatorType _type,
+                       yirage::type::TBOperatorType _type,
                        STensor const &input1)
     : bgraph(_graph), op_type(_type) {
   input_tensors.push_back(input1);
 }
 
 TBOperator::TBOperator(Graph *_graph,
-                       mirage::type::TBOperatorType _type,
+                       yirage::type::TBOperatorType _type,
                        STensor const &input1,
                        STensor const &input2)
     : bgraph(_graph), op_type(_type) {
@@ -55,4 +55,4 @@ int TBOperator::get_output_stensors(STensor **outputs) {
 TBOperator::~TBOperator() {}
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

@@ -13,22 +13,22 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_tensor.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/device_tensor.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/utils/hash_utils.h"
 #include <functional>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
 /*static*/ const DTensor DTensor::EMPTY_TENSOR = {/*zero-initialization*/};
 
 DTensor::DTensor() {
-  data_type = mirage::type::DT_UNKNOWN;
-  layout = mirage::layout::DmemUnknownLayout;
+  data_type = yirage::type::DT_UNKNOWN;
+  layout = yirage::layout::DmemUnknownLayout;
   num_dims = 0;
-  for (int i = 0; i < mirage::config::MAX_TENSOR_DIMS; i++) {
+  for (int i = 0; i < yirage::config::MAX_TENSOR_DIMS; i++) {
     dim[i] = 0;
     // stride[i] = 0;
   }
@@ -48,7 +48,7 @@ size_t DTensor::get_owner_independent_hash() const {
   return ret;
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 cpu::CTensor DTensor::copy_fingerprint_to_ctensor() const {
   cpu::CTensor ctensor;
   ctensor.data_type = data_type;
@@ -108,12 +108,12 @@ bool DTensor::has_same_fingerprint(cpu::CTensor const &ref) const {
 std::atomic<int64_t> DTensor::next_guid = 10000000;
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage
 
 namespace std {
 
-size_t hash<mirage::kernel::DTensor>::operator()(
-    mirage::kernel::DTensor const &tensor) const {
+size_t hash<yirage::kernel::DTensor>::operator()(
+    yirage::kernel::DTensor const &tensor) const {
   size_t ret = hash<int>()((tensor.data_type));
   hash_combine(ret, tensor.layout);
   hash_combine(ret, tensor.num_dims);

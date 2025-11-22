@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import numpy as np
 import torch
 torch.set_printoptions(sci_mode=False)
@@ -14,10 +14,10 @@ def torch_qwen_prenorm(X, G, W):
 
 if __name__ == "__main__":
 
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(1, 2048), dtype=mi.bfloat16)
-    G = graph.new_input(dims=(1, 2048), dtype=mi.bfloat16)
-    W = graph.new_input(dims=(2048, 2560), strides=(1, 2048), dtype=mi.bfloat16)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(1, 2048), dtype=yr.bfloat16)
+    G = graph.new_input(dims=(1, 2048), dtype=yr.bfloat16)
+    W = graph.new_input(dims=(2048, 2560), strides=(1, 2048), dtype=yr.bfloat16)
     D = graph.rms_norm(X, normalized_shape=(2048,))
     D = graph.mul(D, G)
     O = graph.matmul(D, W)

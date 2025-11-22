@@ -1,6 +1,6 @@
-#include "mirage/search/symbolic_graph/symbolic_tensor.h"
+#include "yirage/search/symbolic_graph/symbolic_tensor.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 SymbolicDTensor::SymbolicDTensor(std::vector<SymbolicTensorDim> dim_templates)
@@ -19,4 +19,4 @@ SymbolicSTensor::operator json() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

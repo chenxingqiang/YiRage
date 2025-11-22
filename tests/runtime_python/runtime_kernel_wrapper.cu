@@ -570,7 +570,7 @@ void launch_multitoken_paged_attention(
     float k_eps) {
   dim3 grid_dim(1, 1, 1);
   dim3 block_dim(128, 1, 1);
-  size_t smem_size = mirage::runtime::MAX_DYNAMIC_SHARED_MEMORY_SIZE;
+  size_t smem_size = yirage::runtime::MAX_DYNAMIC_SHARED_MEMORY_SIZE;
 
   cudaFuncSetAttribute(multitoken_paged_attention_wrapper<T,
                                                           NUM_QO_HEADS,
@@ -585,7 +585,7 @@ void launch_multitoken_paged_attention(
                        cudaFuncAttributeMaxDynamicSharedMemorySize,
                        smem_size);
 
-#ifndef MIRAGE_PROFILE_AMPERE
+#ifndef YIRAGE_PROFILE_AMPERE
   multitoken_paged_attention_wrapper<T,
                                      NUM_QO_HEADS,
                                      NUM_KV_HEADS,

@@ -13,9 +13,9 @@
  * limitations under the License.
  */
 
-#include "mirage/type.h"
+#include "yirage/type.h"
 
-namespace mirage {
+namespace yirage {
 namespace type {
 
 size_t get_datatype_size(DataType type) {
@@ -80,4 +80,4 @@ bool is_threadblock_element_unary(TBOperatorType op_type) {
 }
 
 } // namespace type
-} // namespace mirage
+} // namespace yirage

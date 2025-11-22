@@ -1,8 +1,8 @@
-#include "mirage/search/order.h"
+#include "yirage/search/order.h"
 
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 bool Order::operator<(Order const &other) const {
@@ -30,4 +30,4 @@ bool Order::operator<=(Order const &other) const {
 Order::Order(std::vector<int> const &v, int type) : v(v), type(type) {}
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

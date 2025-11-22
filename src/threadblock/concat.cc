@@ -13,11 +13,11 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/concat.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/threadblock/concat.h"
+#include "yirage/threadblock/graph.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 STensor Graph::concat(STensor const &A, STensor const &B, int concat_dim) {
@@ -55,7 +55,7 @@ TBOperator *Graph::create_concat_op(STensor const &A,
   TBOperator *op = new TBConcatOp(this, A, B, concat_dim);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -69,7 +69,7 @@ TBConcatOp::TBConcatOp(Graph *bgraph,
                        int dim)
     : TBOperator(
           bgraph,
-          (mirage::type::TBOperatorType)(mirage::type::TB_CONCAT_0_OP + dim),
+          (yirage::type::TBOperatorType)(yirage::type::TB_CONCAT_0_OP + dim),
           A,
           B),
       concat_dim(dim) {
@@ -96,4 +96,4 @@ TBConcatOp::operator json() const {
               {"concat_dim", concat_dim}};
 }
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

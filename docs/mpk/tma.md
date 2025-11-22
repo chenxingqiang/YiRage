@@ -1,8 +1,8 @@
-# MPK TMA Settings Instruction
+# YPK TMA Settings Instruction
 
 ## Overview
 
-**Tensor Memory Accelerator (TMA)** is a new component in **Hopper/Blackwell** Architecture GPUs to move tiles between **global memory (GMEM)** and **shared memory (SMEM)** using `cp.async.bulk.tensor.5d` with an **mbarrier** for completion. Unlike `ldmatrix` or `cp.async.cg` in Ampere GPUs where all threads work cooperatively, only one thread issues the `cp.async.bulk.tensor` instructions. In mpk settings, we support the following 2-4 dimensional `TMA` usage.
+**Tensor Memory Accelerator (TMA)** is a new component in **Hopper/Blackwell** Architecture GPUs to move tiles between **global memory (GMEM)** and **shared memory (SMEM)** using `cp.async.bulk.tensor.5d` with an **mbarrier** for completion. Unlike `ldmatrix` or `cp.async.cg` in Ampere GPUs where all threads work cooperatively, only one thread issues the `cp.async.bulk.tensor` instructions. In ypk settings, we support the following 2-4 dimensional `TMA` usage.
 
 * `tma_2d<T, …>` — 2-D tiles (row, col)
 * `tma_3d<T, …>` — 3-D tiles (depth, row, col)
@@ -12,7 +12,7 @@ Each helper encodes a `CUtensorMap` on the host (shape, strides, swizzle) and ex
 
 ## Prerequisites
 
-* Compile for **Hopper** (`-arch=sm_90a`) and **define** `MIRAGE_GRACE_HOPPER`.
+* Compile for **Hopper** (`-arch=sm_90a`) and **define** `YIRAGE_GRACE_HOPPER`.
 * mbarrier object lives in `__shared__` and is 8-byte aligned.
 
 

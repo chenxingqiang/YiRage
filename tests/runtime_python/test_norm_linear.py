@@ -57,16 +57,16 @@ for output_size in output_sizes:
 
     print(f"Average time over {repetitions} runs: {avg_time:.6f} ms")
 
-    # Compare with Mirage
-    import mirage as mi
+    # Compare with YiRage
+    import yirage as yr
     if output_size <= 64:
-        graph = mi.new_kernel_graph()
-        X = graph.new_input(dims=(1, reduction_size), dtype=mi.bfloat16)
-        G = graph.new_input(dims=(1, reduction_size), dtype=mi.bfloat16)
+        graph = yr.new_kernel_graph()
+        X = graph.new_input(dims=(1, reduction_size), dtype=yr.bfloat16)
+        G = graph.new_input(dims=(1, reduction_size), dtype=yr.bfloat16)
         W = graph.new_input(
-            dims=(reduction_size, min(output_size, 64)), dtype=mi.bfloat16
+            dims=(reduction_size, min(output_size, 64)), dtype=yr.bfloat16
         )
-        tb_graph = mi.new_threadblock_graph(
+        tb_graph = yr.new_threadblock_graph(
             grid_dim=(1, 1, 1),
             block_dim=(128, 1, 1),
             forloop_range=reduction_size / 64,
@@ -104,6 +104,6 @@ for output_size in output_sizes:
         torch.cuda.synchronize()
         curr_time = starter.elapsed_time(ender)
         mean_syn = curr_time / repetitions
-        print(f"Mirage average time over {repetitions} runs: {mean_syn:.6f} ms")
+        print(f"YiRage average time over {repetitions} runs: {mean_syn:.6f} ms")
     else:
-        print(f"Skipping Mirage test for output_size ({output_size}) > 64")
+        print(f"Skipping YiRage test for output_size ({output_size}) > 64")

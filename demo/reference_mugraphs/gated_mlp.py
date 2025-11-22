@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import numpy as np
 import torch
 
@@ -11,11 +11,11 @@ def torch_gated_mlp(X, W1, W2):
     return O
 
 if __name__ == "__main__":
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(16, 4096), dtype=mi.float16)
-    W1 = graph.new_input(dims=(4096, 4096), dtype=mi.float16)
-    W2 = graph.new_input(dims=(4096, 4096), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(16, 4096), dtype=yr.float16)
+    W1 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+    W2 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(128,1,1), forloop_range=32, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW1 = tb_graph.new_input(dtensor=W1, input_map=(1, -1, -1), forloop_dim=0)
     tW2 = tb_graph.new_input(dtensor=W2, input_map=(1, -1, -1), forloop_dim=0)
@@ -36,7 +36,7 @@ if __name__ == "__main__":
     ]
 
     input_strides = [tensor.stride() for tensor in input_tensors]
-    p = mi.generate_cuda_program(graph.cygraph, target_cc=86, input_strides=input_strides)
+    p = yr.generate_cuda_program(graph.cygraph, target_cc=86, input_strides=input_strides)
     print(p["code"])
     silu = torch.nn.SiLU()
     # warm up runs

@@ -33,7 +33,7 @@ from .configuration_qwen2 import Qwen2Config
 import time
 
 import flashinfer
-import mirage as mi
+import yirage as yr
 from .rope import apply_rotary_pos_emb_triton
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Qwen2
@@ -130,35 +130,35 @@ class Qwen2MLP(nn.Module):
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
-        self.enable_mirage = False
+        self.enable_yirage = False
 
     def fuse_weights(self):
         self.fused_weight = torch.transpose(torch.cat((self.gate_proj.weight, self.up_proj.weight), 0), 0, 1)
 
     def superoptimize_kernels(self):
-        self.enable_mirage = True
-        graph = mi.new_kernel_graph()
-        X = graph.new_input(dims=(1, self.hidden_size), dtype=mi.bfloat16)
-        G = graph.new_input(dims=(1, self.hidden_size), dtype=mi.bfloat16)
-        W = graph.new_input(dims=(self.hidden_size, 2*self.intermediate_size), strides=(1, self.hidden_size), dtype=mi.bfloat16)
+        self.enable_yirage = True
+        graph = yr.new_kernel_graph()
+        X = graph.new_input(dims=(1, self.hidden_size), dtype=yr.bfloat16)
+        G = graph.new_input(dims=(1, self.hidden_size), dtype=yr.bfloat16)
+        W = graph.new_input(dims=(self.hidden_size, 2*self.intermediate_size), strides=(1, self.hidden_size), dtype=yr.bfloat16)
         D = graph.rms_norm(X, normalized_shape=(self.hidden_size,))
         D = graph.mul(D, G)
         O = graph.matmul(D, W)
         graph.mark_output(O)
         self.kernel1 = graph.superoptimize(config="mlp")
 
-        graph = mi.new_kernel_graph()
-        X = graph.new_input(dims=(1, self.intermediate_size), dtype=mi.bfloat16)
-        Y = graph.new_input(dims=(1, self.intermediate_size), dtype=mi.bfloat16)
-        W = graph.new_input(dims=(self.intermediate_size, self.hidden_size), strides=(1, self.intermediate_size), dtype=mi.bfloat16)
+        graph = yr.new_kernel_graph()
+        X = graph.new_input(dims=(1, self.intermediate_size), dtype=yr.bfloat16)
+        Y = graph.new_input(dims=(1, self.intermediate_size), dtype=yr.bfloat16)
+        W = graph.new_input(dims=(self.intermediate_size, self.hidden_size), strides=(1, self.intermediate_size), dtype=yr.bfloat16)
         D = graph.mul(graph.silu(X), Y)
         O = graph.matmul(D, W)
         graph.mark_output(O)
         self.kernel2 = graph.superoptimize(config="mlp")
 
     def forward(self, input_layernorm, hidden_state, stream: torch.cuda.Stream = None):
-        if hidden_state.shape[-2] == 1 and self.enable_mirage:
-            # use mirage kernels for decoding
+        if hidden_state.shape[-2] == 1 and self.enable_yirage:
+            # use yirage kernels for decoding
             output = self.kernel1(inputs=(hidden_state, input_layernorm.weight, self.fused_weight), stream=stream)[0]
             gate_output, up_output = torch.chunk(output, 2, -1)
             output = self.kernel2(inputs=(gate_output, up_output, self.down_proj.weight), stream=stream)[0]
@@ -196,19 +196,19 @@ class Qwen2Attention(nn.Module):
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
 
         self.rotary_emb = Qwen2RotaryEmbedding(config=self.config)
-        self.enable_mirage = False
+        self.enable_yirage = False
 
     def fuse_weights(self):
         self.fused_weight = torch.transpose(torch.cat((self.q_proj.weight, self.k_proj.weight, self.v_proj.weight), 0), 0, 1)
         self.fused_bias = torch.cat((self.q_proj.bias, self.k_proj.bias, self.v_proj.bias), 0)
 
     def superoptimize_kernels(self):
-        self.enable_mirage = True
-        graph = mi.new_kernel_graph()
+        self.enable_yirage = True
+        graph = yr.new_kernel_graph()
         self.fused_outdim = (self.num_heads + 2 * self.num_key_value_heads) * self.head_dim
-        X = graph.new_input(dims=(1, self.hidden_size), dtype=mi.bfloat16)
-        G = graph.new_input(dims=(1, self.hidden_size), dtype=mi.bfloat16)
-        W = graph.new_input(dims=(self.hidden_size, self.fused_outdim), strides=(1, self.hidden_size), dtype=mi.bfloat16)
+        X = graph.new_input(dims=(1, self.hidden_size), dtype=yr.bfloat16)
+        G = graph.new_input(dims=(1, self.hidden_size), dtype=yr.bfloat16)
+        W = graph.new_input(dims=(self.hidden_size, self.fused_outdim), strides=(1, self.hidden_size), dtype=yr.bfloat16)
         D = graph.rms_norm(X, normalized_shape=(self.hidden_size,))
         D = graph.mul(D, G)
         O = graph.matmul(D, W)
@@ -227,8 +227,8 @@ class Qwen2Attention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len, _ = hidden_states.size()
 
-        if q_len == 1 and self.enable_mirage:
-            # use mirage kernels for decoding
+        if q_len == 1 and self.enable_yirage:
+            # use yirage kernels for decoding
             xqkv = self.kernel(inputs=(hidden_states, input_layernorm.weight, self.fused_weight), stream=stream)[0]
             xqkv = xqkv.view(bsz, q_len, self.fused_outdim)
         else:

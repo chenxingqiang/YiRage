@@ -1,5 +1,6 @@
-import mirage as mi
+import yirage as yr
 import argparse
+import time
 import os
 import torch
 import flashinfer
@@ -14,21 +15,21 @@ batch_size = 8
 
 silu = torch.nn.SiLU()
 def get_rms_linear():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=mi.float16)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim), dtype=yr.float16)
     D = graph.rms_norm(X, normalized_shape=(4096,))
     O = graph.matmul(D, W)
     graph.mark_output(O)
     return graph.superoptimize(config="mlp", previous_checkpoint="llama_rms_linear_bs{batch_size}.json")
 
 def get_lora():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=mi.float16)
-    A = graph.new_input(dims=(4096, 16), dtype=mi.float16)
-    B = graph.new_input(dims=(16, intermediate_size * 2), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(448,1,1), block_dim=(128,1,1), forloop_range=64, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(batch_size * num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, intermediate_size * 2), dtype=yr.float16)
+    A = graph.new_input(dims=(4096, 16), dtype=yr.float16)
+    B = graph.new_input(dims=(16, intermediate_size * 2), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(448,1,1), block_dim=(128,1,1), forloop_range=64, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW = tb_graph.new_input(dtensor=W, input_map=(1, -1, -1), forloop_dim=0)
     tA = tb_graph.new_input(dtensor=A, input_map=(-1, -1, -1), forloop_dim=0)
@@ -50,12 +51,12 @@ def get_lora():
     return graph
 
 def get_lora2():
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(batch_size * num_tokens, 14336), dtype=mi.float16)
-    W = graph.new_input(dims=(14336, 4096), dtype=mi.float16)
-    A = graph.new_input(dims=(14336, 16), dtype=mi.float16)
-    B = graph.new_input(dims=(16, 4096), dtype=mi.float16)
-    tb_graph = mi.new_threadblock_graph(grid_dim=(128,1,1), block_dim=(128,1,1), forloop_range=224, reduction_dimx=64)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(batch_size * num_tokens, 14336), dtype=yr.float16)
+    W = graph.new_input(dims=(14336, 4096), dtype=yr.float16)
+    A = graph.new_input(dims=(14336, 16), dtype=yr.float16)
+    B = graph.new_input(dims=(16, 4096), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(grid_dim=(128,1,1), block_dim=(128,1,1), forloop_range=224, reduction_dimx=64)
     tX = tb_graph.new_input(dtensor=X, input_map=(-1, -1, -1), forloop_dim=1)
     tW = tb_graph.new_input(dtensor=W, input_map=(1, -1, -1), forloop_dim=0)
     tA = tb_graph.new_input(dtensor=A, input_map=(-1, -1, -1), forloop_dim=0)
@@ -74,7 +75,7 @@ def get_lora2():
     graph.mark_output(O[0])
     return graph
 
-def mirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, A1, B1, A2, B2, kernels):
+def yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, A1, B1, A2, B2, kernels):
     func = kernels[0]
     outputs = func(inputs=[X, Wqkv])
     Xqkv = outputs[0]
@@ -103,17 +104,17 @@ def mirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, A1, B1, A2, B2, kernels):
 
 
 if __name__ == "__main__":
-    X = torch.randn(batch_size * num_tokens, 4096, dtype=torch.float16, device='cuda:0')
-    Wqkv = torch.randn(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim, dtype=torch.float16, device='cuda:0')
-    Wo = torch.randn(n_local_heads * head_dim, 4096, dtype=torch.float16, device='cuda:0')
-    W13 = torch.randn(4096, intermediate_size * 2, dtype=torch.float16, device='cuda:0')
-    W2 = torch.rand(14336, 4096, dtype=torch.float16, device='cuda:0')
-    Kcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device='cuda:0')
-    Vcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device='cuda:0')
-    A1 = torch.rand(4096, 16, dtype=torch.float16, device='cuda:0')
-    B1 = torch.rand(16, 14336 * 2, dtype=torch.float16, device='cuda:0')
-    A2 = torch.rand(14336, 16, dtype=torch.float16, device='cuda:0')
-    B2 = torch.rand(16, 4096, dtype=torch.float16, device='cuda:0')
+    X = torch.randn(batch_size * num_tokens, 4096, dtype=torch.float16, device=device)
+    Wqkv = torch.randn(4096, n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim, dtype=torch.float16, device=device)
+    Wo = torch.randn(n_local_heads * head_dim, 4096, dtype=torch.float16, device=device)
+    W13 = torch.randn(4096, intermediate_size * 2, dtype=torch.float16, device=device)
+    W2 = torch.rand(14336, 4096, dtype=torch.float16, device=device)
+    Kcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device=device)
+    Vcache = torch.rand(num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device=device)
+    A1 = torch.rand(4096, 16, dtype=torch.float16, device=device)
+    B1 = torch.rand(16, 14336 * 2, dtype=torch.float16, device=device)
+    A2 = torch.rand(14336, 16, dtype=torch.float16, device=device)
+    B2 = torch.rand(16, 4096, dtype=torch.float16, device=device)
 
     k1 = get_rms_linear()
     k2 = None
@@ -122,17 +123,31 @@ if __name__ == "__main__":
     kernels = [k1, k2, k3, k4]
 
     for _ in range(16):
-        mirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, A1, B1, A2, B2, kernels)
-    torch.cuda.synchronize()
+        yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, A1, B1, A2, B2, kernels)
+    if device.startswith('cuda'):
+        torch.cuda.synchronize()
+    elif device == 'mps' and hasattr(torch.mps, 'synchronize'):
+        torch.mps.synchronize()
 
-    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    if device.startswith('cuda'):
+        starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
     repetitions = 1000
-    starter.record()
+    if device.startswith('cuda'):
+        starter.record()
     for rep in range(repetitions):
-        mirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, A1, B1, A2, B2, kernels)
+        yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, A1, B1, A2, B2, kernels)
 
     ender.record()
-    torch.cuda.synchronize()
+        torch.cuda.synchronize()
+        curr_time = starter.elapsed_time(ender)
+    else:
+        start_time = time.perf_counter()
+        # Execute operations (copy from above)
+        # ...
+    if device.startswith('cuda'):
+        torch.cuda.synchronize()
+    elif device == 'mps' and hasattr(torch.mps, 'synchronize'):
+        torch.mps.synchronize()
     curr_time = starter.elapsed_time(ender)
 
     mean_syn = curr_time / 1000

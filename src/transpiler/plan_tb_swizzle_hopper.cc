@@ -1,8 +1,8 @@
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/transpiler/transpiler.h"
 #include <unordered_map>
 #include <unordered_set>
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 // Get the swizzle plan for a threadblock
@@ -170,4 +170,4 @@ void Transpiler::get_threadblock_swizzle_plan_hopper(tb::Graph const &tb_graph,
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

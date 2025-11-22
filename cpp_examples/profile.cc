@@ -1,12 +1,12 @@
-#include "mirage/kernel/graph.h"
-#include "mirage/search/search.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/search/search.h"
+#include "yirage/threadblock/graph.h"
 
 #include <fstream>
 #include <iostream>
 
-using namespace mirage;
-using namespace mirage::search;
+using namespace yirage;
+using namespace yirage::search;
 
 int main(int argc, char **argv) {
   if (argc < 2) {

@@ -40,14 +40,14 @@ jobs:
           find /usr -name "libz3.so*" || true
           ldd $(find /usr/lib -name "*z3*.so*" | head -1) || true
           
-      - name: Build Mirage from Source
+      - name: Build YiRage from Source
         env:
           CUDA_TOOLKIT_PATH: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}
           GITHUB_WORKSPACE: ${{ github.workspace }}
-        run: .github/workflows/helpers/build_mirage_from_source.sh
+        run: .github/workflows/helpers/build_yirage_from_source.sh
       
-      - name: Test Mirage Import
+      - name: Test YiRage Import
         run: |
           # Set LD_LIBRARY_PATH for Z3
           export LD_LIBRARY_PATH="/usr/lib:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
-          python -c "import mirage; print('Mirage import successful!')"
+          python -c "import yirage; print('YiRage import successful!')"

@@ -14,14 +14,14 @@
  */
 
 #include "cutlass/cutlass.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/matmul.h"
-#include "mirage/utils/cuda_helper.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/matmul.h"
+#include "yirage/utils/cuda_helper.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 namespace matmul {} // namespace matmul
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

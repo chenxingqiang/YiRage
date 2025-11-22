@@ -1,15 +1,15 @@
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/utils/math_utils.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/utils/math_utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
-using namespace mirage::config;
+using namespace yirage::type;
+using namespace yirage::config;
 
 DeviceMemoryManager *DeviceMemoryManager::singleton = nullptr;
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 DeviceMemoryManager::DeviceMemoryManager() {
   num_devices = 1; // Default to 1 device for non-CUDA environments
   auto initizalize_exp_lookup_table =
@@ -76,4 +76,4 @@ DeviceMemoryManager *DeviceMemoryManager::get_instance() {
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

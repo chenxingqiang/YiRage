@@ -1,6 +1,6 @@
-#include "mirage/search/symbolic_graph/symbolic_tensor_dim.h"
+#include "yirage/search/symbolic_graph/symbolic_tensor_dim.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 SymbolicTensorDim::SymbolicTensorDim(
@@ -36,12 +36,12 @@ SymbolicTensorDim
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage
 
 namespace std {
 
-size_t hash<mirage::search::SymbolicTensorDim>::operator()(
-    mirage::search::SymbolicTensorDim const &dim) const {
+size_t hash<yirage::search::SymbolicTensorDim>::operator()(
+    yirage::search::SymbolicTensorDim const &dim) const {
   return dim.dim_expr->hash();
 }
 

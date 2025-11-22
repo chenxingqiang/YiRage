@@ -5,7 +5,7 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--disable-mirage", action='store_true', help="Disable Mirage kernels")
+    parser.add_argument("--disable-yirage", action='store_true', help="Disable YiRage kernels")
     args = parser.parse_args()
     print("Input arguments:", args)
 
@@ -16,7 +16,7 @@ if __name__ == "__main__":
     with torch.device("cuda"):
         model = Qwen2ForCausalLM.from_pretrained(model_name).to("cuda")
         model.fuse_weights()
-        if not args.disable_mirage:
+        if not args.disable_yirage:
             model.superoptimize_kernels()
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     

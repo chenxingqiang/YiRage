@@ -3,7 +3,7 @@
 Multi-Level Graph Representation
 ********************************
 
-Mirage uses a uGraph to specify the execution of a tensor program on GPUs. A uGraph contains hierarchical graphs at multiple levels to represent computation at the kernel, block, and thread levels.
+YiRage uses a uGraph to specify the execution of a tensor program on GPUs. A uGraph contains hierarchical graphs at multiple levels to represent computation at the kernel, block, and thread levels.
 
 GPU Hierarchy
 =============
@@ -33,7 +33,7 @@ Each tensor program corresponds to one kernel graph, where each node represents 
 Thread Block Graph
 ------------------
 
-A block graph specifies computation associated with a thread block, where each node denotes a block operator which specifies computation within a thread block, and each edge is a tensor shared between thread block operators. Mirage saves all intermediate tensors within a block graph in GPU shared memory for two considerations. First, GPU shared memory offers much higher bandwidth than device memory, and this design allows Mirage to reduce device memory access by maximally saving intermediate results in shared memory. Second, for tensors whose sizes exceed the shared memory capacity and must be stored in the device memory, Mirage uses these tensors to split computation into multiple block graphs, each of which only contains tensors in shared memory. This separation does not introduce additional access to device memory.
+A block graph specifies computation associated with a thread block, where each node denotes a block operator which specifies computation within a thread block, and each edge is a tensor shared between thread block operators. YiRage saves all intermediate tensors within a block graph in GPU shared memory for two considerations. First, GPU shared memory offers much higher bandwidth than device memory, and this design allows YiRage to reduce device memory access by maximally saving intermediate results in shared memory. Second, for tensors whose sizes exceed the shared memory capacity and must be stored in the device memory, YiRage uses these tensors to split computation into multiple block graphs, each of which only contains tensors in shared memory. This separation does not introduce additional access to device memory.
 
 Each block graph is also associated with a few properties to specify its execution, which we introduce as follows.
 

@@ -1,8 +1,8 @@
 # The Transpiler
 
-## Introduction to Mirage's Transpiler
+## Introduction to YiRage's Transpiler
 
-The transpiler is a key component of Mirage. It is responsible for translating the (optimized) computation graph produced by Mirage into efficient CUDA code.
+The transpiler is a key component of YiRage. It is responsible for translating the (optimized) computation graph produced by YiRage into efficient CUDA code.
 
 It is not easy to write a transpiler. You should ensure both the correctness and the performance, which is both an algorithm challenge (e.g. how to plan the layout of every tensor) and an engineering challenge (e.g. how to design the transpiler in an extensible and maintainable way). There are also numerous details and corner cases to consider, like what to do when the shape of the matrix is not divisible by the MMA size.
 
@@ -12,7 +12,7 @@ In this document, we will first introduce the architecture of the transpiler, th
 
 The transpiler has two crucial components: the "Transpiler" and the "Runtime".
 
-The "Transpiler" is a part of Mirage's codebase (under `src/transpiler`). It exposes an interface called `transpile`, which takes a Mirage's computational graph as input and returns the generated CUDA code. Here is an example of a piece of generated code:
+The "Transpiler" is a part of YiRage's codebase (under `src/transpiler`). It exposes an interface called `transpile`, which takes a YiRage's computational graph as input and returns the generated CUDA code. Here is an example of a piece of generated code:
 
 ```cpp
 #define NUM_GPUS 1
@@ -34,7 +34,7 @@ static void _execute_mugraph(std::vector<void const *> input_tensors, std::vecto
 }
 ```
 
-The "Runtime" is a header-only library that provides a set of useful kernels & device functions for the transpiled code. Although it's located at `include/mirage/transpiler/runtime`, code in Mirage does not include it. Instead, the generated code will include the "Runtime" library (`runtime.h`), and can call various functions inside it (like we called `kn::gemm` in the example above). It's the joint effort of the "Transpiler" and the "Runtime" that makes the generated code efficient and correct.
+The "Runtime" is a header-only library that provides a set of useful kernels & device functions for the transpiled code. Although it's located at `include/yirage/transpiler/runtime`, code in YiRage does not include it. Instead, the generated code will include the "Runtime" library (`runtime.h`), and can call various functions inside it (like we called `kn::gemm` in the example above). It's the joint effort of the "Transpiler" and the "Runtime" that makes the generated code efficient and correct.
 
 Besides, the transpiler also contains a set of tests to ensure the correctness and performance of the generated code. It's located under `tests/transpiler`.
 
@@ -44,7 +44,7 @@ Before we dive into the details of the transpiler, we need some prerequisites:
 - You need to master **CUDA Programming**, of course.
 - To leverage compile-time computation, we use **C++ Template Metaprogramming** extensively.
 - We also make use of the **CuTe Library**. It's a library inside the [Cutlass library](https://github.com/NVIDIA/cutlass) and provides a set of useful primitives for tensor core matrix multiplication and data movement. CuTe has its own [document](https://github.com/NVIDIA/cutlass/blob/main/media/docs/cute/00_quickstart.md) but it's poorly written. If you speak Chinese (or you are good at Google Translate), you can refer to [these series of blogs](https://zhuanlan.zhihu.com/p/661182311) for a better understanding.
-- We suppose you have a basic understanding of **the Mirage project**, particularly, what `DTensor`, `STensor`, "kernel graph", "kernel operator", "threadblock graph", "threadblock operator" mean.
+- We suppose you have a basic understanding of **the YiRage project**, particularly, what `DTensor`, `STensor`, "kernel graph", "kernel operator", "threadblock graph", "threadblock operator" mean.
 
 ## Transpiler Overview
 
@@ -260,11 +260,11 @@ for (...) {
 }
 ```
 
-## Mirage Profiler
+## YiRage Profiler
 
 Warp group specialization in Grace Hopper architecture is very important to develop high performance kernels. Different warp groups can be assigned distinct tasks that utilize different hardware resource—such as Tensor Cores , CUDA Cores and TMA units. How to wisely choose the warp group scheduling is very important for optimizing a kernel. 
 
-Mirage provides a profiling tool to visualize your kernel, which traces the start and end of kernel events in each warp group and thread block. Users can very easily understand the operator execution time,  overlapping and gpu waves.
+YiRage provides a profiling tool to visualize your kernel, which traces the start and end of kernel events in each warp group and thread block. Users can very easily understand the operator execution time,  overlapping and gpu waves.
 
 **Prerequisites**
 ```python

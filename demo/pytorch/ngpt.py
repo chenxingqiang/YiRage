@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import argparse
 import os
 import torch

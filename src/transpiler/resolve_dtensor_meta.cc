@@ -13,14 +13,14 @@
  * limitations under the License.
  */
 
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/transpiler/transpiler.h"
 
 #include <stdexcept>
 #include <unordered_set>
 
-#include "mirage/transpiler/utils.h"
+#include "yirage/transpiler/utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 // Resolve metadata for DTensors
@@ -60,4 +60,4 @@ void Transpiler::resolve_dtensor_meta() {
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

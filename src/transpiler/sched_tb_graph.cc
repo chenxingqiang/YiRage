@@ -1,13 +1,13 @@
-#include "mirage/transpiler/sched_tb_graph.h"
-#include "mirage/threadblock/operator.h"
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/transpiler/structs.h"
-#include "mirage/transpiler/transpiler.h"
-#include "mirage/transpiler/utils.h"
-#include "mirage/type.h"
+#include "yirage/transpiler/sched_tb_graph.h"
+#include "yirage/threadblock/operator.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/transpiler/structs.h"
+#include "yirage/transpiler/transpiler.h"
+#include "yirage/transpiler/utils.h"
+#include "yirage/type.h"
 #include <algorithm>
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 using std::vector, std::pair;
@@ -399,4 +399,4 @@ TBSched Transpiler::get_threadblock_schedule(tb::Graph const &tb_graph) {
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

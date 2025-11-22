@@ -1,9 +1,9 @@
-#include "mirage/search/verification/output_match.h"
+#include "yirage/search/verification/output_match.h"
 
 #include <algorithm>
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 OutputMatch::OutputMatch(int num_outputs) : _valid(true) {
@@ -36,4 +36,4 @@ bool OutputMatch::is_valid() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

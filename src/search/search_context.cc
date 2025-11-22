@@ -1,6 +1,6 @@
-#include "mirage/search/search_context.h"
+#include "yirage/search/search_context.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 void from_json(json const &j, SearchContext &c) {
@@ -53,4 +53,4 @@ SearchContext SerializedSearchContext::deserialize() const {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

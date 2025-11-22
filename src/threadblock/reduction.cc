@@ -13,11 +13,11 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/reduction.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/threadblock/reduction.h"
+#include "yirage/threadblock/graph.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 STensor Graph::reduction(STensor const &input, int dim) {
@@ -38,7 +38,7 @@ TBOperator *Graph::create_reduction_op(STensor const &input, int dim) {
   TBOperator *op = new TBReductionOp(this, input, dim, 1 /*size*/);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -57,7 +57,7 @@ TBOperator *Graph::create_reduction_to_dimx_op(STensor const &input, int dim) {
   TBOperator *op = new TBReductionOp(this, input, dim, this->reduction_dimx);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -84,7 +84,7 @@ TBOperator *Graph::create_reduction_max_op(STensor const &input, int dim) {
       new TBReductionOp(this, input, dim, -1 /*size = -1 for max*/);
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -97,18 +97,18 @@ TBReductionOp::TBReductionOp(Graph *bgraph,
                              int dim,
                              int size)
     : TBOperator(bgraph,
-                 size == 1 ? (mirage::type::TBOperatorType)(
-                                 mirage::type::TB_REDUCTION_0_OP + dim)
+                 size == 1 ? (yirage::type::TBOperatorType)(
+                                 yirage::type::TB_REDUCTION_0_OP + dim)
                  : size == -1
-                     ? (mirage::type::TBOperatorType)(
-                           mirage::type::TB_REDUCTION_0_MAX_OP + dim)
-                     : (mirage::type::TBOperatorType)(
-                           mirage::type::TB_REDUCTION_0_TO_DIMX_OP + dim),
+                     ? (yirage::type::TBOperatorType)(
+                           yirage::type::TB_REDUCTION_0_MAX_OP + dim)
+                     : (yirage::type::TBOperatorType)(
+                           yirage::type::TB_REDUCTION_0_TO_DIMX_OP + dim),
                  input),
       reduce_dim(dim), reduce_size(size) {
   STensor output = input;
   assert(output.num_dims > reduce_dim);
-  assert(output.layout == mirage::layout::SmemRowMajor);
+  assert(output.layout == yirage::layout::SmemRowMajor);
   output.dim[reduce_dim] = reduce_size == -1 ? 1 : reduce_size;
   output.owner_op = this;
   output.owner_ts_idx = 0;
@@ -139,4 +139,4 @@ TBReductionOp::operator json() const {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

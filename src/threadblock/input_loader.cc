@@ -13,16 +13,16 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
-STensor Graph::new_input(mirage::kernel::DTensor const &dtensor,
+STensor Graph::new_input(yirage::kernel::DTensor const &dtensor,
                          int3 input_map,
                          int forloop_dim,
-                         mirage::layout::SmemLayout layout,
+                         yirage::layout::SmemLayout layout,
                          bool store_in_dmem) {
   TBOperator *op =
       create_input_op(dtensor, input_map, forloop_dim, layout, store_in_dmem);
@@ -31,10 +31,10 @@ STensor Graph::new_input(mirage::kernel::DTensor const &dtensor,
   return op->output_tensors[0];
 }
 
-STensor *Graph::new_input(mirage::kernel::DTensor const *dtensor,
+STensor *Graph::new_input(yirage::kernel::DTensor const *dtensor,
                           int3 input_map,
                           int forloop_dim,
-                          mirage::layout::SmemLayout layout,
+                          yirage::layout::SmemLayout layout,
                           bool store_in_dmem) {
   TBOperator *op = create_input_op(
       dtensor == nullptr ? kernel::DTensor::EMPTY_TENSOR : *dtensor,
@@ -47,17 +47,17 @@ STensor *Graph::new_input(mirage::kernel::DTensor const *dtensor,
   return &op->output_tensors[0];
 }
 
-TBOperator *Graph::create_input_op(mirage::kernel::DTensor const &dtensor,
+TBOperator *Graph::create_input_op(yirage::kernel::DTensor const &dtensor,
                                    int3 input_map,
                                    int forloop_dim,
-                                   mirage::layout::SmemLayout layout,
+                                   yirage::layout::SmemLayout layout,
                                    bool store_in_dmem) {
   TBInputOp *op = new TBInputOp(
       this, dtensor, input_map, forloop_dim, layout, store_in_dmem);
 
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -66,12 +66,12 @@ TBOperator *Graph::create_input_op(mirage::kernel::DTensor const &dtensor,
 }
 
 TBInputOp::TBInputOp(Graph *_graph,
-                     mirage::kernel::DTensor const &_dtensor,
+                     yirage::kernel::DTensor const &_dtensor,
                      int3 _input_map,
                      int _forloop_dim,
-                     mirage::layout::SmemLayout _layout,
+                     yirage::layout::SmemLayout _layout,
                      bool store_in_dmem)
-    : TBOperator(_graph, mirage::type::TB_INPUT_OP), dtensor(_dtensor),
+    : TBOperator(_graph, yirage::type::TB_INPUT_OP), dtensor(_dtensor),
       input_map(_input_map), forloop_dim(_forloop_dim) {
   STensor tensor;
   tensor.layout = _layout;
@@ -136,4 +136,4 @@ size_t TBInputOp::get_dtensor_guid() {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

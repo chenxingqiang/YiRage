@@ -31,21 +31,21 @@ def config_cython():
     try:
         from Cython.Build import cythonize
         ret = []
-        cython_path = path.join(path.dirname(__file__), "mirage/_cython")
-        mirage_path = path.join(path.dirname(__file__), "..")
+        cython_path = path.join(path.dirname(__file__), "yirage/_cython")
+        yirage_path = path.join(path.dirname(__file__), "..")
         for fn in os.listdir(cython_path):
             if not fn.endswith(".pyx"):
                 continue
             ret.append(Extension(
-                "mirage.%s" % fn[:-4],
+                "yirage.%s" % fn[:-4],
                 ["%s/%s" % (cython_path, fn)],
-                include_dirs=[path.join(mirage_path, "include"),
-                              path.join(mirage_path, "deps", "json", "include"),
-                              path.join(mirage_path, "deps", "cutlass", "include"),
+                include_dirs=[path.join(yirage_path, "include"),
+                              path.join(yirage_path, "deps", "json", "include"),
+                              path.join(yirage_path, "deps", "cutlass", "include"),
                               "/usr/local/cuda/include"],
-                libraries=["mirage_runtime", "cudadevrt", "cudart_static", "cudart", "cuda", "z3", "gomp", "rt"],
-                library_dirs=[path.join(mirage_path, "build"),
-                              path.join(mirage_path, "deps", "z3", "build"),
+                libraries=["yirage_runtime", "cudadevrt", "cudart_static", "cudart", "cuda", "z3", "gomp", "rt"],
+                library_dirs=[path.join(yirage_path, "build"),
+                              path.join(yirage_path, "deps", "z3", "build"),
                               "/usr/local/cuda/lib",
                               "/usr/local/cuda/lib64",
                               "/usr/local/cuda/lib64/stubs"],
@@ -66,16 +66,16 @@ setup_args = {}
 #    LIB_LIST[i] = os.path.relpath(path, curr_path)
 #    setup_args = {
 #        "include_package_data": True,
-#        "data_files": [('mirage', LIB_LIST)]
+#        "data_files": [('yirage', LIB_LIST)]
 #    }
 
-setup(name='mirage',
+setup(name='yirage',
       version="0.2.4",
-      description="Mirage: A Multi-Level Superoptimizer for Tensor Algebra",
+      description="YiRage: A Multi-Level Superoptimizer for Tensor Algebra",
       zip_safe=False,
       install_requires=[],
       packages=find_packages(),
-      url='https://github.com/mirage-project/mirage',
+      url='https://github.com/yirage-project/yirage',
       ext_modules=config_cython(),
       #**setup_args,
       )

@@ -28,11 +28,11 @@ setup(
                 os.path.join(this_dir, 'runtime_kernel_wrapper_moe_hopper.cu'),
             ],
             depends=[
-                os.path.join(this_dir, '../../../../include/mirage/persistent_kernel/tasks/hopper/moe_linear_swapAB_hopper.cuh'),
+                os.path.join(this_dir, '../../../../include/yirage/persistent_kernel/tasks/hopper/moe_linear_swapAB_hopper.cuh'),
             ],
             include_dirs=[
-                os.path.join(this_dir, '../../../include/mirage/persistent_kernel'),
-                os.path.join(this_dir, '../../../include/mirage/persistent_kernel/tasks/'),
+                os.path.join(this_dir, '../../../include/yirage/persistent_kernel'),
+                os.path.join(this_dir, '../../../include/yirage/persistent_kernel/tasks/'),
                 os.path.join(this_dir, '../../../include'),
                 os.path.join(this_dir, '../../../deps/cutlass/include'),
                 os.path.join(this_dir, '../../../deps/cutlass/tools/util/include'),
@@ -40,18 +40,18 @@ setup(
             libraries=["cuda"],
             library_dirs=cuda_library_dirs,
             extra_compile_args={
-                'cxx': ['-DMIRAGE_GRACE_HOPPER',
-                '-DMIRAGE_BACKEND_USE_CUDA',
-                '-DMPK_TARGET_CC=90',
-                '-DMPK_ENABLE_TMA'],
+                'cxx': ['-DYIRAGE_GRACE_HOPPER',
+                '-DYIRAGE_BACKEND_USE_CUDA',
+                '-DYPK_TARGET_CC=90',
+                '-DYPK_ENABLE_TMA'],
                 'nvcc': [
                     '-O3',
                     '-gencode=arch=compute_90a,code=sm_90a',
-                    '-DMIRAGE_BACKEND_USE_CUDA',
-                    '-DMIRAGE_GRACE_HOPPER',
-                    '-DMIRAGE_BACKEND_USE_CUDA',
-                    '-DMPK_ENABLE_TMA',
-                    # '-DMIRAGE_PROFILE_HOPPER',
+                    '-DYIRAGE_BACKEND_USE_CUDA',
+                    '-DYIRAGE_GRACE_HOPPER',
+                    '-DYIRAGE_BACKEND_USE_CUDA',
+                    '-DYPK_ENABLE_TMA',
+                    # '-DYIRAGE_PROFILE_HOPPER',
                 ]
             }
         )

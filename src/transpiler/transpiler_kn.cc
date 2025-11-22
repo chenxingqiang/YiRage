@@ -13,20 +13,20 @@
  * limitations under the License.
  */
 
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/transpiler/transpiler.h"
 
 #include <algorithm>
 #include <unordered_set>
 
-#include "mirage/transpiler/utils.h"
-#include "mirage/type.h"
+#include "yirage/transpiler/utils.h"
+#include "yirage/type.h"
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 using std::string;
-namespace kn = mirage::kernel;
-namespace tb = mirage::threadblock;
+namespace kn = yirage::kernel;
+namespace tb = yirage::threadblock;
 
 // Get a CuTe layout from dims and strides
 //
@@ -338,9 +338,9 @@ TranspileResult Transpiler::transpile_ugraph() {
   header.e("#define NUM_GPUS $", num_gpus);
   header.e("#define USE_NVSHMEM $", use_nvshmem);
   if (config.target_cc == GPU_CC::H100) {
-    header.e("#define MIRAGE_GRACE_HOPPER");
+    header.e("#define YIRAGE_GRACE_HOPPER");
   } else if (config.target_cc == GPU_CC::B200) {
-    header.e("#define MIRAGE_BLACKWELL");
+    header.e("#define YIRAGE_BLACKWELL");
   }
   header.e("#include \"runtime.h\"");
   header.e("using namespace cute;");
@@ -881,4 +881,4 @@ TranspileResult Transpiler::transpile_ugraph() {
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

@@ -170,7 +170,7 @@ assert prompt_len < page_size, "Assume prompt can fit in a single page for now"
 torch_paged_k_cache[page_idx, page_offset : page_offset + max_tokens] = k
 torch_paged_v_cache[page_idx, page_offset : page_offset + max_tokens] = v
 
-mirage_qkv = qkv.clone()
+yirage_qkv = qkv.clone()
 
 q_norm_weight = torch.randn((1, head_dim), device=device, dtype=dtype)
 k_norm_weight = torch.randn((1, head_dim), device=device, dtype=dtype)
@@ -180,13 +180,13 @@ torch_sin = all_sin[0 : max_tokens + prompt_len + 1, :]
 
 eps = 1e-5
 
-mirage_output = torch.empty(max_tokens * qo_heads, head_dim, device=device, dtype=dtype)
+yirage_output = torch.empty(max_tokens * qo_heads, head_dim, device=device, dtype=dtype)
 
 runtime_kernel.multitoken_paged_attention(
-    mirage_qkv,
+    yirage_qkv,
     paged_k_cache,
     paged_v_cache,
-    mirage_output,
+    yirage_output,
     qo_indptr_buffer,
     paged_kv_indptr_buffer,
     paged_kv_indices_buffer,
@@ -219,6 +219,6 @@ torch_out = torch_multitoken_paged_attention(
     torch_sin,
     eps=eps,
 )
-print("Ratio (Mirage / Torch):")
-print(mirage_output / torch_out)
+print("Ratio (YiRage / Torch):")
+print(yirage_output / torch_out)
 

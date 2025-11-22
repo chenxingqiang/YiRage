@@ -179,8 +179,8 @@ def test_extend_correctness():
     
     k_cache_torch = torch.empty((1, max_seq_len, head_dim), device=device, dtype=dtype)
     v_cache_torch = torch.empty((1, max_seq_len, head_dim), device=device, dtype=dtype)
-    k_cache_mirage = torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
-    v_cache_mirage = torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
+    k_cache_yirage = torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
+    v_cache_yirage = torch.empty((max_seq_len, head_dim), device=device, dtype=dtype)
     
     all_cos = torch.randn((513, head_dim), device=device, dtype=dtype)
     all_sin = torch.randn((513, head_dim), device=device, dtype=dtype)
@@ -200,8 +200,8 @@ def test_extend_correctness():
                 v_data = torch.randn(head_dim, device=device, dtype=dtype)
                 k_cache_torch[0, i] = k_data
                 v_cache_torch[0, i] = v_data
-                k_cache_mirage[i] = k_data
-                v_cache_mirage[i] = v_data
+                k_cache_yirage[i] = k_data
+                v_cache_yirage[i] = v_data
             
             # Create QKV for extend_num + 1 tokens (last token + new tokens)
             total_extend_heads = q_heads * (extend_num + 1)
@@ -246,9 +246,9 @@ def test_extend_correctness():
             print(torch_output.shape)
             # exit()
             
-            # Mirage implementation
+            # YiRage implementation
             total_q_vec_num = q_heads * (extend_num + 1)
-            mirage_output_flat = torch.empty((total_q_vec_num, head_dim), device=device, dtype=dtype)
+            yirage_output_flat = torch.empty((total_q_vec_num, head_dim), device=device, dtype=dtype)
             
             # Debug tensors for normalization outputs
             q_norm_debug_cuda = torch.empty((q_heads * (extend_num + 1), head_dim), device=device, dtype=dtype)
@@ -257,9 +257,9 @@ def test_extend_correctness():
             try:
                 runtime_kernel.single_batch_extend(
                     qkv,
-                    k_cache_mirage,
-                    v_cache_mirage,
-                    mirage_output_flat,
+                    k_cache_yirage,
+                    v_cache_yirage,
+                    yirage_output_flat,
                     seq_len,
                     extend_num,
                     True,  # qk_norm
@@ -276,7 +276,7 @@ def test_extend_correctness():
                 
                 # Both outputs are now in same format: [(extend_num+1)*q_heads, head_dim]
                 # print("PyTorch output shape:", torch_output.shape)
-                # print("CUDA output shape:", mirage_output_flat.shape)
+                # print("CUDA output shape:", yirage_output_flat.shape)
                 
                 # Compare normalization results (for debugging)
                 # print("\n=== Normalization Comparison ===")
@@ -313,18 +313,18 @@ def test_extend_correctness():
                 # Additional debugging: print first few elements to verify format
                 # print("\n=== Final Output Comparison ===")
                 # for i in range(q_heads * (extend_num + 1)):
-                #     max_cur_row = torch.max(torch.abs(mirage_output_flat[i] - torch_output[i]))
+                #     max_cur_row = torch.max(torch.abs(yirage_output_flat[i] - torch_output[i]))
                 #     print(f"row: {i}, max_cur_row: {max_cur_row}")
                 #     if max_cur_row > 0.1:
-                #         print(f"PyTorch Q norm[{i}]:", mirage_output_flat[i])
+                #         print(f"PyTorch Q norm[{i}]:", yirage_output_flat[i])
                 #         print(f"CUDA Q norm[{i}]:", torch_output[i])
                 # print("torch_output[0:8, 0:5]:")
                 # print(torch_output[:8, :5])
-                # print("mirage_output_flat[0:8, 0:5]:")
-                # print(mirage_output_flat[:8, :5])
+                # print("yirage_output_flat[0:8, 0:5]:")
+                # print(yirage_output_flat[:8, :5])
                 
                 # Compare results directly
-                diff = mirage_output_flat - torch_output
+                diff = yirage_output_flat - torch_output
                 max_diff = diff.abs().max().item()
                 mean_diff = diff.abs().mean().item()
                 
@@ -336,12 +336,12 @@ def test_extend_correctness():
                 else:
                     print("  ✗ Test failed!")
                     print(f"  Torch output shape: {torch_output.shape}")
-                    print(f"  Mirage output shape: {mirage_output_flat.shape}")
+                    print(f"  YiRage output shape: {yirage_output_flat.shape}")
                     print(f"  Sample torch output: {torch_output[0, :100]}")
-                    print(f"  Sample mirage output: {mirage_output_flat[0, :100]}")
+                    print(f"  Sample yirage output: {yirage_output_flat[0, :100]}")
                     # print(f"  Sample diff: {diff}")
-                    print("ratio:", (mirage_output_flat / torch_output)[-5:])
-                    print("diff:", (mirage_output_flat - torch_output)[-5:])
+                    print("ratio:", (yirage_output_flat / torch_output)[-5:])
+                    print("diff:", (yirage_output_flat - torch_output)[-5:])
                     # 20 22 23 24
                     
             except Exception as e:

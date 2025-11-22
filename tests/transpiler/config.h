@@ -30,7 +30,7 @@ inline std::string get_generated_cu_dir() {
   }
   int uid = getuid();
   std::string answer =
-      "/tmp/mirage-transpiler-test-" + std::to_string(uid) + "/generated-cu";
+      "/tmp/yirage-transpiler-test-" + std::to_string(uid) + "/generated-cu";
   make_dir(answer);
   return answer;
 }
@@ -46,7 +46,7 @@ inline std::string get_generated_so_dir() {
   }
   int uid = getuid();
   std::string answer =
-      "/tmp/mirage-transpiler-test-" + std::to_string(uid) + "/generated-so";
+      "/tmp/yirage-transpiler-test-" + std::to_string(uid) + "/generated-so";
   make_dir(answer);
   return answer;
 }
@@ -84,24 +84,24 @@ inline std::string get_cutlass_root() {
   return result;
 }
 
-inline std::string get_mirage_runtime_root() {
+inline std::string get_yirage_runtime_root() {
   std::string result;
-  char const *config_from_env_str = getenv("MIRAGE_RUNTIME_ROOT");
+  char const *config_from_env_str = getenv("YIRAGE_RUNTIME_ROOT");
   if (config_from_env_str != nullptr) {
     return config_from_env_str;
   } else {
     result =
         std::filesystem::relative(
             std::filesystem::canonical("/proc/self/exe").remove_filename() /
-            ".." / ".." / ".." / "include" / "mirage" / "transpiler" /
+            ".." / ".." / ".." / "include" / "yirage" / "transpiler" /
             "runtime")
             .string();
   }
   if (!std::filesystem::exists(result)) {
-    printf("MIRAGE_RUNTIME_ROOT (%s) not found. Please properly set the "
-           "MIRAGE_RUNTIME_ROOT environment variable.\n",
+    printf("YIRAGE_RUNTIME_ROOT (%s) not found. Please properly set the "
+           "YIRAGE_RUNTIME_ROOT environment variable.\n",
            result.c_str());
-    throw std::runtime_error("MIRAGE_RUNTIME_ROOT not found");
+    throw std::runtime_error("YIRAGE_RUNTIME_ROOT not found");
   }
   if (result.back() == '/') {
     result.pop_back();

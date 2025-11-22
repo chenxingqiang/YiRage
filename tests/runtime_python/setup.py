@@ -4,7 +4,7 @@ from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 import os
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
-include_dir = os.path.join(this_dir, '../../include/mirage/persistent_kernel/')
+include_dir = os.path.join(this_dir, '../../include/yirage/persistent_kernel/')
 cutlass_dir = os.path.join(this_dir, "../../deps/cutlass/include")
 header_root_dir = os.path.join(this_dir, '../../include')
 spec_decode_include_dir = os.path.join(include_dir, 'speculative_decoding')
@@ -18,7 +18,7 @@ header_files += glob.glob(os.path.join(header_root_dir, '*.h'))
 
 print(header_files)
 
-macros=[("MIRAGE_BACKEND_USE_CUDA", None), ("MIRAGE_FINGERPRINT_USE_CUDA", None)]
+macros=[("YIRAGE_BACKEND_USE_CUDA", None), ("YIRAGE_FINGERPRINT_USE_CUDA", None)]
 
 setup(
     name='runtime_kernel',

@@ -1,7 +1,7 @@
-#include "mirage/search/verification/probabilistic_verifier.h"
-#include "mirage/search/op_utils.h"
+#include "yirage/search/verification/probabilistic_verifier.h"
+#include "yirage/search/op_utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 std::mutex ProbabilisticVerifier::fp_mutex;
@@ -81,4 +81,4 @@ OutputMatch ProbabilisticVerifier::verify(kernel::Graph const &graph) {
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

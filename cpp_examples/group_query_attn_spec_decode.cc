@@ -1,13 +1,13 @@
 #include "common.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/search/search.h"
-#include "mirage/threadblock/graph.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/search/search.h"
+#include "yirage/threadblock/graph.h"
 
-using namespace mirage;
+using namespace yirage;
 
 int main(int argc, char **argv) {
   // Currently only optimize for these two batch sizes
-  int batch_size = miragetest::BATCH_SIZE;
+  int batch_size = yiragetest::BATCH_SIZE;
   assert(batch_size == 1 || batch_size == 8);
   kernel::Graph ref_graph({1, 1, 1});
   {
@@ -40,7 +40,7 @@ int main(int argc, char **argv) {
     }
     printf("[cudnn kernel graph] Total runtime = %.4lfms\n", total_runtime);
   }
-  mirage::cpu::CTensor ref_fp = ref_graph.operators.back()
+  yirage::cpu::CTensor ref_fp = ref_graph.operators.back()
                                     ->output_tensors[0]
                                     .copy_fingerprint_to_ctensor();
   kernel::Graph graph({1, 1, 1});

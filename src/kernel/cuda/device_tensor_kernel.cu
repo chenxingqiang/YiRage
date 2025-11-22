@@ -13,35 +13,35 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/device_tensor.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/utils/cuda_helper.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/device_tensor.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/utils/cuda_helper.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
-mirage::cpu::CTensor DTensor::copy_fingerprint_to_ctensor() const {
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
+yirage::cpu::CTensor DTensor::copy_fingerprint_to_ctensor() const {
   // Assert a 1-D GPU mesh
   assert(owner_op->kgraph->gpu_dim.y == 1);
   assert(owner_op->kgraph->gpu_dim.z == 1);
-  mirage::cpu::CTensor ctensor;
+  yirage::cpu::CTensor ctensor;
   ctensor.data_type = data_type;
-  ctensor.layout = mirage::layout::dmemlayout_to_cmemlayout(layout);
+  ctensor.layout = yirage::layout::dmemlayout_to_cmemlayout(layout);
   ctensor.num_dims = num_dims;
   for (int i = 0; i < num_dims; i++) {
     ctensor.dim[i] = dim[i];
   }
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
   // Set device id to dmm->gpu_id when retrieving fingerprints
   checkCUDA(cudaSetDevice(dmm->gpu_id));
   // FIXME: memory leakage since we do not free this fingerprint buffer
   // This is ok for now since we only copy the input mugraph's fingerprint
   // to ctensor
   for (int gpu_id = 0; gpu_id < owner_op->kgraph->gpu_dim.x; gpu_id++) {
-    ctensor.fp_ptr[gpu_id] = (mirage::type::FPType *)malloc(fingerprint_size());
+    ctensor.fp_ptr[gpu_id] = (yirage::type::FPType *)malloc(fingerprint_size());
     checkCUDA(cudaMemcpy(ctensor.fp_ptr[gpu_id],
                          dmm->fp_base_ptr[gpu_id] + fp_offset,
                          fingerprint_size(),
@@ -50,11 +50,11 @@ mirage::cpu::CTensor DTensor::copy_fingerprint_to_ctensor() const {
   return ctensor;
 }
 
-bool DTensor::has_same_fingerprint(mirage::cpu::CTensor const &ref) const {
+bool DTensor::has_same_fingerprint(yirage::cpu::CTensor const &ref) const {
   if (data_type != ref.data_type) {
     return false;
   }
-  if (mirage::layout::dmemlayout_to_cmemlayout(layout) != ref.layout) {
+  if (yirage::layout::dmemlayout_to_cmemlayout(layout) != ref.layout) {
     return false;
   }
   if (num_dims != ref.num_dims) {
@@ -65,14 +65,14 @@ bool DTensor::has_same_fingerprint(mirage::cpu::CTensor const &ref) const {
       return false;
     }
   }
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
   // Assert a 1-D GPU mesh
   assert(owner_op->kgraph->gpu_dim.y == 1);
   assert(owner_op->kgraph->gpu_dim.z == 1);
   // Set device id to dmm->gpu_id when retrieving fingerprints
   checkCUDA(cudaSetDevice(dmm->gpu_id));
-  mirage::type::FPType *A = (mirage::type::FPType *)malloc(fingerprint_size());
+  yirage::type::FPType *A = (yirage::type::FPType *)malloc(fingerprint_size());
   for (int gpu_id = 0; gpu_id < owner_op->kgraph->gpu_dim.x; gpu_id++) {
     checkCUDA(cudaMemcpy(A,
                          dmm->fp_base_ptr[gpu_id] + fp_offset,
@@ -89,7 +89,7 @@ bool DTensor::has_same_fingerprint(mirage::cpu::CTensor const &ref) const {
   free(A);
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

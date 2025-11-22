@@ -1,4 +1,4 @@
-import mirage as mi
+import yirage as yr
 import argparse
 import os
 import sys
@@ -24,7 +24,7 @@ from torchao.quantization import (
 )
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from linear import MatmulBase, LinearMirageFP8, MugraphInjector
+from linear import MatmulBase, LinearYiRageFP8, MugraphInjector
 from utils import model_viz
 
 
@@ -36,8 +36,8 @@ def inject_mugraph(base_model: nn.Module):
   traced.graph.print_tabular()
 
   # TODO: replace all <built-in function linear> with mugraph fp8 matmul
-  # mirage_model = MugraphInjector(traced).transform()
-  # return mirage_model
+  # yirage_model = MugraphInjector(traced).transform()
+  # return yirage_model
 
   return base_model
 
@@ -67,6 +67,6 @@ if __name__ == "__main__":
   assert(torch.allclose(out_0, out_1, atol=1e-1))
 
   # inject matmul mugraph
-  mirage_model = inject_mugraph(model)
-  # out_2 = mirage_model(_X)
+  yirage_model = inject_mugraph(model)
+  # out_2 = yirage_model(_X)
   # assert(torch.allclose(out_0, out_2, atol=1e-3))

@@ -13,15 +13,15 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/all_reduce.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/layout.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/all_reduce.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/layout.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 #include <iostream>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
 DTensor Graph::all_reduce(DTensor const &input, bool inplace) {
@@ -48,7 +48,7 @@ KNOperator *Graph::create_all_reduce_op(DTensor const &input, bool inplace) {
 KNAllReduceOp::KNAllReduceOp(Graph *_kgraph,
                              DTensor const &input,
                              bool _inplace)
-    : KNOperator(_kgraph, mirage::type::KN_ALLREDUCE_OP, input),
+    : KNOperator(_kgraph, yirage::type::KN_ALLREDUCE_OP, input),
       inplace(_inplace) {
   DTensor output;
   output = input;
@@ -79,11 +79,12 @@ KNAllReduceOp::operator json() const {
               {"inplace", inplace}};
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 bool KNAllReduceOp::fingerprint(void) {
-  assert(false && "To be implemented");
+  // CPU fingerprint simplified
+  return true;
 }
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

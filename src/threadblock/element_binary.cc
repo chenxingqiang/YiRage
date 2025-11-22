@@ -13,56 +13,56 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/element_binary.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/operator.h"
+#include "yirage/threadblock/element_binary.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 
 STensor Graph::add(STensor const &input1, STensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::TB_ADD_OP);
+  return elementbinary(input1, input2, yirage::type::TB_ADD_OP);
 }
 
 STensor *Graph::add(STensor const *input1, STensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::TB_ADD_OP);
+  return elementbinary(input1, input2, yirage::type::TB_ADD_OP);
 }
 
 STensor Graph::mul(STensor const &input1, STensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::TB_MUL_OP);
+  return elementbinary(input1, input2, yirage::type::TB_MUL_OP);
 }
 
 STensor *Graph::mul(STensor const *input1, STensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::TB_MUL_OP);
+  return elementbinary(input1, input2, yirage::type::TB_MUL_OP);
 }
 
 STensor Graph::div(STensor const &input1, STensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::TB_DIV_OP);
+  return elementbinary(input1, input2, yirage::type::TB_DIV_OP);
 }
 
 STensor *Graph::div(STensor const *input1, STensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::TB_DIV_OP);
+  return elementbinary(input1, input2, yirage::type::TB_DIV_OP);
 }
 
 STensor Graph::sub(STensor const &input1, STensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::TB_SUB_OP);
+  return elementbinary(input1, input2, yirage::type::TB_SUB_OP);
 }
 
 STensor *Graph::sub(STensor const *input1, STensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::TB_SUB_OP);
+  return elementbinary(input1, input2, yirage::type::TB_SUB_OP);
 }
 
 STensor Graph::pow(STensor const &input1, STensor const &input2) {
-  return elementbinary(input1, input2, mirage::type::TB_POW_OP);
+  return elementbinary(input1, input2, yirage::type::TB_POW_OP);
 }
 
 STensor *Graph::pow(STensor const *input1, STensor const *input2) {
-  return elementbinary(input1, input2, mirage::type::TB_POW_OP);
+  return elementbinary(input1, input2, yirage::type::TB_POW_OP);
 }
 
 STensor Graph::elementbinary(STensor const &input1,
                              STensor const &input2,
-                             mirage::type::TBOperatorType type) {
+                             yirage::type::TBOperatorType type) {
   TBOperator *op = create_elementbinary_op(input1, input2, type);
   assert(op != nullptr);
   operators.push_back(op);
@@ -71,7 +71,7 @@ STensor Graph::elementbinary(STensor const &input1,
 
 STensor *Graph::elementbinary(STensor const *input1,
                               STensor const *input2,
-                              mirage::type::TBOperatorType type) {
+                              yirage::type::TBOperatorType type) {
   TBOperator *op = create_elementbinary_op(*input1, *input2, type);
   assert(op != nullptr);
   operators.push_back(op);
@@ -80,7 +80,7 @@ STensor *Graph::elementbinary(STensor const *input1,
 
 TBOperator *Graph::create_elementbinary_op(STensor const &input1,
                                            STensor const &input2,
-                                           mirage::type::TBOperatorType _type) {
+                                           yirage::type::TBOperatorType _type) {
   if (input1.num_dims != input2.num_dims) {
     return nullptr;
   }
@@ -98,7 +98,7 @@ TBOperator *Graph::create_elementbinary_op(STensor const &input1,
 
   // Check shmem usage
   size_t smem_usage = calculate_shared_memory_usage(op);
-  if (smem_usage > mirage::config::MAX_SMEM_SIZE) {
+  if (smem_usage > yirage::config::MAX_SMEM_SIZE) {
     delete op;
     return nullptr;
   } else {
@@ -109,7 +109,7 @@ TBOperator *Graph::create_elementbinary_op(STensor const &input1,
 TBElementBinaryOp::TBElementBinaryOp(Graph *_graph,
                                      STensor const &input1,
                                      STensor const &input2,
-                                     mirage::type::TBOperatorType _type)
+                                     yirage::type::TBOperatorType _type)
     : TBOperator(_graph, _type, input1, input2) {
   assert(input1.num_dims == input2.num_dims);
   for (int i = 0; i < input1.num_dims; i++) {
@@ -141,4 +141,4 @@ TBElementBinaryOp::operator json() const {
 }
 
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage

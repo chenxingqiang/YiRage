@@ -1,9 +1,9 @@
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/transpiler/transpiler.h"
 
-#include "mirage/transpiler/utils.h"
-#include "mirage/type.h"
+#include "yirage/transpiler/utils.h"
+#include "yirage/type.h"
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 // Decide when and how to fuse operators in every threadblock level op
@@ -91,4 +91,4 @@ void Transpiler::resolve_tb_fusion() {
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

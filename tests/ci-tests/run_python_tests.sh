@@ -2,21 +2,21 @@
 set -euo pipefail
 
 # Setup project paths and environment variables
-MIRAGE_HOME=$(realpath "${BASH_SOURCE[0]%/*}/../..")
-export MIRAGE_HOME
-BUILD_FOLDER="${MIRAGE_HOME}/build"
+YIRAGE_HOME=$(realpath "${BASH_SOURCE[0]%/*}/../..")
+export YIRAGE_HOME
+BUILD_FOLDER="${YIRAGE_HOME}/build"
 export BUILD_FOLDER
 CUDA_HOME=${CUDA_HOME:-"/usr/local/cuda"}
 export CUDA_HOME
 export PATH="${CUDA_HOME}/bin:${PATH}"
 export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}"
-pushd ${MIRAGE_HOME}/src/search/abstract_expr/abstract_subexpr
+pushd ${YIRAGE_HOME}/src/search/abstract_expr/abstract_subexpr
 cargo build --release --target-dir ../../../../build
 popd
-export LD_LIBRARY_PATH+="${MIRAGE_HOME}/build/release:${LD_LIBRARY_PATH}"
+export LD_LIBRARY_PATH+="${YIRAGE_HOME}/build/release:${LD_LIBRARY_PATH}"
 # Temporary file paths 
 OUTPUT_DIR="/tmp"
-PREFIX="mirage"
+PREFIX="yirage"
 RESPONSE_BEFORE="${OUTPUT_DIR}/${PREFIX}_before_response.txt"
 RESPONSE_AFTER="${OUTPUT_DIR}/${PREFIX}_after_response.txt"
 LATENCY_BEFORE="${OUTPUT_DIR}/${PREFIX}_before_latency.txt"
@@ -27,7 +27,7 @@ installation_status=${1:-"before-installation"}
 echo "Running Python interface tests (installation status: ${installation_status})"
 
 # Ensure we're in the correct directory
-cd "${MIRAGE_HOME}/tests/ci-tests/qwen2.5" || exit 1
+cd "${YIRAGE_HOME}/tests/ci-tests/qwen2.5" || exit 1
 
 run_test() {
   local disable_flag=$1
@@ -45,19 +45,19 @@ run_test() {
 if [[ "$installation_status" == "before-installation" ]]; then
   export LD_LIBRARY_PATH="${BUILD_FOLDER}:${LD_LIBRARY_PATH}"
   
-  # Check Mirage module availability
-  python -c "import mirage; print('Mirage module loaded successfully!'); exit()"
+  # Check YiRage module availability
+  python -c "import yirage; print('YiRage module loaded successfully!'); exit()"
   
-  # Run baseline test (with Mirage disabled)
-  run_test "--disable-mirage" "before" "baseline test"
+  # Run baseline test (with YiRage disabled)
+  run_test "--disable-yirage" "before" "baseline test"
   
   unset LD_LIBRARY_PATH
 
 elif [[ "$installation_status" == "after-installation" ]]; then
-  # Check Mirage module availability after installation
-  python -c "import mirage; print('Mirage module loaded successfully!'); exit()"
+  # Check YiRage module availability after installation
+  python -c "import yirage; print('YiRage module loaded successfully!'); exit()"
   
-  # Run optimized test (with Mirage enabled)
+  # Run optimized test (with YiRage enabled)
   run_test "" "after" "optimized test"
   
   # Compare responses - they should be identical

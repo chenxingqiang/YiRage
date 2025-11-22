@@ -13,20 +13,20 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/utils/hash_utils.h"
 #include <functional>
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {
 std::atomic<int64_t> STensor::next_guid = 20000000;
 } // namespace threadblock
-} // namespace mirage
+} // namespace yirage
 
 namespace std {
 
-size_t hash<mirage::threadblock::STensor>::operator()(
-    mirage::threadblock::STensor const &tensor) const {
+size_t hash<yirage::threadblock::STensor>::operator()(
+    yirage::threadblock::STensor const &tensor) const {
   size_t ret = hash<int>()((tensor.data_type));
   hash_combine(ret, tensor.layout);
   hash_combine(ret, tensor.num_dims);

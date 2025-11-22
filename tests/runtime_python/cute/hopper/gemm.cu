@@ -482,7 +482,7 @@ void launch_linear_hopper_cute_mpk(void *weight_ptr,
   cudaEventDestroy(stop);
 }
 
-#define DISPATCH_LINEAR_CUTE_MPK_REDUCTION_SIZE_CASE(                          \
+#define DISPATCH_LINEAR_CUTE_YPK_REDUCTION_SIZE_CASE(                          \
     OUTPUT_SIZE, BATCH_SIZE, REDUCTION_SIZE)                                   \
   case REDUCTION_SIZE:                                                         \
     launch_linear_hopper_cute_mpk<cutlass::bfloat16_t,                         \
@@ -492,12 +492,12 @@ void launch_linear_hopper_cute_mpk(void *weight_ptr,
         weight_ptr, input_ptr, residual_ptr, output_ptr);                      \
     break;
 
-#define DISPATCH_LINEAR_CUTE_MPK_REDUCTION_SIZE(OUTPUT_SIZE, BATCH_SIZE)       \
+#define DISPATCH_LINEAR_CUTE_YPK_REDUCTION_SIZE(OUTPUT_SIZE, BATCH_SIZE)       \
   switch (weight.size(1)) {                                                    \
-    DISPATCH_LINEAR_CUTE_MPK_REDUCTION_SIZE_CASE(                              \
+    DISPATCH_LINEAR_CUTE_YPK_REDUCTION_SIZE_CASE(                              \
         OUTPUT_SIZE, BATCH_SIZE, 4096)                                         \
     /*                                                                         \
-    DISPATCH_LINEAR_CUTE_MPK_REDUCTION_SIZE_CASE(OUTPUT_SIZE, BATCH_SIZE,      \
+    DISPATCH_LINEAR_CUTE_YPK_REDUCTION_SIZE_CASE(OUTPUT_SIZE, BATCH_SIZE,      \
     12288)                                                                     \
     */                                                                         \
     default:                                                                   \
@@ -505,27 +505,27 @@ void launch_linear_hopper_cute_mpk(void *weight_ptr,
       break;                                                                   \
   }
 
-#define DISPATCH_LINEAR_CUTE_MPK_BATCH_SIZE_CASE(OUTPUT_SIZE, BATCH_SIZE)      \
+#define DISPATCH_LINEAR_CUTE_YPK_BATCH_SIZE_CASE(OUTPUT_SIZE, BATCH_SIZE)      \
   case BATCH_SIZE:                                                             \
-    DISPATCH_LINEAR_CUTE_MPK_REDUCTION_SIZE(OUTPUT_SIZE, BATCH_SIZE)           \
+    DISPATCH_LINEAR_CUTE_YPK_REDUCTION_SIZE(OUTPUT_SIZE, BATCH_SIZE)           \
     break;
 
-#define DISPATCH_LINEAR_CUTE_MPK_BATCH_SIZE(OUTPUT_SIZE)                       \
+#define DISPATCH_LINEAR_CUTE_YPK_BATCH_SIZE(OUTPUT_SIZE)                       \
   switch (input.size(0)) {                                                     \
-    DISPATCH_LINEAR_CUTE_MPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 8)                   \
-    DISPATCH_LINEAR_CUTE_MPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 16)                  \
+    DISPATCH_LINEAR_CUTE_YPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 8)                   \
+    DISPATCH_LINEAR_CUTE_YPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 16)                  \
     /*                                                                         \
-    DISPATCH_LINEAR_CUTE_MPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 32)                  \
-    DISPATCH_LINEAR_CUTE_MPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 64)                  \
+    DISPATCH_LINEAR_CUTE_YPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 32)                  \
+    DISPATCH_LINEAR_CUTE_YPK_BATCH_SIZE_CASE(OUTPUT_SIZE, 64)                  \
     */                                                                         \
     default:                                                                   \
       printf("Unsupported batch size in test: %zu\n", input.size(1));          \
       break;                                                                   \
   }
 
-#define DISPATCH_LINEAR_CUTE_MPK_OUTPUT_SIZE_CASE(OUTPUT_SIZE)                 \
+#define DISPATCH_LINEAR_CUTE_YPK_OUTPUT_SIZE_CASE(OUTPUT_SIZE)                 \
   case OUTPUT_SIZE:                                                            \
-    DISPATCH_LINEAR_CUTE_MPK_BATCH_SIZE(OUTPUT_SIZE)                           \
+    DISPATCH_LINEAR_CUTE_YPK_BATCH_SIZE(OUTPUT_SIZE)                           \
     break;
 
 void linear_mpk_kernel(torch::Tensor weight,
@@ -539,7 +539,7 @@ void linear_mpk_kernel(torch::Tensor weight,
   void *output_ptr = output.data_ptr();
 
   switch (weight.size(0)) {
-    DISPATCH_LINEAR_CUTE_MPK_OUTPUT_SIZE_CASE(64)
+    DISPATCH_LINEAR_CUTE_YPK_OUTPUT_SIZE_CASE(64)
     default:
       printf("Unsupported output size in test: %zu\n", weight.size(0));
       break;
@@ -553,5 +553,5 @@ void linear_mpk_kernel(torch::Tensor weight,
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
   // m.def("linear", &linear_kernel, "Linear kernel");
-  m.def("linear_mpk", &linear_mpk_kernel, "Linear mpk kernel");
+  m.def("linear_mpk", &linear_mpk_kernel, "Linear ypk kernel");
 }

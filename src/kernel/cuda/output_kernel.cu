@@ -13,20 +13,20 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/kernel/operator.h"
-#include "mirage/utils/cuda_helper.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/operator.h"
+#include "yirage/utils/cuda_helper.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
 bool KNOutputOp::fingerprint(void) {
   // Do nothing
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

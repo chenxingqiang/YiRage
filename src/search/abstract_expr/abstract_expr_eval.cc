@@ -1,9 +1,9 @@
-#include "mirage/search/abstract_expr/abstract_expr_eval.h"
-#include "mirage/kernel/rms_norm.h"
-#include "mirage/search/op_utils.h"
-#include "mirage/search/symbolic_graph/op_args.h"
+#include "yirage/search/abstract_expr/abstract_expr_eval.h"
+#include "yirage/kernel/rms_norm.h"
+#include "yirage/search/op_utils.h"
+#include "yirage/search/symbolic_graph/op_args.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 void abstract_expr_eval(
@@ -157,4 +157,4 @@ void abstract_expr_eval(
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

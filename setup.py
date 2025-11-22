@@ -49,34 +49,65 @@ cuda_library_dirs = [
 z3_path = path.dirname(z3.__file__)
 
 # Use version.py to get package version
-version_file = os.path.join(os.path.dirname(__file__), "python/mirage/version.py")
+version_file = os.path.join(os.path.dirname(__file__), "python/yirage/version.py")
 with open(version_file, "r") as f:
     exec(f.read())  # This will define __version__
 
 def get_backend_macros(config_file):
-    flags = {
-        "USE_CUDA":   None,
-        "USE_NKI":    None,
+    """Read config.cmake and return macros for all enabled backends"""
+    backend_flags = {
+        # GPU Backends
+        "USE_CUDA": None,
+        "USE_CUDNN": None,
+        "USE_MPS": None,
+        "USE_CUSPARSELT": None,
+        # CPU Backends
+        "USE_CPU": None,
+        "USE_MKL": None,
+        "USE_MKLDNN": None,
+        "USE_OPENMP": None,
+        "USE_XEON": None,
+        # Specialized Backends
+        "USE_NKI": None,
+        "USE_TRITON": None,
+        "USE_MHA": None,
+        "USE_NNPACK": None,
+        "USE_OPT_EINSUM": None,
     }
 
-    pattern = re.compile(r'^\s*set\s*\(\s*(USE_CUDA|USE_NKI)\s+(ON|OFF)\s*\)', re.IGNORECASE)
+    pattern = re.compile(r'^\s*set\s*\(\s*([A-Z_]+)\s+(ON|OFF)\s*\)', re.IGNORECASE)
     
     with open(config_file, 'r') as f:
         for line in f:
             match = pattern.match(line)
             if match:
                 var, val = match.groups()
-                flags[var] = (val.upper() == "ON")
+                if var in backend_flags:
+                    backend_flags[var] = (val.upper() == "ON")
     
     macros = []
-    if flags.get("USE_CUDA"):
-        macros.append(("MIRAGE_BACKEND_USE_CUDA", None))
-        macros.append(("MIRAGE_FINGERPRINT_USE_CUDA", None))
-    elif flags.get("USE_NKI"):
-        macros.append(("MIRAGE_BACKEND_USE_NKI", None))
-        macros.append(("MIRAGE_FINGERPRINT_USE_CPU", None))
-    else:
-        raise KeyError("Please select either USE_CUDA or USE_NKI in config.cmake file")
+    enabled_backends = []
+    
+    # Add macro for each enabled backend
+    for flag_name, enabled in backend_flags.items():
+        if enabled:
+            backend_name = flag_name.replace("USE_", "")
+            macros.append((f"YIRAGE_BACKEND_{backend_name}_ENABLED", None))
+            enabled_backends.append(backend_name)
+            
+            # Backward compatibility macros
+            if flag_name == "USE_CUDA":
+                macros.append(("YIRAGE_BACKEND_USE_CUDA", None))
+                macros.append(("YIRAGE_FINGERPRINT_USE_CUDA", None))
+            elif flag_name == "USE_NKI":
+                macros.append(("YIRAGE_BACKEND_USE_NKI", None))
+                macros.append(("YIRAGE_FINGERPRINT_USE_CPU", None))
+    
+    # At least one backend must be enabled
+    if not enabled_backends:
+        raise ValueError("At least one backend must be enabled in config.cmake file")
+    
+    print(f"Enabled backends: {', '.join(enabled_backends)}")
     return macros
 
 def config_cython():
@@ -85,52 +116,44 @@ def config_cython():
         from Cython.Build import cythonize
 
         ret = []
-        mirage_path = ''
-        config_path = path.join(mirage_path, "config.cmake")
+        yirage_path = ''
+        config_path = path.join(yirage_path, "config.cmake")
         macros = get_backend_macros(config_path)
-        cython_path = path.join(mirage_path, "python/mirage/_cython")
+        cython_path = path.join(yirage_path, "python/yirage/_cython")
         for fn in os.listdir(cython_path):
             if not fn.endswith(".pyx"):
                 continue
             ret.append(
                 Extension(
-                    "mirage.%s" % fn[:-4],
+                    "yirage.%s" % fn[:-4],
                     ["%s/%s" % (cython_path, fn)],
                     include_dirs=[
-                        path.join(mirage_path, "include"),
-                        path.join(mirage_path, "deps", "json", "include"),
-                        path.join(mirage_path, "deps", "cutlass", "include"),
-                        path.join(mirage_path, "deps", "cutlass", "tools", "util", "include"),
-                        path.join(mirage_path, "build", "abstract_subexpr", "release"),
-                        path.join(mirage_path, "build", "formal_verifier", "release"),
+                        path.join(yirage_path, "include"),
+                        path.join(yirage_path, "deps", "json", "include"),
+                        path.join(yirage_path, "deps", "cutlass", "include"),
+                        path.join(yirage_path, "deps", "cutlass", "tools", "util", "include"),
+                        path.join(yirage_path, "build", "abstract_subexpr", "release"),
+                        path.join(yirage_path, "build", "formal_verifier", "release"),
                         path.join(z3_path, "include"),
                         cuda_include_dir,
                     ],
                     libraries=[
-                        "mirage_runtime",
-                        "cudadevrt",
-                        "cudart_static",
-                        "cudart",
-                        "cuda",
+                        "yirage_runtime",
                         "z3",
-                        "gomp",
-                        "rt",
                         "abstract_subexpr",
                         "formal_verifier",
-                    ],
+                    ] + (["cudadevrt", "cudart_static", "cudart", "cuda"] if macros and any("CUDA" in str(m) for m in macros) else []),
                     library_dirs=[
-                        path.join(mirage_path, "build"),
+                        path.join(yirage_path, "build"),
                         path.join(z3_path, "lib"),
-                        path.join(mirage_path, "build", "abstract_subexpr", "release"),
-                        path.join(mirage_path, "build", "formal_verifier", "release"),
+                        path.join(yirage_path, "build", "abstract_subexpr", "release"),
+                        path.join(yirage_path, "build", "formal_verifier", "release"),
                     ]
                     + cuda_library_dirs,
                     define_macros=macros,
-                    extra_compile_args=["-std=c++17", "-fopenmp"],
+                    extra_compile_args=["-std=c++17"],
                     extra_link_args=[
                         "-fPIC",
-                        "-fopenmp",
-                        "-lrt",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'abstract_subexpr', 'release')}",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'formal_verifier', 'release')}",
                     ],
@@ -157,11 +180,11 @@ except FileNotFoundError:
     # Add the cargo binary directory to the PATH
     os.environ["PATH"] = f"{os.path.join(os.environ.get('HOME', '/root'), '.cargo', 'bin')}:{os.environ.get('PATH', '')}"
 
-mirage_path = path.dirname(__file__)
-# z3_path = os.path.join(mirage_path, 'deps', 'z3', 'build')
+yirage_path = path.dirname(__file__)
+# z3_path = os.path.join(yirage_path, 'deps', 'z3', 'build')
 # os.environ['Z3_DIR'] = z3_path
-if mirage_path == '':
-    mirage_path = '.'
+if yirage_path == '':
+    yirage_path = '.'
 
 try:
     subprocess.check_output(['cargo', 'build', '--release', '--target-dir', '../../../../build/abstract_subexpr'], cwd='src/search/abstract_expr/abstract_subexpr')
@@ -172,7 +195,7 @@ except subprocess.CalledProcessError as e:
         print("Abstract_subexpr Rust library built successfully.")
     except subprocess.CalledProcessError as e:
         print("Failed to build abstract_subexpr Rust library.")
-    os.environ['ABSTRACT_SUBEXPR_LIB'] = os.path.join(mirage_path,'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so')
+    os.environ['ABSTRACT_SUBEXPR_LIB'] = os.path.join(yirage_path,'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so')
 
 try:
     subprocess.check_output(['cargo', 'build', '--release', '--target-dir', '../../../../build/formal_verifier'], cwd='src/search/verification/formal_verifier_equiv')
@@ -183,22 +206,22 @@ except subprocess.CalledProcessError as e:
         print("formal_verifier Rust library built successfully.")
     except subprocess.CalledProcessError as e:
         print("Failed to build formal_verifier Rust library.")
-    os.environ['FORMAL_VERIFIER_LIB'] = os.path.join(mirage_path,'build', 'formal_verifier', 'release', 'libformal_verifier.so')
+    os.environ['FORMAL_VERIFIER_LIB'] = os.path.join(yirage_path,'build', 'formal_verifier', 'release', 'libformal_verifier.so')
 
 
-# build Mirage runtime library
+# build YiRage runtime library
 try:
     os.environ["CUDACXX"] = nvcc_path if nvcc_path else os.path.join(
         cuda_home, "bin", "nvcc"
     )
-    mirage_path = path.dirname(__file__)
-    # z3_path = os.path.join(mirage_path, 'deps', 'z3', 'build')
+    yirage_path = path.dirname(__file__)
+    # z3_path = os.path.join(yirage_path, 'deps', 'z3', 'build')
     # os.environ['Z3_DIR'] = z3_path
-    if mirage_path == "":
-        mirage_path = "."
-    os.makedirs(mirage_path, exist_ok=True)
-    os.chdir(mirage_path)
-    build_dir = os.path.join(mirage_path, "build")
+    if yirage_path == "":
+        yirage_path = "."
+    os.makedirs(yirage_path, exist_ok=True)
+    os.chdir(yirage_path)
+    build_dir = os.path.join(yirage_path, "build")
 
     cc_path = shutil.which("gcc")
     os.environ["CC"] = cc_path if cc_path else "/usr/bin/gcc"
@@ -215,10 +238,10 @@ try:
             "-DCMAKE_BUILD_TYPE=Debug",
             "-DZ3_CXX_INCLUDE_DIRS=" + z3_path + "/include/",
             "-DZ3_LIBRARIES=" + path.join(z3_path, "lib", "libz3.so"),
-            '-DABSTRACT_SUBEXPR_LIB=' + path.join(mirage_path, 'build', 'abstract_subexpr', 'release'),
-            '-DABSTRACT_SUBEXPR_LIBRARIES=' + path.join(mirage_path, 'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so'),
-            '-DFORMAL_VERIFIER_LIB=' + path.join(mirage_path, 'build', 'formal_verifier', 'release'),
-            '-DFORMAL_VERIFIER_LIBRARIES=' + path.join(mirage_path, 'build', 'formal_verifier', 'release', 'libformal_verifier.so'),
+            '-DABSTRACT_SUBEXPR_LIB=' + path.join(yirage_path, 'build', 'abstract_subexpr', 'release'),
+            '-DABSTRACT_SUBEXPR_LIBRARIES=' + path.join(yirage_path, 'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so'),
+            '-DFORMAL_VERIFIER_LIB=' + path.join(yirage_path, 'build', 'formal_verifier', 'release'),
+            '-DFORMAL_VERIFIER_LIBRARIES=' + path.join(yirage_path, 'build', 'formal_verifier', 'release', 'libformal_verifier.so'),
             "-DCMAKE_C_COMPILER=" + os.environ["CC"],
             "-DCMAKE_CXX_COMPILER=" + os.environ["CXX"],
         ],
@@ -226,7 +249,7 @@ try:
         env=os.environ.copy(),
     )
     subprocess.check_call(["make", "-j8"], cwd=build_dir, env=os.environ.copy())
-    print("Mirage runtime library built successfully.")
+    print("YiRage runtime library built successfully.")
 except subprocess.CalledProcessError as e:
     print("Failed to build runtime library.")
     raise SystemExit(e.returncode)
@@ -238,7 +261,7 @@ with open(Path(__file__).parent / "requirements.txt", "r") as reqs_file:
     requirements = reqs_file.read().strip().split("\n")
 print(f"Requirements: {requirements}")
 
-INCLUDE_BASE = "python/mirage/include"
+INCLUDE_BASE = "python/yirage/include"
 
 
 @contextmanager
@@ -247,28 +270,28 @@ def copy_include():
         src_dirs = ["deps/cutlass/include", "deps/json/include"]
         for src_dir in src_dirs:
             shutil.copytree(src_dir, path.join(INCLUDE_BASE, src_dir))
-        # copy mirage/transpiler/runtime/*
-        # to python/mirage/include/mirage/transpiler/runtime/*
-        # instead of python/mirage/include/include/mirage/transpiler/runtime/*
-        include_mirage_dirs = [
-            "include/mirage/transpiler/runtime",
-            "include/mirage/triton_transpiler/runtime",
-            "include/mirage/persistent_kernel",
+        # copy yirage/transpiler/runtime/*
+        # to python/yirage/include/yirage/transpiler/runtime/*
+        # instead of python/yirage/include/include/yirage/transpiler/runtime/*
+        include_yirage_dirs = [
+            "include/yirage/transpiler/runtime",
+            "include/yirage/triton_transpiler/runtime",
+            "include/yirage/persistent_kernel",
         ]
-        include_mirage_dsts = [
-            path.join(INCLUDE_BASE, "mirage/transpiler/runtime"),
-            path.join(INCLUDE_BASE, "mirage/triton_transpiler/runtime"),
-            path.join(INCLUDE_BASE, "mirage/persistent_kernel"),
+        include_yirage_dsts = [
+            path.join(INCLUDE_BASE, "yirage/transpiler/runtime"),
+            path.join(INCLUDE_BASE, "yirage/triton_transpiler/runtime"),
+            path.join(INCLUDE_BASE, "yirage/persistent_kernel"),
         ]
-        for include_mirage_dir, include_mirage_dst in zip(
-            include_mirage_dirs, include_mirage_dsts
+        for include_yirage_dir, include_yirage_dst in zip(
+            include_yirage_dirs, include_yirage_dsts
         ):
-            shutil.copytree(include_mirage_dir, include_mirage_dst)
+            shutil.copytree(include_yirage_dir, include_yirage_dst)
 
         config_h_src = path.join(
-            mirage_path, "include/mirage/config.h"
+            yirage_path, "include/yirage/config.h"
         )  # Needed by transpiler/runtime/threadblock/utils.h
-        config_h_dst = path.join(INCLUDE_BASE, "mirage/config.h")
+        config_h_dst = path.join(INCLUDE_BASE, "yirage/config.h")
         shutil.copy(config_h_src, config_h_dst)
         yield True
     else:
@@ -285,14 +308,14 @@ with copy_include() as copied:
         )
 
     setup(
-        name="mirage-project",
+        name="yirage",
         version=__version__,
-        description="Mirage: A Multi-Level Superoptimizer for Tensor Algebra",
+        description="YiRage: A Multi-Level Superoptimizer for Tensor Algebra",
         zip_safe=False,
         install_requires=requirements,
         packages=find_packages(where="python"),
         package_dir={"": "python"},
-        url="https://github.com/mirage-project/mirage",
+        url="https://github.com/yirage-project/yirage",
         ext_modules=config_cython(),
         include_package_data=True,
         # **setup_args,

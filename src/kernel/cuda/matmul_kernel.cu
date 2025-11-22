@@ -13,25 +13,25 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/kernel/matmul.h"
-#include "mirage/utils/cuda_helper.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/matmul.h"
+#include "yirage/utils/cuda_helper.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
-using namespace mirage::config;
-using namespace mirage::utils;
+using namespace yirage::type;
+using namespace yirage::config;
+using namespace yirage::utils;
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
-__global__ void compute_matmul_fingerprint(mirage::type::FPType *A_ptr,
-                                           mirage::type::FPType *B_ptr,
-                                           mirage::type::FPType *C_ptr,
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
+__global__ void compute_matmul_fingerprint(yirage::type::FPType *A_ptr,
+                                           yirage::type::FPType *B_ptr,
+                                           yirage::type::FPType *C_ptr,
                                            int num_batches,
                                            int m,
                                            int n,
@@ -43,11 +43,11 @@ __global__ void compute_matmul_fingerprint(mirage::type::FPType *A_ptr,
   int nk = n * k;
   if (row_idx < m) {
     for (int b = 0; b < num_batches; b++) {
-      mirage::type::FPType result = 0;
+      yirage::type::FPType result = 0;
       for (int i = 0; i < k; i++) {
-        mirage::type::FPType x = A_ptr[b * mk + row_idx * k + i];
-        mirage::type::FPType y = B_ptr[b * nk + i * n + col_idx];
-        mirage::type::FPType z = utils::compute_mul_fingerprint(x, y);
+        yirage::type::FPType x = A_ptr[b * mk + row_idx * k + i];
+        yirage::type::FPType y = B_ptr[b * nk + i * n + col_idx];
+        yirage::type::FPType z = utils::compute_mul_fingerprint(x, y);
         result = utils::compute_add_fingerprint(result, z);
       }
       if (threadIdx.x == 0 && blockIdx.x == 0 && blockIdx.y == 0) {
@@ -82,17 +82,17 @@ bool KNMatmulOp::fingerprint(void) {
   int const num_threads_per_blk = 1024;
   int num_blocks =
       (row_C * column_C + num_threads_per_blk - 1) / num_threads_per_blk;
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
   // Use GPU dmm->gpu_id for computing fingerprint
   checkCUDA(cudaSetDevice(dmm->gpu_id));
 
   for (int gpu_id = 0; gpu_id < kgraph->gpu_dim.x; gpu_id++) {
-    mirage::type::FPType *A_fp_ptr = reinterpret_cast<mirage::type::FPType *>(
+    yirage::type::FPType *A_fp_ptr = reinterpret_cast<yirage::type::FPType *>(
         dmm->fp_base_ptr[gpu_id] + input_tensors[0].fp_offset);
-    mirage::type::FPType *B_fp_ptr = reinterpret_cast<mirage::type::FPType *>(
+    yirage::type::FPType *B_fp_ptr = reinterpret_cast<yirage::type::FPType *>(
         dmm->fp_base_ptr[gpu_id] + input_tensors[1].fp_offset);
-    mirage::type::FPType *C_fp_ptr = reinterpret_cast<mirage::type::FPType *>(
+    yirage::type::FPType *C_fp_ptr = reinterpret_cast<yirage::type::FPType *>(
         dmm->fp_base_ptr[gpu_id] + output_tensors[0].fp_offset);
     compute_matmul_fingerprint<<<num_blocks, num_threads_per_blk>>>(
         A_fp_ptr, B_fp_ptr, C_fp_ptr, num_batches, row_C, column_C, row_B);
@@ -100,7 +100,7 @@ bool KNMatmulOp::fingerprint(void) {
   }
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

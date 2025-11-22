@@ -13,17 +13,17 @@
  * limitations under the License.
  */
 
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/kernel/operator.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
 DTensor Graph::new_input(std::vector<int> const &dims,
                          std::vector<size_t> const &strides,
-                         mirage::type::DataType data_type,
-                         mirage::layout::DmemLayout layout) {
+                         yirage::type::DataType data_type,
+                         yirage::layout::DmemLayout layout) {
   KNOperator *op = create_input_op(dims, strides, data_type, layout);
   assert(op != nullptr);
   operators.push_back(op);
@@ -32,8 +32,8 @@ DTensor Graph::new_input(std::vector<int> const &dims,
 
 DTensor *Graph::new_input_ptr(std::vector<int> const &dims,
                               std::vector<size_t> const &strides,
-                              mirage::type::DataType data_type,
-                              mirage::layout::DmemLayout layout) {
+                              yirage::type::DataType data_type,
+                              yirage::layout::DmemLayout layout) {
   KNOperator *op = create_input_op(dims, strides, data_type, layout);
   assert(op != nullptr);
   operators.push_back(op);
@@ -42,8 +42,8 @@ DTensor *Graph::new_input_ptr(std::vector<int> const &dims,
 
 KNOperator *Graph::create_input_op(std::vector<int> const &dims,
                                    std::vector<size_t> const &strides,
-                                   mirage::type::DataType data_type,
-                                   mirage::layout::DmemLayout layout) {
+                                   yirage::type::DataType data_type,
+                                   yirage::layout::DmemLayout layout) {
   DTensor tensor;
   tensor.layout = layout;
   tensor.num_dims = dims.size();
@@ -62,10 +62,10 @@ KNOperator *Graph::create_input_op(std::vector<int> const &dims,
 KNInputOp::KNInputOp(Graph *_graph,
                      std::vector<int> const &dims,
                      std::vector<size_t> const &strides,
-                     mirage::type::DataType data_type,
-                     mirage::layout::DmemLayout layout,
+                     yirage::type::DataType data_type,
+                     yirage::layout::DmemLayout layout,
                      int3 _input_map)
-    : KNOperator(_graph, mirage::type::KN_INPUT_OP), input_strides(strides),
+    : KNOperator(_graph, yirage::type::KN_INPUT_OP), input_strides(strides),
       input_map(_input_map) {
   assert(dims.size() == strides.size());
   DTensor tensor;
@@ -94,7 +94,7 @@ KNInputOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef MIRAGE_FINGERPRINT_USE_CPU
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
 bool KNInputOp::fingerprint(void) {
   DeviceMemoryManager *dmm = DeviceMemoryManager::get_instance();
   type::FPType value = 0;
@@ -111,4 +111,4 @@ bool KNInputOp::fingerprint(void) {
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

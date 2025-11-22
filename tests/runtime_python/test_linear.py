@@ -40,14 +40,14 @@ for output_size in output_sizes:
     print(f"Average time over {repetitions} runs: {avg_time:.6f} ms")
     continue
 
-    # Compare with Mirage
-    import mirage as mi
+    # Compare with YiRage
+    import yirage as yr
 
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(batch_size, reduction_size), dtype=mi.bfloat16)
-    W = graph.new_input(dims=(reduction_size, output_size), dtype=mi.bfloat16)
-    b = graph.new_input(dims=(batch_size, output_size), dtype=mi.bfloat16)
-    tb_graph = mi.new_threadblock_graph(
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(batch_size, reduction_size), dtype=yr.bfloat16)
+    W = graph.new_input(dims=(reduction_size, output_size), dtype=yr.bfloat16)
+    b = graph.new_input(dims=(batch_size, output_size), dtype=yr.bfloat16)
+    tb_graph = yr.new_threadblock_graph(
         grid_dim=(1, 1, 1),
         block_dim=(128, 1, 1),
         forloop_range=reduction_size / 64,
@@ -81,4 +81,4 @@ for output_size in output_sizes:
     torch.cuda.synchronize()
     curr_time = starter.elapsed_time(ender)
     mean_syn = curr_time / repetitions
-    print(f"Mirage average time over {repetitions} runs: {mean_syn:.6f} ms")
+    print(f"YiRage average time over {repetitions} runs: {mean_syn:.6f} ms")

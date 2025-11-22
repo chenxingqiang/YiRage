@@ -14,11 +14,11 @@ class MatmulBase(nn.Module):
   def forward(self, X):
     return self.linear(X)
 
-class LinearMirageFP8(nn.Linear):
+class LinearYiRageFP8(nn.Linear):
   """
   TODO:
   Code injection scheme: 
-    override nn.Linear module with this to invoke mirage hopper matmul
+    override nn.Linear module with this to invoke yirage hopper matmul
   """
   def __init__(self, in_features, out_features, bias=True):
     super().__init__(in_features, out_features, bias)
@@ -28,21 +28,21 @@ class LinearMirageFP8(nn.Linear):
     _, N = self.weight
 
     # TODO: code injection point
-    graph = mirage_hopper_matmul(M, N, K)
+    graph = yirage_hopper_matmul(M, N, K)
 
     output = graph(inputs=[x, self.weight])
     return output[0]
 
 """
-TODO: replace nn.Linear functionality by calling mirage FP8 matmul kernel:
+TODO: replace nn.Linear functionality by calling yirage FP8 matmul kernel:
 """
-def mirage_hopper_matmul(M, N, K):
-  kn_graph = mi.new_kernel_graph()
-  X = kn_graph.new_input(dims=(M, K), dtype=mi.float8_e4m3)
-  W = kn_graph.new_input(dims=(K, N), dtype=mi.float8_e4m3)
+def yirage_hopper_matmul(M, N, K):
+  kn_graph = yr.new_kernel_graph()
+  X = kn_graph.new_input(dims=(M, K), dtype=yr.float8_e4m3)
+  W = kn_graph.new_input(dims=(K, N), dtype=yr.float8_e4m3)
 
   # launch 64x1x1 blocks, each running a warp group (128 threads)
-  tb_graph = mi.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(128,1,1), forloop_range=64, reduction_dimx=64)
+  tb_graph = yr.new_threadblock_graph(grid_dim=(64,1,1), block_dim=(128,1,1), forloop_range=64, reduction_dimx=64)
   tX = tb_graph.new_input(dtensor=X, input_map=(-1,-1,-1), forloop_dim=1)
   tW = tb_graph.new_input(dtensor=W, input_map=( 1,-1,-1), forloop_dim=0)
   tM = tb_graph.matmul(tX, tW) # see hopper_matmul.cu
@@ -63,7 +63,7 @@ class MugraphInjector(fx.Transformer):
   def call_module(self, target, args, kwargs):
     orig_module = self.root.get_submodule(target)
     if isinstance(orig_module, nn.Linear):
-      new_layer = LinearMirageFP8(orig_module.in_features, orig_module.out_features)
+      new_layer = LinearYiRageFP8(orig_module.in_features, orig_module.out_features)
       self.root.add_module(target, new_layer)
       return self.call_module(target, args, kwargs)
     return super().call_module(target, args, kwargs)

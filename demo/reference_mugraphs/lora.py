@@ -1,8 +1,8 @@
-import mirage as mi
+import yirage as yr
 import argparse
 import os
 import torch
-from mirage import visualizer
+from yirage import visualizer
 
 @torch.compile(backend="cudagraphs")
 def torch_lora(X, W, A, B):
@@ -13,11 +13,11 @@ def torch_lora(X, W, A, B):
     return O
 
 def optimize_lora(checkpoint):
-    graph = mi.new_kernel_graph()
-    X = graph.new_input(dims=(1, 4096), dtype=mi.float16)
-    W = graph.new_input(dims=(4096, 4096), dtype=mi.float16)
-    A = graph.new_input(dims=(4096, 16), dtype=mi.float16)
-    B = graph.new_input(dims=(16, 4096), dtype=mi.float16)
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(1, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+    A = graph.new_input(dims=(4096, 16), dtype=yr.float16)
+    B = graph.new_input(dims=(16, 4096), dtype=yr.float16)
     D = graph.matmul(X, A)
     E = graph.matmul(D, B)
     C = graph.matmul(X, W)

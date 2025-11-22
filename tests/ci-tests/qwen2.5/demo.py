@@ -7,14 +7,14 @@ import json
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--disable-mirage", action='store_true', help="Disable Mirage kernels")
+    parser.add_argument("--disable-yirage", action='store_true', help="Disable YiRage kernels")
     parser.add_argument("--output-dir", type=str, default="/tmp", help="Directory to save response and latency")
-    parser.add_argument("--prefix", type=str, default="mirage", help="Prefix for output files")
+    parser.add_argument("--prefix", type=str, default="yirage", help="Prefix for output files")
     args = parser.parse_args()
     print("Input arguments:", args)
 
     # Set file paths based on arguments
-    mode = "before" if args.disable_mirage else "after"
+    mode = "before" if args.disable_yirage else "after"
     response_file = os.path.join(args.output_dir, f"{args.prefix}_{mode}_response.txt")
     latency_file = os.path.join(args.output_dir, f"{args.prefix}_{mode}_latency.txt")
 
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     with torch.device("cuda"):
         model = Qwen2ForCausalLM.from_pretrained(model_name).to("cuda")
         model.fuse_weights()
-        if not args.disable_mirage:
+        if not args.disable_yirage:
             model.superoptimize_kernels()
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     

@@ -1,9 +1,9 @@
-#include "mirage/search/symbolic_graph/tensor_dim_constraint.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/search/symbolic_graph/tensor_dim_constraint.h"
+#include "yirage/utils/hash_utils.h"
 
 #include <unordered_map>
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 TensorDimConstraint::TensorDimConstraint(ConstraintType type,
@@ -149,16 +149,16 @@ bool check_satisfiability(
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage
 
 namespace std {
 
-size_t hash<mirage::search::TensorDimConstraint>::operator()(
-    mirage::search::TensorDimConstraint const &constraint) const {
+size_t hash<yirage::search::TensorDimConstraint>::operator()(
+    yirage::search::TensorDimConstraint const &constraint) const {
   size_t seed = 0;
   hash_combine(seed, constraint.type);
   hash_combine(seed, constraint.dims.size());
-  for (mirage::search::SymbolicTensorDim const &dim : constraint.dims) {
+  for (yirage::search::SymbolicTensorDim const &dim : constraint.dims) {
     hash_combine(seed, dim);
   }
   return seed;

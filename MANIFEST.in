@@ -7,8 +7,8 @@ recursive-include include *
 recursive-include cmake *
 recursive-include src *
 
-recursive-include python/mirage/_cython *.pyx *.pxd
-recursive-include python/mirage/include *
+recursive-include python/yirage/_cython *.pyx *.pxd
+recursive-include python/yirage/include *
 
 recursive-include deps/cutlass *
 recursive-include deps/json *

@@ -1,0 +1,99 @@
+# YiRage Copyright Headers
+
+## For New Files (Completely Created by YiRage)
+
+### C++/C Header
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * This file is part of YiRage (Yi Revolutionary AGile Engine),
+ * a derivative work based on Mirage by CMU.
+ * Original Mirage Copyright 2023-2024 CMU.
+ */
+
+### Python Header
+# Copyright 2025 Chen Xingqiang (YiRage Project)
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# This file is part of YiRage (Yi Revolutionary AGile Engine),
+# a derivative work based on Mirage by CMU.
+# Original Mirage Copyright 2023-2024 CMU.
+
+### Markdown Header
+<!--
+Copyright 2025 Chen Xingqiang (YiRage Project)
+
+This documentation is part of YiRage (Yi Revolutionary AGile Engine),
+a derivative work based on Mirage by CMU.
+Original Mirage Copyright 2023-2024 CMU.
+
+Licensed under the Apache License, Version 2.0.
+-->
+
+---
+
+## For Modified Files (Based on CMU Code)
+
+### C++/C Header
+/* Original Copyright 2023-2024 CMU
+ * Modifications Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Modified for YiRage (Yi Revolutionary AGile Engine).
+ */
+
+### Python Header
+# Original Copyright 2024 CMU
+# Modifications Copyright 2025 Chen Xingqiang (YiRage Project)
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+# Modified for YiRage (Yi Revolutionary AGile Engine).
+
+---
+
+## NOTICE File Content
+
+YiRage (Yi Revolutionary AGile Engine)
+Copyright 2025 Chen Xingqiang
+
+This product includes software developed at Carnegie Mellon University (CMU).
+Original Mirage Copyright 2023-2024 CMU.
+
+This project is a derivative work of YiRage, and contains both original
+YiRage code and new code developed for YiRage.
+
+Licensed under the Apache License, Version 2.0.
+

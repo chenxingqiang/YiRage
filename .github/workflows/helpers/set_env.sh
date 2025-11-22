@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script to set up environment variables for Mirage
+# Script to set up environment variables for YiRage
 # This script can be sourced by other scripts or called directly
 
 # Function to set environment variables in GitHub Actions or locally

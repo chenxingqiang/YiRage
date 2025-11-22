@@ -155,7 +155,7 @@ void launch_moe_linear_sm90(int const expert_offset,
                               static_cast<uint32_t>(TMA_CP_ASYNC_SIZE)};
   size_t w_smem_repeat_col =
       (TILE_SIZE + TMA_CP_ASYNC_SIZE - 1) / TMA_CP_ASYNC_SIZE;
-  mirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
+  yirage::runtime::fill_tma_desc<bfloat16, B, M, S, 2>(
       &host_w_desc,
       static_cast<bfloat16 *>(weight_ptr),
       w_gmem_shape,

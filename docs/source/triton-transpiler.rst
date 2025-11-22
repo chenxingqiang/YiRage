@@ -4,9 +4,9 @@ The Triton Transpiler
 Introduction
 ------------
 
-The Triton transpiler is a component of the Mirage framework that
+The Triton transpiler is a component of the YiRage framework that
 converts kernel graphs into Triton code for efficient GPU execution. It
-provides automatic code generation and validation based on mirage’s
+provides automatic code generation and validation based on yirage’s
 built-in optimizations.
 
 Key Features
@@ -88,7 +88,7 @@ Basic Usage
 ~~~~~~~~~~~
 
 By using ``graph.superoptimize`` and indicate backend to “triton”,
-mirage will automatically search, profile and return the best
+yirage will automatically search, profile and return the best
 arrangement it found and return the related graph.
 
 You could then use ``generate_triton_program()["code"]`` to get the
@@ -99,15 +99,15 @@ find as ``demo/triton_rms_norm.py``:
 
 .. code:: python
 
-   import mirage as mi
+   import yirage as yr
    import torch
 
    # Create a kernel graph
-   graph = mi.new_kernel_graph()
+   graph = yr.new_kernel_graph()
 
    # Define inputs and operations
-   X = graph.new_input(dims=(16, 4096), dtype=mi.float16)
-   W = graph.new_input(dims=(4096, 6144), dtype=mi.float16)
+   X = graph.new_input(dims=(16, 4096), dtype=yr.float16)
+   W = graph.new_input(dims=(4096, 6144), dtype=yr.float16)
    D = graph.rms_norm(X, normalized_shape=(4096,))
    O = graph.matmul(D, W)
    graph.mark_output(O)
@@ -117,7 +117,7 @@ find as ``demo/triton_rms_norm.py``:
 
    # Generate and save the code
    with open("triton_generated.py", "w") as f:
-       f.write(mi.generate_triton_program(
+       f.write(yr.generate_triton_program(
            optimized_graph.cygraph, 
            target_cc=10)["code"])
 
@@ -127,7 +127,7 @@ Advanced Guide
 Debug Mode
 ~~~~~~~~~~
 
-Inside ``python/mirage/kernel.py``, you could find ``triton_transpiler``
+Inside ``python/yirage/kernel.py``, you could find ``triton_transpiler``
 related code at:
 
 .. code:: python

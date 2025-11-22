@@ -46,9 +46,9 @@ import sphinx_rtd_theme
 
 # -- Project information -----------------------------------------------------
 
-project = 'Mirage'
-copyright = '2024 Mirage team'
-author = 'Mirage developers'
+project = 'YiRage'
+copyright = '2024 YiRage team'
+author = 'YiRage developers'
 
 # -- General configuration ---------------------------------------------------
 

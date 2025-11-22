@@ -1,6 +1,6 @@
-#include "mirage/search/abstract_expr/abstract_expr_for_ops.h"
+#include "yirage/search/abstract_expr/abstract_expr_for_ops.h"
 
-namespace mirage {
+namespace yirage {
 namespace search {
 
 std::shared_ptr<AbstractExpr const> get_abstract_expr(
@@ -310,4 +310,4 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
 }
 
 } // namespace search
-} // namespace mirage
+} // namespace yirage

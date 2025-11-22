@@ -13,8 +13,8 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/operator.h"
+#include "yirage/threadblock/operator.h"
 
-namespace mirage {
+namespace yirage {
 namespace threadblock {} // namespace threadblock
-} // namespace mirage
+} // namespace yirage

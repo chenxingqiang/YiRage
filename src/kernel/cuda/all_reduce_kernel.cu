@@ -14,25 +14,25 @@
  */
 
 #include "cutlass/fast_math.h"
-#include "mirage/config.h"
-#include "mirage/kernel/all_reduce.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/utils/cuda_helper.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/config.h"
+#include "yirage/kernel/all_reduce.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/utils/cuda_helper.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
-using namespace mirage::config;
-using namespace mirage::utils;
+using namespace yirage::type;
+using namespace yirage::config;
+using namespace yirage::utils;
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
 __global__ void compute_allreduce_fingerprint(
-    mirage::utils::FpPointerList fp_ptr_list, int num_gpus, int num_elements) {
+    yirage::utils::FpPointerList fp_ptr_list, int num_gpus, int num_elements) {
   int i = threadIdx.x + blockIdx.x * blockDim.x;
   if (i < num_elements) {
     FPType x = 0;
@@ -55,15 +55,15 @@ bool KNAllReduceOp::fingerprint(void) {
   int const num_threads_per_blk = 1024;
   int num_blocks =
       (num_elements + num_threads_per_blk - 1) / num_threads_per_blk;
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
   // assert inplace optimization is enabled
   assert(inplace);
   // Use GPU dmm->gpu_id for computing fingerprint
   checkCUDA(cudaSetDevice(dmm->gpu_id));
-  mirage::utils::FpPointerList fp_ptr_list;
+  yirage::utils::FpPointerList fp_ptr_list;
   for (int gpu_id = 0; gpu_id < kgraph->gpu_dim.x; gpu_id++) {
-    fp_ptr_list.ptrs[gpu_id] = reinterpret_cast<mirage::type::FPType *>(
+    fp_ptr_list.ptrs[gpu_id] = reinterpret_cast<yirage::type::FPType *>(
         dmm->fp_base_ptr[gpu_id] + input_tensors[0].fp_offset);
   }
   compute_allreduce_fingerprint<<<num_blocks, num_threads_per_blk>>>(
@@ -74,4 +74,4 @@ bool KNAllReduceOp::fingerprint(void) {
 #endif
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage

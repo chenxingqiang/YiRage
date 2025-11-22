@@ -13,18 +13,18 @@
  * limitations under the License.
  */
 
-#include "mirage/utils/cuda_helper.h"
+#include "yirage/utils/cuda_helper.h"
 
-namespace mirage {
+namespace yirage {
 namespace utils {
 
-cudaDataType_t to_cuda_datatype(mirage::type::DataType type) {
+cudaDataType_t to_cuda_datatype(yirage::type::DataType type) {
   switch (type) {
-    case mirage::type::DT_FLOAT16:
+    case yirage::type::DT_FLOAT16:
       return CUDA_R_16F;
-    case mirage::type::DT_FLOAT32:
+    case yirage::type::DT_FLOAT32:
       return CUDA_R_32F;
-    case mirage::type::DT_DOUBLE:
+    case yirage::type::DT_DOUBLE:
       return CUDA_R_64F;
     default:
       assert(false && "Unspoorted cuda data type");
@@ -41,4 +41,4 @@ size_t get_max_shared_mem() {
 }
 
 } // namespace utils
-} // namespace mirage
+} // namespace yirage

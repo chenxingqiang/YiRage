@@ -33,7 +33,7 @@ from transformers.modeling_utils import PreTrainedModel
 from .configuration_qwen3 import Qwen3Config
 import time
 
-import mirage as mi
+import yirage as yr
 from .rope import apply_rotary_pos_emb_triton
 
 

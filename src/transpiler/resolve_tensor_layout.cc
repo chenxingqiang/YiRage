@@ -13,23 +13,23 @@
  * limitations under the License.
  */
 
-#include "mirage/threadblock/smem_tensor.h"
-#include "mirage/transpiler/transpiler.h"
+#include "yirage/threadblock/smem_tensor.h"
+#include "yirage/transpiler/transpiler.h"
 
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 
-#include "mirage/type.h"
+#include "yirage/type.h"
 #include "z3++.h"
 
-#include "mirage/kernel/customized.h"
-#include "mirage/threadblock/graph.h"
-#include "mirage/threadblock/matmul.h"
-#include "mirage/threadblock/reduction.h"
-#include "mirage/transpiler/utils.h"
+#include "yirage/kernel/customized.h"
+#include "yirage/threadblock/graph.h"
+#include "yirage/threadblock/matmul.h"
+#include "yirage/threadblock/reduction.h"
+#include "yirage/transpiler/utils.h"
 
-namespace mirage {
+namespace yirage {
 namespace transpiler {
 
 // Helper functions
@@ -815,4 +815,4 @@ void Transpiler::resolve_tensor_layout() {
 }
 
 } // namespace transpiler
-} // namespace mirage
+} // namespace yirage

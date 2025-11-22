@@ -14,22 +14,22 @@
  */
 
 #include "cutlass/fast_math.h"
-#include "mirage/kernel/device_memory_manager.h"
-#include "mirage/kernel/graph.h"
-#include "mirage/kernel/reduction.h"
-#include "mirage/utils/cuda_helper.h"
-#include "mirage/utils/fingerprint_functions.h"
-#include "mirage/utils/hash_utils.h"
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/reduction.h"
+#include "yirage/utils/cuda_helper.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include "yirage/utils/hash_utils.h"
 #include <cassert>
 
-namespace mirage {
+namespace yirage {
 namespace kernel {
 
-using namespace mirage::type;
-using namespace mirage::config;
-using namespace mirage::utils;
+using namespace yirage::type;
+using namespace yirage::config;
+using namespace yirage::utils;
 
-#ifdef MIRAGE_FINGERPRINT_USE_CUDA
+#ifdef YIRAGE_FINGERPRINT_USE_CUDA
 __global__ void compute_reduction_fingerprint(FPType *input_ptr,
                                               FPType *output_ptr,
                                               int num_elements,
@@ -67,17 +67,17 @@ bool KNReductionOp::fingerprint(void) {
   int reduction_factor = input_tensors[0].dim[reduction_dim_idx] /
                          output_tensors[0].dim[reduction_dim_idx];
   assert(output_stride * reduction_factor == input_stride);
-  mirage::kernel::DeviceMemoryManager *dmm =
-      mirage::kernel::DeviceMemoryManager::get_instance();
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
   // Use GPU dmm->gpu_id for computing fingerprint
   checkCUDA(cudaSetDevice(dmm->gpu_id));
 
   for (int gpu_id = 0; gpu_id < kgraph->gpu_dim.x; gpu_id++) {
-    mirage::type::FPType *input_fp_ptr =
-        reinterpret_cast<mirage::type::FPType *>(dmm->fp_base_ptr[gpu_id] +
+    yirage::type::FPType *input_fp_ptr =
+        reinterpret_cast<yirage::type::FPType *>(dmm->fp_base_ptr[gpu_id] +
                                                  input_tensors[0].fp_offset);
-    mirage::type::FPType *output_fp_ptr =
-        reinterpret_cast<mirage::type::FPType *>(dmm->fp_base_ptr[gpu_id] +
+    yirage::type::FPType *output_fp_ptr =
+        reinterpret_cast<yirage::type::FPType *>(dmm->fp_base_ptr[gpu_id] +
                                                  output_tensors[0].fp_offset);
     compute_reduction_fingerprint<<<num_blocks, num_threads_per_blk>>>(
         input_fp_ptr,
@@ -90,7 +90,7 @@ bool KNReductionOp::fingerprint(void) {
   }
   return true;
 }
-#endif // MIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CUDA
 
 } // namespace kernel
-} // namespace mirage
+} // namespace yirage
