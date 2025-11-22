@@ -58,8 +58,8 @@ int main() {
 
     if (backend->is_available()) {
       std::cout << "    Max Memory: "
-                << (backend->get_max_memory() / (1024.0 * 1024 * 1024))
-                << " GB" << std::endl;
+                << (backend->get_max_memory() / (1024.0 * 1024 * 1024)) << " GB"
+                << std::endl;
       std::cout << "    Max Shared Memory: "
                 << (backend->get_max_shared_memory() / 1024.0) << " KB"
                 << std::endl;
@@ -76,8 +76,8 @@ int main() {
   for (auto const &name : backend_names) {
     auto *backend = registry.get_backend(name);
     if (backend) {
-      std::cout << "  Found: " << name << " -> "
-                << backend->get_display_name() << std::endl;
+      std::cout << "  Found: " << name << " -> " << backend->get_display_name()
+                << std::endl;
     } else {
       std::cout << "  Not found: " << name << std::endl;
     }
@@ -99,15 +99,15 @@ int main() {
   std::cout << "\n[Test 6] Testing backend availability..." << std::endl;
   for (auto const &name : backend_names) {
     bool available = is_backend_available(name);
-    std::cout << "  " << name << ": " << (available ? "Available" : "Not Available")
-              << std::endl;
+    std::cout << "  " << name << ": "
+              << (available ? "Available" : "Not Available") << std::endl;
   }
 
   // Test 7: Test data type support
   std::cout << "\n[Test 7] Testing data type support..." << std::endl;
   if (default_backend) {
-    std::cout << "  Testing " << default_backend->get_name() << " data types:"
-              << std::endl;
+    std::cout << "  Testing " << default_backend->get_name()
+              << " data types:" << std::endl;
     std::cout << "    FP32: "
               << (default_backend->supports_data_type(yirage::type::DT_FLOAT32)
                       ? "Yes"
@@ -136,8 +136,3 @@ int main() {
 
   return 0;
 }
-
-
-
-
-
