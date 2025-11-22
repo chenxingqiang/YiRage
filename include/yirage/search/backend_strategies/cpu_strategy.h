@@ -17,7 +17,6 @@
  * Original Mirage Copyright 2023-2024 CMU.
  */
 
-
 #pragma once
 
 #include "yirage/kernel/cpu/cpu_kernel_config.h"
@@ -30,7 +29,7 @@ namespace search {
 
 /**
  * @brief CPU-specific search strategy
- * 
+ *
  * Optimizes kernel configurations for CPUs by exploring:
  * - Cache blocking (tile sizes)
  * - Thread counts
@@ -44,16 +43,16 @@ public:
   bool initialize(SearchConfig const &config) override;
 
   std::vector<CandidateConfig>
-  generate_candidates(kernel::Graph const &graph) override;
+      generate_candidates(kernel::Graph const &graph) override;
 
   float evaluate_candidate(CandidateConfig &candidate,
-                          kernel::Graph const &graph) override;
+                           kernel::Graph const &graph) override;
 
   kernel::KernelConfig *
-  select_best_config(std::vector<CandidateConfig> &candidates) override;
+      select_best_config(std::vector<CandidateConfig> &candidates) override;
 
   std::unique_ptr<kernel::KernelConfig>
-  optimize(kernel::Graph const &graph) override;
+      optimize(kernel::Graph const &graph) override;
 
   type::BackendType get_backend_type() const override {
     return type::BT_CPU;
@@ -74,8 +73,8 @@ private:
    * @param k K dimension
    * @return Vector of (tile_m, tile_n, tile_k) tuples
    */
-  std::vector<std::tuple<int, int, int>> 
-  generate_tile_configs(int m, int n, int k);
+  std::vector<std::tuple<int, int, int>>
+      generate_tile_configs(int m, int n, int k);
 
   /**
    * @brief Generate thread count candidates
@@ -101,7 +100,9 @@ private:
    * @return Cache efficiency score (0.0 - 1.0)
    */
   float evaluate_cache_efficiency(kernel::cpu::CPUKernelConfig const &config,
-                                  int m, int n, int k);
+                                  int m,
+                                  int n,
+                                  int k);
 
   /**
    * @brief Evaluate vectorization efficiency
@@ -110,8 +111,7 @@ private:
    * @return Vectorization efficiency score (0.0 - 1.0)
    */
   float evaluate_vectorization_efficiency(
-      kernel::cpu::CPUKernelConfig const &config,
-      size_t problem_size);
+      kernel::cpu::CPUKernelConfig const &config, size_t problem_size);
 
   /**
    * @brief Evaluate load balance across threads
@@ -134,8 +134,3 @@ private:
 } // namespace yirage
 
 #endif // YIRAGE_BACKEND_CPU_ENABLED
-
-
-
-
-

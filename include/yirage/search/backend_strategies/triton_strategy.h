@@ -17,7 +17,6 @@
  * Original Mirage Copyright 2023-2024 CMU.
  */
 
-
 #pragma once
 
 #include "yirage/kernel/triton/triton_kernel_config.h"
@@ -30,7 +29,7 @@ namespace search {
 
 /**
  * @brief Triton compiler-based search strategy
- * 
+ *
  * Optimizes by exploring Triton-specific configurations:
  * - Block sizes
  * - Number of warps
@@ -44,16 +43,16 @@ public:
   bool initialize(SearchConfig const &config) override;
 
   std::vector<CandidateConfig>
-  generate_candidates(kernel::Graph const &graph) override;
+      generate_candidates(kernel::Graph const &graph) override;
 
   float evaluate_candidate(CandidateConfig &candidate,
-                          kernel::Graph const &graph) override;
+                           kernel::Graph const &graph) override;
 
   kernel::KernelConfig *
-  select_best_config(std::vector<CandidateConfig> &candidates) override;
+      select_best_config(std::vector<CandidateConfig> &candidates) override;
 
   std::unique_ptr<kernel::KernelConfig>
-  optimize(kernel::Graph const &graph) override;
+      optimize(kernel::Graph const &graph) override;
 
   type::BackendType get_backend_type() const override {
     return type::BT_TRITON;
@@ -66,7 +65,7 @@ private:
 
   // Generate block size candidates
   std::vector<std::tuple<int, int, int>>
-  generate_block_size_configs(int m, int n, int k);
+      generate_block_size_configs(int m, int n, int k);
 
   // Generate warp count candidates
   std::vector<int> generate_warp_configs();
@@ -85,8 +84,3 @@ private:
 } // namespace yirage
 
 #endif // YIRAGE_BACKEND_TRITON_ENABLED
-
-
-
-
-

@@ -17,7 +17,6 @@
  * Original Mirage Copyright 2023-2024 CMU.
  */
 
-
 #pragma once
 
 #include "yirage/kernel/cuda/cuda_kernel_config.h"
@@ -30,7 +29,7 @@ namespace search {
 
 /**
  * @brief CUDA-specific search strategy
- * 
+ *
  * Optimizes kernel configurations for NVIDIA GPUs by exploring:
  * - Warp configurations
  * - Shared memory layouts
@@ -44,16 +43,16 @@ public:
   bool initialize(SearchConfig const &config) override;
 
   std::vector<CandidateConfig>
-  generate_candidates(kernel::Graph const &graph) override;
+      generate_candidates(kernel::Graph const &graph) override;
 
   float evaluate_candidate(CandidateConfig &candidate,
-                          kernel::Graph const &graph) override;
+                           kernel::Graph const &graph) override;
 
   kernel::KernelConfig *
-  select_best_config(std::vector<CandidateConfig> &candidates) override;
+      select_best_config(std::vector<CandidateConfig> &candidates) override;
 
   std::unique_ptr<kernel::KernelConfig>
-  optimize(kernel::Graph const &graph) override;
+      optimize(kernel::Graph const &graph) override;
 
   type::BackendType get_backend_type() const override {
     return type::BT_CUDA;
@@ -89,7 +88,7 @@ private:
    * @return Vector of Tensor Core configs
    */
   std::vector<kernel::cuda::CUDAKernelConfig>
-  generate_tensor_core_configs(int m, int n, int k);
+      generate_tensor_core_configs(int m, int n, int k);
 
   /**
    * @brief Generate grid/block dimension candidates
@@ -97,8 +96,7 @@ private:
    * @param n N dimension
    * @return Vector of grid/block configs
    */
-  std::vector<std::pair<dim3, dim3>> generate_grid_block_configs(int m,
-                                                                  int n);
+  std::vector<std::pair<dim3, dim3>> generate_grid_block_configs(int m, int n);
 
   // CUDA-specific evaluation metrics
 
@@ -114,16 +112,16 @@ private:
    * @param config Kernel configuration
    * @return Memory efficiency score (0.0 - 1.0)
    */
-  float evaluate_memory_efficiency(
-      kernel::cuda::CUDAKernelConfig const &config);
+  float
+      evaluate_memory_efficiency(kernel::cuda::CUDAKernelConfig const &config);
 
   /**
    * @brief Evaluate compute throughput potential
    * @param config Kernel configuration
    * @return Compute throughput score (0.0 - 1.0)
    */
-  float evaluate_compute_throughput(
-      kernel::cuda::CUDAKernelConfig const &config);
+  float
+      evaluate_compute_throughput(kernel::cuda::CUDAKernelConfig const &config);
 
   /**
    * @brief Evaluate shared memory bank conflicts
@@ -144,8 +142,3 @@ private:
 } // namespace yirage
 
 #endif // YIRAGE_BACKEND_CUDA_ENABLED
-
-
-
-
-

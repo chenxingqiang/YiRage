@@ -17,7 +17,6 @@
  * Original Mirage Copyright 2023-2024 CMU.
  */
 
-
 #pragma once
 
 #include "yirage/kernel/nki/nki_kernel_config.h"
@@ -30,7 +29,7 @@ namespace search {
 
 /**
  * @brief NKI (Neuron Kernel Interface) search strategy
- * 
+ *
  * Optimizes for AWS Inferentia/Trainium by exploring:
  * - NeuronCore tile configurations
  * - SBUF (State Buffer) usage
@@ -44,16 +43,16 @@ public:
   bool initialize(SearchConfig const &config) override;
 
   std::vector<CandidateConfig>
-  generate_candidates(kernel::Graph const &graph) override;
+      generate_candidates(kernel::Graph const &graph) override;
 
   float evaluate_candidate(CandidateConfig &candidate,
-                          kernel::Graph const &graph) override;
+                           kernel::Graph const &graph) override;
 
   kernel::KernelConfig *
-  select_best_config(std::vector<CandidateConfig> &candidates) override;
+      select_best_config(std::vector<CandidateConfig> &candidates) override;
 
   std::unique_ptr<kernel::KernelConfig>
-  optimize(kernel::Graph const &graph) override;
+      optimize(kernel::Graph const &graph) override;
 
   type::BackendType get_backend_type() const override {
     return type::BT_NKI;
@@ -66,10 +65,10 @@ private:
 
   // NKI-specific candidate generation
   std::vector<std::tuple<int, int, int>>
-  generate_tile_configs(int m, int n, int k);
+      generate_tile_configs(int m, int n, int k);
 
   std::vector<kernel::nki::NKIKernelConfig::ScheduleStrategy>
-  generate_schedule_strategies();
+      generate_schedule_strategies();
 
   // NKI-specific evaluation
   float evaluate_sbuf_efficiency(kernel::nki::NKIKernelConfig const &config);
@@ -83,8 +82,3 @@ private:
 } // namespace yirage
 
 #endif // YIRAGE_BACKEND_NKI_ENABLED
-
-
-
-
-
