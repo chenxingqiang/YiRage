@@ -17,31 +17,31 @@ def get_mps_search_config():
         dict: Search configuration optimized for MPS
     """
     return {
-        # Reduce search space for faster optimization
-        "max_num_threadblock_graph_op": 7,  # Reduced from 9
-        "max_num_kernel_graph_op": 4,       # Reduced from 5
+        # Aggressive reduction for faster search
+        "max_num_threadblock_graph_op": 5,  # Reduced from 9 -> 7 -> 5
+        "max_num_kernel_graph_op": 3,       # Reduced from 5 -> 4 -> 3
         "max_num_threadblock_graphs": 1,
         "search_thread": 8,                  # M3 has ~10 GPU cores
         
-        # MPS-optimized thread block dimensions
+        # Early stopping when good solutions found
+        "early_stop_threshold": 10,          # Stop after finding 10 valid graphs
+        "search_timeout_seconds": 300,       # 5 minute timeout
+        
+        # MPS-optimized thread block dimensions (minimal set)
         # Apple GPUs work well with multiples of 32 (SIMD width)
         "grid_dims_to_explore": [
-            (32, 1, 1),
-            (64, 1, 1),
-            (128, 1, 1),
-            (32, 2, 1),
-            (64, 2, 1),
+            (32, 1, 1),   # Small
+            (64, 1, 1),   # Medium
+            (128, 1, 1),  # Large
         ],
         
         "block_dims_to_explore": [
-            (32, 1, 1),   # 1 SIMD group
-            (64, 1, 1),   # 2 SIMD groups
+            (64, 1, 1),   # 2 SIMD groups (optimal for most cases)
             (128, 1, 1),  # 4 SIMD groups
-            (256, 1, 1),  # 8 SIMD groups
         ],
         
-        # Forloop ranges optimized for MPS
-        "franges_to_explore": [4, 16, 32],  # Reduced from [4, 16, 64]
+        # Minimal forloop ranges for faster search
+        "franges_to_explore": [4, 16],  # Reduced from [4, 16, 32]
     }
 
 def get_cpu_search_config():
@@ -52,26 +52,29 @@ def get_cpu_search_config():
         dict: Search configuration optimized for CPU
     """
     return {
-        # CPU has different optimal configurations
-        "max_num_threadblock_graph_op": 6,
-        "max_num_kernel_graph_op": 4,
+        # Aggressive reduction for CPU
+        "max_num_threadblock_graph_op": 5,
+        "max_num_kernel_graph_op": 3,
         "max_num_threadblock_graphs": 1,
-        "search_thread": 8,  # Use fewer threads for search
+        "search_thread": 8,
         
-        # CPU-optimized dimensions (cache-friendly)
+        # Early stopping
+        "early_stop_threshold": 10,
+        "search_timeout_seconds": 300,
+        
+        # Minimal CPU-optimized dimensions
         "grid_dims_to_explore": [
-            (16, 1, 1),
             (32, 1, 1),
             (64, 1, 1),
         ],
         
         "block_dims_to_explore": [
-            (32, 1, 1),
             (64, 1, 1),
             (128, 1, 1),
         ],
         
-        "franges_to_explore": [4, 8, 16],
+        # Reduced forloop ranges
+        "franges_to_explore": [4, 16],
     }
 
 def apply_backend_config(config_dict, backend):
