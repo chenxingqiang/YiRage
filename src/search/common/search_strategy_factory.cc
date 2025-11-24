@@ -42,6 +42,10 @@
 #include "yirage/search/backend_strategies/nki_strategy.h"
 #endif
 
+#ifdef YIRAGE_BACKEND_ASCEND_ENABLED
+#include "yirage/search/backend_strategies/ascend_strategy.h"
+#endif
+
 // Note: CUDNN and MKL can reuse CUDA and CPU strategies respectively
 // If needed, dedicated strategies can be implemented later
 
@@ -89,6 +93,13 @@ SearchStrategyFactory::create_strategy(type::BackendType backend,
   }
 #endif
 
+#ifdef YIRAGE_BACKEND_ASCEND_ENABLED
+  case type::BT_ASCEND: {
+    strategy = std::make_unique<AscendSearchStrategy>();
+    break;
+  }
+#endif
+
   default:
     std::cerr << "No search strategy available for backend: "
               << static_cast<int>(backend) << std::endl;
@@ -129,6 +140,11 @@ bool SearchStrategyFactory::has_strategy(type::BackendType backend) {
 
 #ifdef YIRAGE_BACKEND_NKI_ENABLED
   case type::BT_NKI:
+    return true;
+#endif
+
+#ifdef YIRAGE_BACKEND_ASCEND_ENABLED
+  case type::BT_ASCEND:
     return true;
 #endif
 

@@ -72,6 +72,14 @@ size_t const MAX_SMEM_SIZE = (size_t)24 * 1024 * 1024;          // 24 MB (SBUF)
 }
 #endif
 
+#ifdef YIRAGE_BACKEND_ASCEND_ENABLED
+namespace ascend {
+// Ascend 910: 32GB HBM, Ascend 910B: 64GB HBM2e
+size_t const MAX_DMEM_SIZE = (size_t)64 * 1024 * 1024 * 1024;   // 64 GB (910B)
+size_t const MAX_SMEM_SIZE = 512 * 1024;                        // 512 KB (AI Core L1)
+}
+#endif
+
 // Default limits (fallback if no backend specified)
 #if !defined(YIRAGE_BACKEND_CUDA_ENABLED) && !defined(YIRAGE_BACKEND_CPU_ENABLED) && \
     !defined(YIRAGE_BACKEND_MPS_ENABLED) && !defined(YIRAGE_BACKEND_NKI_ENABLED)
