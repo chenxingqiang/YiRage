@@ -111,26 +111,62 @@ AscendTranspileResult transpile(kernel::Graph const *graph,
 }
 
 /**
+ * @brief Transpile via Triton path (RECOMMENDED)
+ * 
+ * Uses YiRage's existing Triton transpiler + BiSheng compiler
+ * This is the fastest and most maintainable path.
+ */
+AscendTranspileResult transpile_via_triton(kernel::Graph const *graph,
+                                          int device_type) {
+    AscendTranspileResult result;
+    result.path_used = CodeGenPath::TRITON;
+    
+    // Configure Triton transpiler for Ascend target
+    #ifdef YIRAGE_BACKEND_TRITON_ENABLED
+    triton_transpiler::TritonTranspilerConfig triton_config;
+    triton_config.target_cc = 80;  // Dummy value (BiSheng ignores it)
+    triton_config.is_ascend_target = true;
+    
+    // Map device type to SOC name
+    switch (device_type) {
+        case 0:  triton_config.ascend_soc = "Ascend910"; break;
+        case 1:  triton_config.ascend_soc = "Ascend910B"; break;
+        case 2:  triton_config.ascend_soc = "Ascend310P"; break;
+        default: triton_config.ascend_soc = "Ascend910B";
+    }
+    
+    // Call existing Triton transpiler
+    auto triton_result = triton_transpiler::transpile(graph, triton_config);
+    
+    result.code = triton_result.code;
+    result.output_shapes = triton_result.output_shapes;
+    
+    // BiSheng compiler command
+    result.compile_command = 
+        "bisheng-triton --target=" + triton_config.ascend_soc + " " +
+        "--opt-level=3 " +
+        "--enable-fp16 " +
+        "-o kernel.so";
+    #else
+    result.code = "# Triton transpiler not available (not compiled with TRITON support)";
+    result.compile_command = "";
+    #endif
+    
+    return result;
+}
+
+/**
  * @brief Smart transpile with automatic path selection
  * 
  * Automatically chooses best code generation path:
- * 1. Triton (if BiSheng Compiler available) - RECOMMENDED
+ * 1. Triton (if available) - RECOMMENDED, reuses existing code
  * 2. Ascend C (for 910B+)
  * 3. TBE (for 910 compatibility)
  */
 AscendTranspileResult transpile_auto(kernel::Graph const *graph,
                                     int device_type) {
-    AscendTranspilerConfig config;
-    config.device_type = device_type;
-    config.use_cube_ops = true;
-    config.enable_fusion = true;
-    config.ai_cores_per_block = 8;
-    
-    // Auto-select best path
-    // Try Triton first (best portability + performance)
-    config.codegen_path = CodeGenPath::TRITON;
-    
-    return transpile(graph, config);
+    // Always prefer Triton path (leverages BiSheng support)
+    return transpile_via_triton(graph, device_type);
 }
 
 } // namespace ascend_transpiler
