@@ -160,34 +160,111 @@ std::string MPSSearchStrategy::get_statistics() const {
 std::vector<int> MPSSearchStrategy::generate_threadgroup_configs(
     size_t problem_size) {
   std::vector<int> configs;
-
-  // Try different threadgroup sizes (multiples of SIMD width)
   int simd_width = 32;
-  for (int mult = 4; mult <= 32; mult *= 2) {
+  
+  // Dynamically adjust range based on problem size
+  int min_mult = (problem_size < 1024) ? 2 : 4;      // Small problems use smaller threadgroups
+  int max_mult = (problem_size > 1048576) ? 32 : 20; // Large problems can use bigger ones
+  
+  // Generate all multiples of SIMD width in range
+  for (int mult = min_mult; mult <= max_mult; mult++) {
     int size = simd_width * mult;
-    if (size <= 1024) { // Metal limit
+    if (size >= 32 && size <= 1024) { // Metal limits: 32-1024
       configs.push_back(size);
     }
   }
-
-  return configs;
+  
+  // Add empirically good values if not already present
+  std::vector<int> empirical = {64, 96, 128, 160, 192, 256, 320, 384, 512};
+  for (int size : empirical) {
+    if (size % simd_width == 0 && size >= 32 && size <= 1024) {
+      // Add if not duplicate
+      if (std::find(configs.begin(), configs.end(), size) == configs.end()) {
+        configs.push_back(size);
+      }
+    }
+  }
+  
+  // Sort and ensure we have at least some candidates
+  std::sort(configs.begin(), configs.end());
+  
+  // Ensure we have reasonable candidates
+  if (configs.empty()) {
+    configs = {128, 256, 512}; // Fallback
+  }
+  
+  return configs;  // Now returns 10-20 candidates instead of 4
 }
 
 std::vector<std::tuple<int, int, int>>
 MPSSearchStrategy::generate_tile_configs(int m, int n, int k) {
   std::vector<std::tuple<int, int, int>> configs;
-
-  // Try different tile sizes optimized for threadgroup memory
-  std::vector<int> tile_sizes = {16, 32, 48, 64};
-
-  for (int tile : tile_sizes) {
-    configs.emplace_back(
-        std::min(m, tile),
-        std::min(n, tile),
-        std::min(k, tile));
+  
+  // Threadgroup memory = 32KB
+  const size_t tg_memory = 32 * 1024;
+  const size_t dtype_size = 2;  // float16
+  
+  // Try different combinations of tile sizes
+  // Adjust ranges based on problem dimensions
+  std::vector<int> tile_m_sizes = {16, 32, 48, 64};
+  std::vector<int> tile_n_sizes = {16, 32, 48, 64};
+  std::vector<int> tile_k_sizes = {8, 16, 24, 32};
+  
+  // Add larger tiles for big matrices
+  if (m >= 128) tile_m_sizes.push_back(96);
+  if (m >= 192) tile_m_sizes.push_back(128);
+  if (n >= 128) tile_n_sizes.push_back(96);
+  if (n >= 192) tile_n_sizes.push_back(128);
+  if (k >= 64) tile_k_sizes.push_back(48);
+  if (k >= 96) tile_k_sizes.push_back(64);
+  
+  for (int tm : tile_m_sizes) {
+    if (tm > m) continue;  // Skip if larger than dimension
+    
+    for (int tn : tile_n_sizes) {
+      if (tn > n) continue;
+      
+      for (int tk : tile_k_sizes) {
+        if (tk > k) continue;
+        
+        // Calculate required threadgroup memory
+        // A: tm x tk, B: tk x tn (float16)
+        // C: tm x tn (float32 accumulation)
+        size_t memory_needed = (tm * tk + tk * tn) * dtype_size + 
+                               tm * tn * sizeof(float);
+        
+        // Ensure fits in threadgroup memory (with 20% safety margin)
+        if (memory_needed > tg_memory * 0.8f) {
+          continue;
+        }
+        
+        // Prefer balanced tile configurations
+        float aspect_ratio = static_cast<float>(tm * tn) / (tk * tk);
+        if (aspect_ratio < 0.25f || aspect_ratio > 4.0f) {
+          continue;  // Skip very unbalanced tiles
+        }
+        
+        configs.emplace_back(
+            std::min(m, tm),
+            std::min(n, tn),
+            std::min(k, tk));
+      }
+    }
   }
-
-  return configs;
+  
+  // Ensure at least one valid configuration
+  if (configs.empty()) {
+    configs.emplace_back(
+        std::min(m, 32),
+        std::min(n, 32),
+        std::min(k, 16));
+  }
+  
+  // Remove duplicates
+  std::sort(configs.begin(), configs.end());
+  configs.erase(std::unique(configs.begin(), configs.end()), configs.end());
+  
+  return configs;  // Now returns much more candidates
 }
 
 std::vector<kernel::mps::MemoryPattern>
@@ -238,18 +315,58 @@ float MPSSearchStrategy::evaluate_memory_efficiency(
 
 float MPSSearchStrategy::evaluate_threadgroup_memory(
     kernel::mps::MPSKernelConfig const &config) {
-  // Check if tile sizes fit well in threadgroup memory
-  size_t required_memory = (config.tile_m * config.tile_k +
-                           config.tile_k * config.tile_n +
-                           config.tile_m * config.tile_n) *
-                          sizeof(float);
-
-  float memory_ratio = static_cast<float>(required_memory) /
-                      config.threadgroup_memory_size;
-
-  // Penalize if over-allocated or under-utilized
-  float score = 1.0f - std::abs(1.0f - memory_ratio);
-  return std::max(0.0f, score);
+  // Use correct data type size (float16 = 2 bytes)
+  const size_t dtype_size = 2;  // float16
+  
+  // Calculate actual memory needed for matrix tiles
+  // Matrix A: tile_m x tile_k (float16)
+  // Matrix B: tile_k x tile_n (float16)
+  // Matrix C: tile_m x tile_n (float32 for accumulation)
+  size_t memory_a = config.tile_m * config.tile_k * dtype_size;
+  size_t memory_b = config.tile_k * config.tile_n * dtype_size;
+  size_t memory_c = config.tile_m * config.tile_n * sizeof(float);
+  
+  // Reserve space for potential temporary variables
+  size_t temp_memory = config.threads_per_threadgroup * sizeof(float);
+  
+  size_t total_required = memory_a + memory_b + memory_c + temp_memory;
+  
+  // Apple Silicon: 32KB threadgroup memory
+  const size_t tg_memory = 32 * 1024;
+  
+  // Invalid if exceeds limit
+  if (total_required > tg_memory) {
+    return 0.0f;
+  }
+  
+  // Calculate utilization
+  float utilization = static_cast<float>(total_required) / tg_memory;
+  
+  // Optimal range: 60-80% (leave headroom but don't waste)
+  float score = 1.0f;
+  if (utilization >= 0.60f && utilization <= 0.80f) {
+    score = 1.0f;  // Ideal range
+  } else if (utilization > 0.80f && utilization <= 0.95f) {
+    // Gradually penalize as we approach limit
+    score = 0.9f - (utilization - 0.80f) * 2.0f;
+  } else if (utilization < 0.60f && utilization >= 0.30f) {
+    // Underutilization penalty
+    score = 0.7f + utilization * 0.5f;
+  } else if (utilization < 0.30f) {
+    // Severe underutilization
+    score = 0.5f;
+  } else {
+    // Over 95% is risky
+    score = 0.3f;
+  }
+  
+  // Bonus if tile configuration aligns well with threadgroup size
+  int threads_needed = ((config.tile_m * config.tile_n + 31) / 32) * 32;
+  if (threads_needed == config.threads_per_threadgroup) {
+    score *= 1.1f;
+  }
+  
+  return std::min(1.0f, score);
 }
 
 bool MPSSearchStrategy::is_valid_config(
