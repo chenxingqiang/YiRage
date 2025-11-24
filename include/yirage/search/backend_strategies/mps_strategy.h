@@ -21,6 +21,7 @@
 
 #include "yirage/kernel/mps/mps_kernel_config.h"
 #include "yirage/search/common/search_strategy.h"
+#include "yirage/search/mps_profiler.h"
 
 #ifdef YIRAGE_BACKEND_MPS_ENABLED
 
@@ -63,6 +64,13 @@ public:
 private:
   int gpu_family_;
   int gpu_cores_;
+  
+  // Adaptive search state
+  bool adaptive_search_enabled_ = true;
+  
+  // Profile-guided optimization
+  static MPSProfiler profiler_;
+  bool use_profiler_ = true;
 
   // MPS-specific candidate generation
 
@@ -118,6 +126,27 @@ private:
    * @return true if valid
    */
   bool is_valid_config(kernel::mps::MPSKernelConfig const &config);
+  
+  /**
+   * @brief Generate adaptive candidates based on average characteristics
+   * @param graph Kernel graph
+   * @param avg_tg Average threadgroup size from top configs
+   * @param avg_tm Average tile_m from top configs
+   * @param avg_tn Average tile_n from top configs
+   * @param avg_tk Average tile_k from top configs
+   * @return Vector of refined candidate configurations
+   */
+  std::vector<CandidateConfig>
+      generate_adaptive_candidates_simple(kernel::Graph const &graph,
+                                          int avg_tg, int avg_tm, 
+                                          int avg_tn, int avg_tk);
+  
+  /**
+   * @brief Apply M3+ Dynamic Caching optimizations
+   * @param config Kernel configuration to optimize
+   * @return Optimization bonus score
+   */
+  float apply_dynamic_caching_optimization(kernel::mps::MPSKernelConfig const &config);
 };
 
 } // namespace search

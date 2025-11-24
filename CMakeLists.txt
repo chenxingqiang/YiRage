@@ -54,8 +54,10 @@ list(APPEND YIRAGE_SRCS ${KERNEL_OPT_SRCS})
 # Collect search strategy sources
 file(GLOB SEARCH_COMMON_SRCS src/search/common/*.cc)
 file(GLOB SEARCH_STRATEGY_SRCS src/search/backend_strategies/*.cc)
+file(GLOB SEARCH_PROFILER_SRCS src/search/mps_profiler.cc)
 list(APPEND YIRAGE_SRCS ${SEARCH_COMMON_SRCS})
 list(APPEND YIRAGE_SRCS ${SEARCH_STRATEGY_SRCS})
+list(APPEND YIRAGE_SRCS ${SEARCH_PROFILER_SRCS})
 
 # Handle CUDA-specific sources
 if (NOT "${USE_CUDA}" STREQUAL "OFF")
