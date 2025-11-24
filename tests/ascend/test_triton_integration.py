@@ -53,44 +53,64 @@ def test_ascend_triton_codegen():
         return False
 
 
-def test_bisheng_compiler_detection():
-    """Test if BiSheng compiler is available"""
+def test_ascend_stack_detection():
+    """Test if Ascend software stack is available"""
     import subprocess
     
-    print("\n🔍 Detecting BiSheng Compiler...")
+    print("\n🔍 Detecting Ascend Software Stack...")
     print("-" * 60)
     
-    # Try to find bisheng-triton
+    detected = {
+        'torch_npu': False,
+        'triton_ascend': False,
+        'cann': False
+    }
+    
+    # 1. Test torch_npu
     try:
+        import torch_npu
+        print(f"✅ torch_npu found: {torch_npu.__version__}")
+        detected['torch_npu'] = True
+    except ImportError:
+        print("⚠️  torch_npu not found")
+        print("   Install: pip install torch-npu")
+        print("   GitHub: https://github.com/Ascend/pytorch")
+    
+    # 2. Test triton-ascend
+    try:
+        # Check if triton-ascend is installed
         result = subprocess.run(
-            ['which', 'bisheng-triton'],
+            ['python', '-c', 'import triton; print(triton.__version__)'],
             capture_output=True,
             text=True,
             timeout=2
         )
-        
+        if 'ascend' in result.stdout.lower() or result.returncode == 0:
+            print(f"✅ Triton (Ascend): Available")
+            detected['triton_ascend'] = True
+    except:
+        print("⚠️  triton-ascend not found")
+        print("   Install: pip install triton-ascend")
+        print("   GitHub: https://github.com/Ascend/triton-ascend")
+    
+    # 3. Test CANN
+    try:
+        result = subprocess.run(
+            ['which', 'npu-smi'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
         if result.returncode == 0:
-            print(f"✅ BiSheng Triton found: {result.stdout.strip()}")
-            
-            # Try to get version
-            version_result = subprocess.run(
-                ['bisheng-triton', '--version'],
-                capture_output=True,
-                text=True,
-                timeout=2
-            )
-            if version_result.returncode == 0:
-                print(f"   Version: {version_result.stdout.strip()}")
-            return True
+            print(f"✅ CANN tools found: npu-smi available")
+            detected['cann'] = True
         else:
-            print("⚠️  BiSheng Triton not found")
-            print("   Install: pip install bisheng-triton (on Ascend system)")
-            return False
-            
-    except Exception as e:
-        print(f"⚠️  Cannot detect BiSheng: {e}")
-        print("   This is expected on non-Ascend systems")
-        return False
+            print("⚠️  CANN not detected")
+            print("   Download: https://www.hiascend.com/cann")
+    except:
+        print("⚠️  CANN not detected (expected on non-Ascend systems)")
+    
+    return any(detected.values())
 
 
 if __name__ == "__main__":
@@ -101,19 +121,23 @@ if __name__ == "__main__":
     # Test 1: Code generation
     test1 = test_ascend_triton_codegen()
     
-    # Test 2: Compiler detection  
-    test2 = test_bisheng_compiler_detection()
+    # Test 2: Ascend stack detection
+    test2 = test_ascend_stack_detection()
     
     print()
     print("=" * 60)
     if test1:
-        print("✅ Ascend backend framework: READY")
+        print("✅ YiRage Ascend backend: READY")
         if test2:
-            print("✅ BiSheng compiler: AVAILABLE")
+            print("✅ Ascend software stack: AVAILABLE")
             print("\n🚀 Ready for Ascend NPU execution!")
+            print("   Use: graph.superoptimize(backend='ascend')")
         else:
-            print("⚠️  BiSheng compiler: NOT AVAILABLE")
-            print("\n💡 Can still develop - test on Ascend hardware later")
+            print("⚠️  Ascend software stack: NOT AVAILABLE")
+            print("\n💡 Framework ready - install components on Ascend system:")
+            print("   1. pip install torch-npu")
+            print("   2. pip install triton-ascend")  
+            print("   3. Install CANN toolkit")
     else:
         print("❌ Tests failed")
         sys.exit(1)

@@ -4,17 +4,30 @@
 
 ### 前提条件
 
-在Ascend系统上：
+在Ascend系统上安装以下组件：
+
 ```bash
-# 1. 安装CANN工具包
+# 1. 安装CANN工具包（必需）
 # 下载自: https://www.hiascend.com/cann
+# 支持版本: CANN 6.0+ (推荐 8.0+)
 
-# 2. 安装BiSheng编译器（支持Triton）
-pip install bisheng-triton
+# 2. 安装torch_npu（PyTorch Ascend适配器）
+# 参考: https://github.com/Ascend/pytorch
+pip install torch-npu
 
-# 3. 安装torch_npu
-pip install torch_npu
+# 3. 安装Triton for Ascend（Triton路径）
+# 参考: https://github.com/Ascend/triton-ascend
+pip install triton-ascend
+
+# 验证安装
+python -c "import torch_npu; print(torch_npu.__version__)"
+python -c "import torch; print('NPU available:', torch.npu.is_available())"
 ```
+
+**版本兼容性**（参考Ascend/pytorch）：
+- PyTorch 2.1-2.8 + CANN 8.0+ (推荐)
+- PyTorch 1.11 + CANN 6.0+
+- torch_npu需匹配PyTorch版本
 
 ### 快速开始
 
@@ -145,10 +158,46 @@ bisheng-triton \
 - [ ] 性能benchmark
 - [ ] 与PyTorch对比
 
+## 🔗 关键依赖
+
+YiRage Ascend backend依赖以下华为开源项目：
+
+### 1. torch_npu (PyTorch适配器)
+- **GitHub**: https://github.com/Ascend/pytorch
+- **用途**: PyTorch在Ascend NPU上的运行时支持
+- **提供**: `torch.device('npu')`, NPU算子
+- **安装**: `pip install torch-npu`
+
+### 2. triton-ascend (Triton编译器)
+- **GitHub**: https://github.com/Ascend/triton-ascend  
+- **用途**: Triton → Ascend NPU编译
+- **核心**: BiSheng编译器后端
+- **安装**: `pip install triton-ascend`
+
+### 3. CANN (计算架构)
+- **官网**: https://www.hiascend.com/cann
+- **用途**: 底层runtime和驱动
+- **版本**: CANN 6.0+ (推荐 8.0+)
+
+## 🔄 YiRage集成方式
+
+```
+YiRage Triton Transpiler (复用)
+        ↓
+    Triton Code
+        ↓
+triton-ascend (BiSheng)
+        ↓
+    Ascend NPU
+        ↑
+    torch_npu (Runtime)
+```
+
 ## 📚 参考资源
 
 - [CANN官网](https://www.hiascend.com/cann)
-- [Ascend C编程指南](https://www.hiascend.com/document)
-- BiSheng编译器文档
+- [Ascend PyTorch](https://github.com/Ascend/pytorch)
+- [Triton-Ascend](https://github.com/Ascend/triton-ascend)
+- [Ascend文档](https://www.hiascend.com/document)
 - YiRage Triton Transpiler: `src/triton_transpiler/`
 
