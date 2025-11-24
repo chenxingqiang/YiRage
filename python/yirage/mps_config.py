@@ -368,4 +368,3 @@ def get_apple_gpu_info():
         return gpu_info
     except:
         return None
-
