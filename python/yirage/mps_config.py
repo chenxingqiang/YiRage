@@ -77,6 +77,11 @@ def get_mps_search_config():
             (512, 1, 1),  # 16 SIMD groups (optimal end)
         ],
         
+        # Forloop dimension mappings
+        # -1: no forloop, 0/1/2: forloop on dim 0/1/2
+        # Apple Silicon benefits from forloop on outer dimensions
+        "fmaps_to_explore": [-1, 0, 1, 2],
+        
         # Forloop ranges (matches C++ Phase 1)
         "franges_to_explore": [4, 8, 16],
     }

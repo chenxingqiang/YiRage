@@ -585,10 +585,12 @@ class KNGraph:
                 mps_config = get_mps_search_config()
                 griddims = mps_config.get("grid_dims_to_explore")
                 blockdims = mps_config.get("block_dims_to_explore")
+                fmaps = mps_config.get("fmaps_to_explore")
                 franges = mps_config.get("franges_to_explore")
                 print(f"✓ MPS backend: Using Apple Silicon optimized search")
                 print(f"  - Grids: {len(griddims)} configs (SIMD-aligned)")
                 print(f"  - Blocks: {len(blockdims)} configs (threadgroup-optimized)")
+                print(f"  - Fmaps: {fmaps} (forloop dimension mappings)")
                 print(f"  - Franges: {franges}")
             else:
                 print(f"✓ MPS backend selected (using custom parameters)")

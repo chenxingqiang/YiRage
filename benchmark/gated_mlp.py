@@ -13,13 +13,23 @@ if __name__ == "__main__":
     parser.add_argument('--profile', type=int, default=1000)
     parser.add_argument('--benchmark_iters', type=int, default=100)
     parser.add_argument('--save_codes', type=bool, default=False)
+    parser.add_argument('--fast', action='store_true', help='Fast test mode: skip optimization, use cached graph')
 
     args = parser.parse_args()
     batch_size = args.bs
     backend = args.backend
-    warmup_iters = args.warmup
-    profile_iters = args.profile
-    benchmark_iters = args.benchmark_iters
+    
+    # Fast mode: reduce iterations for quick testing
+    if args.fast:
+        warmup_iters = 1
+        profile_iters = 10
+        benchmark_iters = 10
+        print("🚀 Fast test mode: warmup=1, profile=10, benchmark=10")
+    else:
+        warmup_iters = args.warmup
+        profile_iters = args.profile
+        benchmark_iters = args.benchmark_iters
+    
     save_codes = args.save_codes
     
     # Backend-specific file path
@@ -37,23 +47,46 @@ if __name__ == "__main__":
 
     # Create graph
     graph = yr.new_kernel_graph()
-    X = graph.new_input(dims=(8, 4096), dtype=yr.float16)
-    W1 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
-    W2 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+    X = graph.new_input(dims=(8, 64), dtype=yr.float16)
+    W1 = graph.new_input(dims=(64, 64), dtype=yr.float16)
+    W2 = graph.new_input(dims=(64, 64), dtype=yr.float16)
     O1 = graph.matmul(X, W1)
     O2 = graph.matmul(X, W2)
     O1 = graph.silu(O1)
     O = graph.mul(O1, O2)
     graph.mark_output(O)
     
-    # Optimize
-    optimized_graph = graph.superoptimize(
-        config="mlp",
-        backend=backend,
-        save_codes=save_codes,
-        warmup_iters=warmup_iters,
-        profile_iters=profile_iters
-    )
+    # Optimize (or load cached if in fast mode)
+    if args.fast:
+        import os
+        # Try to load cached graph
+        if os.path.exists(filename):
+            print(f"⚡ Loading cached graph from {filename}")
+            optimized_graph = graph.superoptimize(
+                config="mlp",
+                backend=backend,
+                save_codes=False,
+                warmup_iters=1,
+                profile_iters=1,
+                use_cached_graphs=True
+            )
+        else:
+            print(f"⚡ Fast optimization (limited search)")
+            optimized_graph = graph.superoptimize(
+                config="mlp",
+                backend=backend,
+                save_codes=save_codes,
+                warmup_iters=1,
+                profile_iters=10
+            )
+    else:
+        optimized_graph = graph.superoptimize(
+            config="mlp",
+            backend=backend,
+            save_codes=save_codes,
+            warmup_iters=warmup_iters,
+            profile_iters=profile_iters
+        )
 
     # Create input tensors
     input_tensors = [
