@@ -34,9 +34,6 @@ file(GLOB_RECURSE YIRAGE_SRCS
   src/*.cc
 )
 
-# Add transpiler stub for non-CUDA builds
-list(APPEND YIRAGE_SRCS src/transpiler_stub.cc)
-
 # Collect backend-specific sources
 file(GLOB BACKEND_SRCS src/backend/*.cc)
 list(APPEND YIRAGE_SRCS ${BACKEND_SRCS})
@@ -76,7 +73,11 @@ else()
     src/nki_transpiler/*.cc
   )
   list(REMOVE_ITEM YIRAGE_SRCS ${YIRAGE_EXCLUDE_SRCS})
-  message(STATUS "CUDA backend disabled, excluding transpilers")
+  
+  # But keep transpiler_stub.cc for non-CUDA builds
+  list(APPEND YIRAGE_SRCS src/transpiler/transpiler_stub.cc)
+  
+  message(STATUS "CUDA backend disabled, excluding transpilers (except stub)")
   
   # Keep all kernel/*.cc files as they contain backend-agnostic code
   # The CUDA-specific parts are protected by #ifdef
