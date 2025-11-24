@@ -11,7 +11,7 @@
 set -e
 export YIRAGE_HOME=$(pwd)
 
-function collect_ncu() {  
+function collect_ncu() {
   local report_file=$1; shift
   local kernel_name=$1; shift
   local target_cmd=( "$@" )

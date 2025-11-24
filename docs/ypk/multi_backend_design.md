@@ -51,7 +51,7 @@ Referencing `torch.backends`, the following backends are planned:
      │                       │          │         │
 ┌────▼──────┐  ┌─────▼──────┐  ┌──▼───┐  ┌──▼───┐
 │CUDA       │  │CPU         │  │MPS   │  │ ...  │
-│Backend    │  │Backend     │  │Backend│  │      │
+│Backend    │  │Backend     │  │Backend│ │      │
 └───────────┘  └────────────┘  └──────┘  └──────┘
 ```
 
