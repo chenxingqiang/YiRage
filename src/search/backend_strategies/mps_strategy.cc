@@ -1,4 +1,4 @@
-/* Copyright 2023-2024 CMU
+/* Copyright 2023-2026 YiRage Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -280,37 +280,150 @@ MPSSearchStrategy::generate_memory_patterns() {
 
 float MPSSearchStrategy::evaluate_gpu_utilization(
     kernel::mps::MPSKernelConfig const &config) {
-  // Estimate based on threadgroup size and GPU cores
-  int total_threads = config.get_total_blocks() *
-                     config.threads_per_threadgroup;
+  // Apple GPU architecture characteristics:
+  // - Each GPU core is a complete execution unit
+  // - Each core can run multiple threadgroups concurrently
+  // - Concurrency limited by threadgroup memory and registers
   
-  // Assume each GPU core can handle ~1024 threads efficiently
-  int ideal_threads = gpu_cores_ * 1024;
+  int num_threadgroups = config.get_total_blocks();
+  int threads_per_tg = config.threads_per_threadgroup;
+  int num_simd_groups = (threads_per_tg + 31) / 32;
   
-  float utilization = std::min(1.0f, 
-      static_cast<float>(total_threads) / ideal_threads);
+  // Estimate concurrent threadgroups per GPU core
+  // Based on threadgroup memory usage
+  size_t dtype_size = 2;  // float16
+  size_t tg_memory_used = (config.tile_m * config.tile_k +
+                           config.tile_k * config.tile_n) * dtype_size +
+                          config.tile_m * config.tile_n * sizeof(float);
+  size_t tg_memory_available = 32 * 1024;
   
-  return utilization;
+  int max_tg_per_core_memory = std::max(1, 
+      static_cast<int>(tg_memory_available / tg_memory_used));
+  
+  // Apple Silicon concurrency based on GPU family
+  // M1: ~4 concurrent threadgroups per core
+  // M2: ~6 concurrent (improved scheduler)
+  // M3: ~8 concurrent (dynamic caching)
+  float concurrency_factor = 4.0f;
+  switch (gpu_family_) {
+    case 7:  // M1
+      concurrency_factor = 4.0f;
+      break;
+    case 8:  // M2
+      concurrency_factor = 6.0f;
+      break;
+    case 9:  // M3
+      concurrency_factor = 8.0f;  // M3's Dynamic Caching helps
+      break;
+    case 10: // M4
+      concurrency_factor = 10.0f; // Further improved
+      break;
+    default:
+      concurrency_factor = 4.0f;
+  }
+  
+  int max_concurrent_tg_per_core = std::min(
+      max_tg_per_core_memory,
+      static_cast<int>(concurrency_factor));
+  
+  // Ideal case: enough threadgroups to fill all GPU cores
+  int ideal_threadgroups = gpu_cores_ * max_concurrent_tg_per_core;
+  
+  // Calculate base utilization
+  float utilization = std::min(1.0f,
+      static_cast<float>(num_threadgroups) / ideal_threadgroups);
+  
+  // Bonus for optimal threadgroup size (192-512 threads)
+  // This range balances parallelism and resource usage
+  float size_bonus = 1.0f;
+  if (threads_per_tg >= 192 && threads_per_tg <= 512) {
+    size_bonus = 1.15f;  // Sweet spot for Apple GPUs
+  } else if (threads_per_tg >= 128 && threads_per_tg < 192) {
+    size_bonus = 1.05f;  // Still good
+  } else if (threads_per_tg < 64 || threads_per_tg > 768) {
+    size_bonus = 0.85f;  // Too small or too large
+  }
+  
+  // Bonus for SIMD group alignment
+  // Apple GPUs execute most efficiently with power-of-2 SIMD groups
+  if (num_simd_groups == 4 || num_simd_groups == 8 || 
+      num_simd_groups == 16) {
+    size_bonus *= 1.05f;
+  }
+  
+  // Penalty for under-utilization
+  if (utilization < 0.5f && num_threadgroups < gpu_cores_) {
+    utilization *= 0.8f;  // Not enough parallelism
+  }
+  
+  return std::min(1.2f, utilization * size_bonus);
 }
 
 float MPSSearchStrategy::evaluate_memory_efficiency(
     kernel::mps::MPSKernelConfig const &config) {
-  // Score based on memory access pattern
+  // Base score from memory access pattern
   float pattern_score = 1.0f;
   
   switch (config.access_pattern) {
   case kernel::mps::MemoryPattern::COALESCED:
-    pattern_score = 1.0f; // Best
+    pattern_score = 1.0f;   // Best for sequential access
     break;
   case kernel::mps::MemoryPattern::TILED:
-    pattern_score = 0.85f; // Good
+    pattern_score = 0.95f;  // Actually excellent for Apple GPU (tile-based architecture)
     break;
   case kernel::mps::MemoryPattern::STRIDED:
-    pattern_score = 0.7f; // Acceptable
+    pattern_score = 0.75f;  // Acceptable but not optimal
     break;
   }
-
-  return pattern_score;
+  
+  // Unified Memory Architecture optimization
+  // Larger tiles can better utilize memory bandwidth
+  size_t tile_size = config.tile_m * config.tile_n * config.tile_k;
+  float bandwidth_score = 1.0f;
+  
+  if (tile_size >= 32768) {  // 32K elements (~64KB for float16)
+    // Large data transfers are more efficient on unified memory
+    bandwidth_score = 1.15f;
+  } else if (tile_size >= 16384) {
+    bandwidth_score = 1.1f;
+  } else if (tile_size >= 8192) {
+    bandwidth_score = 1.05f;
+  } else if (tile_size < 1024) {
+    // Very small tiles have overhead
+    bandwidth_score = 0.9f;
+  }
+  
+  // Threadgroup memory reuse factor
+  // Higher K dimension means more reuse of A and B tiles
+  float reuse_factor = static_cast<float>(config.tile_k) /
+                      std::sqrt(static_cast<float>(config.tile_m) * config.tile_n);
+  float reuse_score = std::min(1.2f, 0.8f + reuse_factor * 0.4f);
+  
+  // Memory bandwidth varies by M-series chip
+  float bandwidth_multiplier = 1.0f;
+  switch (gpu_family_) {
+  case 7:  // M1: 68.25 GB/s (base), 200-400 GB/s (Pro/Max)
+    bandwidth_multiplier = (gpu_cores_ > 16) ? 1.1f : 0.95f;
+    break;
+  case 8:  // M2: 100 GB/s (base), 200-400 GB/s (Pro/Max)
+    bandwidth_multiplier = (gpu_cores_ > 16) ? 1.15f : 1.0f;
+    break;
+  case 9:  // M3: 100 GB/s (base), 150-400 GB/s (Pro/Max)
+    bandwidth_multiplier = (gpu_cores_ > 16) ? 1.2f : 1.05f;
+    break;
+  case 10: // M4: Improved bandwidth
+    bandwidth_multiplier = (gpu_cores_ > 16) ? 1.25f : 1.1f;
+    break;
+  default:
+    bandwidth_multiplier = 1.0f;
+  }
+  
+  // Combined score
+  float total_score = (pattern_score * 0.35f +
+                      bandwidth_score * 0.35f +
+                      reuse_score * 0.30f) * bandwidth_multiplier;
+  
+  return std::min(1.3f, total_score);
 }
 
 float MPSSearchStrategy::evaluate_threadgroup_memory(

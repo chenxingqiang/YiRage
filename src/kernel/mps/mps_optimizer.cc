@@ -60,17 +60,81 @@ int MPSOptimizer::detect_gpu_family() {
 
 int MPSOptimizer::get_gpu_core_count() {
 #ifdef __APPLE__
-  // Approximate based on GPU family
-  int family = detect_gpu_family();
+  // Try to detect specific Mac model to get accurate GPU core count
+  char model[256];
+  size_t len = sizeof(model);
+  if (sysctlbyname("hw.model", model, &len, NULL, 0) == 0) {
+    std::string model_str(model);
+    
+    // M1 series (Family 7)
+    // Mac13,x models
+    if (model_str.find("Mac13,1") != std::string::npos) {
+      return 24;  // M1 Max (24 or 32 cores)
+    } else if (model_str.find("Mac13,2") != std::string::npos) {
+      return 16;  // M1 Pro (14 or 16 cores)
+    } else if (model_str.find("Mac13,") != std::string::npos) {
+      return 8;   // M1 (7 or 8 cores)
+    } else if (model_str.find("Mac14,13") != std::string::npos ||
+               model_str.find("Mac14,14") != std::string::npos ||
+               model_str.find("Mac14,15") != std::string::npos) {
+      return 64;  // M1 Ultra (48 or 64 cores)
+    }
+    
+    // M2 series (Family 8)
+    // Mac14,x and Mac15,x models
+    if (model_str.find("Mac14,6") != std::string::npos ||
+        model_str.find("Mac14,10") != std::string::npos) {
+      return 38;  // M2 Max (30 or 38 cores)
+    } else if (model_str.find("Mac14,5") != std::string::npos ||
+               model_str.find("Mac14,9") != std::string::npos ||
+               model_str.find("Mac14,12") != std::string::npos) {
+      return 19;  // M2 Pro (16 or 19 cores)
+    } else if (model_str.find("Mac14,") != std::string::npos) {
+      return 10;  // M2 (8 or 10 cores)
+    } else if (model_str.find("Mac15,4") != std::string::npos ||
+               model_str.find("Mac15,5") != std::string::npos) {
+      return 76;  // M2 Ultra (60 or 76 cores)
+    }
+    
+    // M3 series (Family 9)
+    // Mac15,x and Mac16,x models
+    if (model_str.find("Mac15,7") != std::string::npos ||
+        model_str.find("Mac15,10") != std::string::npos ||
+        model_str.find("Mac15,11") != std::string::npos) {
+      return 40;  // M3 Max (30 or 40 cores)
+    } else if (model_str.find("Mac15,3") != std::string::npos ||
+               model_str.find("Mac15,6") != std::string::npos ||
+               model_str.find("Mac15,8") != std::string::npos) {
+      return 18;  // M3 Pro (14 or 18 cores)
+    } else if (model_str.find("Mac15,") != std::string::npos) {
+      return 10;  // M3 (10 cores)
+    }
+    
+    // M4 series (Family 10 - future)
+    if (model_str.find("Mac16,") != std::string::npos) {
+      // M4 detection based on sub-model
+      if (model_str.find("Mac16,6") != std::string::npos ||
+          model_str.find("Mac16,7") != std::string::npos) {
+        return 40;  // M4 Max (estimated)
+      } else if (model_str.find("Mac16,3") != std::string::npos ||
+                 model_str.find("Mac16,4") != std::string::npos) {
+        return 20;  // M4 Pro (estimated)
+      }
+      return 10;  // M4 base (estimated)
+    }
+  }
   
-  // These are estimates - actual values vary by chip variant
+  // Fallback: use GPU family
+  int family = detect_gpu_family();
   switch (family) {
   case 7:  // M1
-    return 8;   // M1 has 7-8 GPU cores (base)
+    return 8;
   case 8:  // M2
-    return 10;  // M2 has 8-10 GPU cores (base)
+    return 10;
   case 9:  // M3
-    return 10;  // M3 has 10+ GPU cores (base)
+    return 10;
+  case 10: // M4
+    return 10;
   default:
     return 8;
   }
