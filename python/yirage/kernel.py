@@ -609,6 +609,23 @@ class KNGraph:
             else:
                 print(f"✓ CPU backend selected (using custom parameters)")
                 
+        elif backend == "ascend":
+            # Ascend NPU-specific optimization
+            if griddims is None and blockdims is None and franges is None:
+                from .ascend_config import get_ascend_search_config
+                ascend_config = get_ascend_search_config()
+                griddims = ascend_config.get("grid_dims_to_explore")
+                blockdims = ascend_config.get("block_dims_to_explore")
+                fmaps = ascend_config.get("fmaps_to_explore")
+                franges = ascend_config.get("franges_to_explore")
+                print(f"✓ Ascend backend: Using Huawei NPU optimized search")
+                print(f"  - Grids: {len(griddims)} configs (AI Core blocks)")
+                print(f"  - Blocks: {len(blockdims)} configs (Cube-optimized)")
+                print(f"  - Fmaps: {fmaps}")
+                print(f"  - Franges: {franges}")
+            else:
+                print(f"✓ Ascend backend selected (using custom parameters)")
+                
         elif backend == "cuda":
             print(f"✓ CUDA backend: Using NVIDIA GPU optimized configuration")
         
