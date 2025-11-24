@@ -33,36 +33,52 @@ def get_mps_search_config():
     search_threads = max(4, int(cpu_count * 0.75))
     
     return {
-        # Reduced search space for Apple Silicon's different compute model
-        # Apple GPUs have fewer but wider execution units compared to NVIDIA
-        "max_num_threadblock_graph_op": 6,   # Conservative for unified memory
-        "max_num_kernel_graph_op": 4,        # Focus on kernel fusion
-        "max_num_threadblock_graphs": 1,     # Single graph for simplicity
-        "search_thread": search_threads,     # Based on CPU cores (search is CPU-bound)
+        # Search space optimized for Apple Silicon (Phase 1-3 aligned)
+        "max_num_threadblock_graph_op": 6,
+        "max_num_kernel_graph_op": 4,
+        "max_num_threadblock_graphs": 1,
+        "search_thread": search_threads,
         
-        # Thread block dimensions - MUST be multiples of 32 (SIMD width)
-        # Apple GPUs achieve best performance with SIMD-aligned dimensions
+        # Grid dimensions (extended to match C++ Phase 1 improvements)
+        # Now includes fine-grained options for better optimization
         "grid_dims_to_explore": [
-            (32, 1, 1),   # Minimal: 1 SIMD group
-            (64, 1, 1),   # Small: 2 SIMD groups
-            (128, 1, 1),  # Medium: 4 SIMD groups
-            (256, 1, 1),  # Large: 8 SIMD groups
-            (32, 2, 1),   # 2D: 2 SIMD groups in Y
-            (64, 2, 1),   # 2D: 4 SIMD groups in Y
-            (32, 4, 1),   # 2D: 4 SIMD groups in Y (better for 2D problems)
+            (32, 1, 1),   # 1 SIMD group
+            (64, 1, 1),   # 2 SIMD groups
+            (96, 1, 1),   # 3 SIMD groups (new)
+            (128, 1, 1),  # 4 SIMD groups
+            (160, 1, 1),  # 5 SIMD groups (new)
+            (192, 1, 1),  # 6 SIMD groups (new - optimal range)
+            (224, 1, 1),  # 7 SIMD groups (new)
+            (256, 1, 1),  # 8 SIMD groups
+            (320, 1, 1),  # 10 SIMD groups (new)
+            (384, 1, 1),  # 12 SIMD groups (new)
+            (512, 1, 1),  # 16 SIMD groups
+            # 2D configurations for matrix operations
+            (32, 2, 1),
+            (64, 2, 1),
+            (32, 4, 1),
+            (64, 4, 1),   # New for better 2D coverage
         ],
         
+        # Block dimensions (extended to match threadgroup configs)
+        # Aligned with Phase 2 optimal ranges (192-512 sweet spot)
         "block_dims_to_explore": [
-            (32, 1, 1),   # 32 threads: 1 SIMD group (minimal)
-            (64, 1, 1),   # 64 threads: 2 SIMD groups (good for small tiles)
-            (128, 1, 1),  # 128 threads: 4 SIMD groups (balanced)
-            (256, 1, 1),  # 256 threads: 8 SIMD groups (good for medium tiles)
-            (512, 1, 1),  # 512 threads: 16 SIMD groups (good for large tiles)
+            (32, 1, 1),   # 1 SIMD group (minimal)
+            (64, 1, 1),   # 2 SIMD groups
+            (96, 1, 1),   # 3 SIMD groups (new)
+            (128, 1, 1),  # 4 SIMD groups
+            (160, 1, 1),  # 5 SIMD groups (new)
+            (192, 1, 1),  # 6 SIMD groups (new - optimal start)
+            (224, 1, 1),  # 7 SIMD groups (new)
+            (256, 1, 1),  # 8 SIMD groups (optimal)
+            (320, 1, 1),  # 10 SIMD groups (new)
+            (384, 1, 1),  # 12 SIMD groups (new - optimal)
+            (448, 1, 1),  # 14 SIMD groups (new)
+            (512, 1, 1),  # 16 SIMD groups (optimal end)
         ],
         
-        # Forloop unrolling ranges - conservative for Apple's compiler
-        # Apple Metal compiler handles small unrolls better
-        "franges_to_explore": [4, 8, 16],  # Smaller ranges for Metal compiler
+        # Forloop ranges (matches C++ Phase 1)
+        "franges_to_explore": [4, 8, 16],
     }
 
 def get_cpu_search_config():
