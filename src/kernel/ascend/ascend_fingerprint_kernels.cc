@@ -20,18 +20,37 @@
 #include "yirage/utils/fingerprint_functions.h"
 #include <cstring>
 
+#ifdef __ASCEND__
+// Include Ascend CANN headers when available
+#include "acl/acl.h"
+#include "kernel/kernel.h"
+#endif
+
 namespace yirage {
 namespace kernel {
 namespace ascend {
 
 using namespace yirage::utils;
 
-// CPU-based fingerprint implementation for Ascend
-// TODO: Replace with actual Ascend kernel when CANN is available
+// Ascend fingerprint implementation
+// 
+// Design rationale (matching CUDA pattern):
+// 1. Fingerprint is ONLY for verification, NOT for performance
+// 2. CUDA uses GPU kernels (__global__) for fingerprint
+// 3. For Ascend without hardware, CPU fallback is acceptable
+// 4. Real execution uses Transpiler-generated TBE/AscendC code
+// 5. This allows development/testing without Ascend hardware
+//
+// Future: Can be upgraded to actual Ascend kernel calls when needed
 
 bool compute_matmul_fingerprint(
     void *A_ptr, void *B_ptr, void *C_ptr,
     int m, int n, int k, int num_batches) {
+  
+#ifdef __ASCEND__
+  // TODO: Implement using ACL runtime kernel launch
+  // For now, use CPU fallback
+#endif
   
   auto *A = reinterpret_cast<type::FPType*>(A_ptr);
   auto *B = reinterpret_cast<type::FPType*>(B_ptr);
