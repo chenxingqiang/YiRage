@@ -167,9 +167,10 @@ size_t MPSBackend::get_max_shared_memory() const {
     return 0;
   }
 
-  // Threadgroup memory on Apple GPUs
-  // M1: 32 KB, M2/M3: 64 KB
-  return 64 * 1024; // 64 KB conservative estimate
+  // Threadgroup memory on all Apple Silicon GPUs
+  // All M-series (M1/M2/M3/M4/M5, including Pro/Max/Ultra): 32 KB
+  // Reference: Apple Metal Feature Set Tables
+  return 32 * 1024; // 32 KB (accurate for all M-series)
 }
 
 bool MPSBackend::supports_data_type(type::DataType dt) const {

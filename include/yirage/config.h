@@ -57,8 +57,11 @@ size_t const MAX_SMEM_SIZE = (size_t)32 * 1024 * 1024;          // 32 MB (L3 cac
 
 #ifdef YIRAGE_BACKEND_MPS_ENABLED
 namespace mps {
-size_t const MAX_DMEM_SIZE = (size_t)16 * 1024 * 1024 * 1024;   // 16 GB (unified)
-size_t const MAX_SMEM_SIZE = 64 * 1024;                         // 64 KB (threadgroup)
+// NOTE: This is a compile-time upper bound. Actual usable memory varies by Mac model:
+// M1/M2/M3: 8GB, 16GB, 24GB | Pro: 16GB, 18GB, 32GB, 36GB | Max: 32GB-128GB | Ultra: 64GB-512GB
+// Runtime should query system memory (see python/yirage/mps_config.py::get_mps_memory_config)
+size_t const MAX_DMEM_SIZE = (size_t)64 * 1024 * 1024 * 1024;   // 64 GB (upper limit for most Macs)
+size_t const MAX_SMEM_SIZE = 32 * 1024;                         // 32 KB (threadgroup) - All M-series
 }
 #endif
 

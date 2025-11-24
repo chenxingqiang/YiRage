@@ -11,6 +11,7 @@ if __name__ == "__main__":
     parser.add_argument('--backend', type=str, default='cuda', choices=['cuda', 'mps', 'cpu'])
     parser.add_argument('--warmup', type=int, default=16)
     parser.add_argument('--profile', type=int, default=1000)
+    parser.add_argument('--benchmark_iters', type=int, default=100)
     parser.add_argument('--save_codes', type=bool, default=False)
 
     args = parser.parse_args()
@@ -18,6 +19,7 @@ if __name__ == "__main__":
     backend = args.backend
     warmup_iters = args.warmup
     profile_iters = args.profile
+    benchmark_iters = args.benchmark_iters
     save_codes = args.save_codes
     
     filename = f'benchmark/saved_mugraphs/{backend}/{args.file}'
@@ -66,29 +68,29 @@ if __name__ == "__main__":
         torch.cuda.synchronize()
         starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
         starter.record()
-        for _ in range(1000):
+        for _ in range(benchmark_iters):
             optimized_graph(inputs=input_tensors)
         ender.record()
         torch.cuda.synchronize()
         curr_time = starter.elapsed_time(ender)
-        mean_syn = curr_time / 1000
+        mean_syn = curr_time / benchmark_iters
     elif device == 'mps':
         # MPS backend: use Python timing with MPS synchronization
         if hasattr(torch.mps, 'synchronize'):
             torch.mps.synchronize()
         start_time = time.perf_counter()
-        for _ in range(1000):
+        for _ in range(benchmark_iters):
             optimized_graph(inputs=input_tensors)
         if hasattr(torch.mps, 'synchronize'):
             torch.mps.synchronize()
         end_time = time.perf_counter()
-        mean_syn = (end_time - start_time) / 1000 * 1000
+        mean_syn = (end_time - start_time) / benchmark_iters * 1000
     else:
         # CPU backend: use Python timing
         start_time = time.perf_counter()
-        for _ in range(1000):
+        for _ in range(benchmark_iters):
             optimized_graph(inputs=input_tensors)
         end_time = time.perf_counter()
-        mean_syn = (end_time - start_time) / 1000 * 1000
+        mean_syn = (end_time - start_time) / benchmark_iters * 1000
 
     print(f"Best muGraph run time (ms): {mean_syn}")
