@@ -12,6 +12,9 @@ set(USE_MKLDNN OFF)      # Intel library (optional on Mac)
 set(USE_OPENMP OFF)      # macOS clang doesn't support -fopenmp
 set(USE_XEON OFF)        # Intel-specific
 
+# NPU Backends
+set(USE_ASCEND OFF)      # Huawei Ascend NPU (requires CANN + torch_npu)
+
 # Specialized Backends
 set(USE_NKI OFF)         # AWS only
 set(USE_TRITON OFF)      # Requires CUDA

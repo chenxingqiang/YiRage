@@ -48,6 +48,7 @@ file(GLOB_RECURSE KERNEL_OPT_SRCS
   src/kernel/nki/*.cc
   src/kernel/cudnn/*.cc
   src/kernel/mkl/*.cc
+  src/kernel/ascend/*.cc
 )
 list(APPEND YIRAGE_SRCS ${KERNEL_OPT_SRCS})
 
@@ -79,7 +80,13 @@ else()
   # But keep transpiler_stub.cc for non-CUDA builds
   list(APPEND YIRAGE_SRCS src/transpiler/transpiler_stub.cc)
   
-  message(STATUS "CUDA backend disabled, excluding transpilers (except stub)")
+  # Keep ascend_transpiler_stub.cc for Ascend backend
+  if (NOT "${USE_ASCEND}" STREQUAL "OFF")
+    list(APPEND YIRAGE_SRCS src/transpiler/ascend_transpiler_stub.cc)
+    message(STATUS "Including Ascend transpiler stub")
+  endif()
+  
+  message(STATUS "CUDA backend disabled, excluding transpilers (except stubs)")
   
   # Keep all kernel/*.cc files as they contain backend-agnostic code
   # The CUDA-specific parts are protected by #ifdef
@@ -97,6 +104,10 @@ endif()
 
 if (NOT "${USE_NKI}" STREQUAL "OFF")
   message(STATUS "NKI backend enabled")
+endif()
+
+if (NOT "${USE_ASCEND}" STREQUAL "OFF")
+  message(STATUS "Ascend backend enabled (requires CANN + torch_npu at runtime)")
 endif()
 
 include(CheckCXXCompilerFlag)
@@ -292,6 +303,12 @@ endif()
 
 if (NOT "${USE_TRITON}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_TRITON_ENABLED)
+endif()
+
+if (NOT "${USE_ASCEND}" STREQUAL "OFF")
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_ASCEND_ENABLED)
+  # Ascend uses CPU fingerprint for development (actual execution needs CANN)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_ASCEND)
 endif()
 
 if (NOT "${USE_MHA}" STREQUAL "OFF")
