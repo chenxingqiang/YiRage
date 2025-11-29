@@ -4,7 +4,7 @@
 
 ### 前提条件
 
-在Ascend系统上安装以下组件：
+**在Ascend系统上安装以下组件**：
 
 ```bash
 # 1. 安装CANN工具包（必需）
@@ -19,12 +19,12 @@ pip install torch-npu
 # 参考: https://github.com/Ascend/triton-ascend
 pip install triton-ascend
 
-# 验证安装
+# 4. 验证安装
 python -c "import torch_npu; print(torch_npu.__version__)"
 python -c "import torch; print('NPU available:', torch.npu.is_available())"
 ```
 
-**版本兼容性**（参考Ascend/pytorch）：
+**版本兼容性**（参考[Ascend/pytorch](https://github.com/Ascend/pytorch)）：
 - PyTorch 2.1-2.8 + CANN 8.0+ (推荐)
 - PyTorch 1.11 + CANN 6.0+
 - torch_npu需匹配PyTorch版本
@@ -33,7 +33,6 @@ python -c "import torch; print('NPU available:', torch.npu.is_available())"
 
 ```python
 import yirage as yr
-import torch_npu
 
 # 创建计算图
 graph = yr.new_kernel_graph()
@@ -42,14 +41,17 @@ W = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
 O = graph.matmul(X, W)
 graph.mark_output(O)
 
-# 优化（自动使用Triton→BiSheng路径）
+# 优化（自动使用Ascend搜索配置）
 optimized = graph.superoptimize(
     backend='ascend',
     warmup_iters=10,
     profile_iters=100
 )
 
-# 执行
+# 执行（需要Ascend硬件）
+import torch
+import torch_npu  # 必需
+
 device = 'npu:0'
 inputs = [
     torch.randn(8, 4096, dtype=torch.float16, device=device),
@@ -62,65 +64,64 @@ print(f"✅ Executed on Ascend NPU: {outputs[0].shape}")
 
 ## 📊 代码生成路径
 
-YiRage for Ascend支持三种路径：
+YiRage for Ascend的设计基于Triton复用：
 
-### Path 1: Triton (推荐) ⭐⭐⭐⭐⭐
+### Path 1: Triton（推荐）⭐⭐⭐⭐⭐
 
 ```
 YiRage Graph → Triton Code → BiSheng Compiler → Ascend NPU
 ```
 
 **优势**：
-- ✅ 复用现有Triton transpiler（0额外开发）
-- ✅ CANN官方支持
+- ✅ 复用现有Triton transpiler
+- ✅ CANN官方支持（triton-ascend）
 - ✅ 性能优秀（90-95% 手写Ascend C）
 - ✅ 代码可移植（CUDA/Ascend通用）
 
 **使用**：
 ```python
-graph.superoptimize(backend='ascend')  # 默认使用Triton路径
+graph.superoptimize(backend='ascend')  # 默认使用Triton配置
 ```
 
-### Path 2: Ascend C (高级) ⭐⭐⭐⭐
+### Path 2: Ascend C（可选，待实现）
 
 ```
 YiRage Graph → Ascend C Code → ascendc → Ascend NPU
 ```
 
-**优势**：
-- ✅ 极致性能（100%）
-- ✅ 完全控制硬件特性
-
-**使用场景**：
-- 需要超越Triton的性能
+**适用场景**：
+- 需要超越Triton的极致性能
 - 针对特定workload深度优化
 
-**状态**：框架就绪，待实现
-
-### Path 3: TBE (兼容) ⭐⭐⭐
-
-仅用于Ascend 910旧版CANN兼容
+**状态**：框架stub就绪，待完整实现
 
 ## 🔧 开发模式（无Ascend硬件）
 
-即使没有Ascend硬件，也可以开发：
+即使没有Ascend硬件，也可以进行开发和测试：
 
 ```bash
-# 运行测试（会使用CPU fallback）
+# 运行测试（验证框架就绪）
 python tests/ascend/test_triton_integration.py
 
-# 结果：
-# ✅ Ascend backend framework: READY
-# ⚠️  BiSheng compiler: NOT AVAILABLE
-# 💡 Can still develop - test on Ascend hardware later
+# 预期结果：
+# ✅ YiRage Ascend backend: READY
+# ⚠️  Ascend software stack: NOT AVAILABLE
+# 💡 Framework ready - install on Ascend system
 ```
 
-**在Ascend系统上测试**：
+### 在Ascend系统上完整测试
+
 ```bash
-# 生成代码并编译
+# 1. 验证Ascend软件栈
 python tests/ascend/test_triton_integration.py
 
-# 执行benchmark
+# 期望结果：
+# ✅ torch_npu: Available
+# ✅ triton-ascend: Available
+# ✅ CANN: Available
+# 🚀 Ready for execution!
+
+# 2. 运行benchmark
 python benchmark/gated_mlp.py --backend ascend
 ```
 
@@ -128,35 +129,12 @@ python benchmark/gated_mlp.py --backend ascend
 
 基于CANN架构和BiSheng优化：
 
-| Backend | 硬件 | Triton性能 | 手写性能 |
-|---------|------|-----------|---------|
-| CUDA | NVIDIA GPU | ~95% | 100% |
-| Ascend | 华为NPU | ~90-95% | 100% |
+| Backend | 硬件 | Triton vs 手写 |
+|---------|------|---------------|
+| CUDA | NVIDIA GPU | ~95% |
+| Ascend | 华为NPU | ~90-95% |
 
-**结论**：Triton路径性能充足，推荐作为默认选择！
-
-## 🎯 BiSheng编译命令
-
-YiRage自动生成的编译命令：
-
-```bash
-bisheng-triton \
-  --target=Ascend910B \
-  --opt-level=3 \
-  --enable-fp16 \
-  -o kernel.so
-```
-
-## ✅ 验证清单
-
-- [x] Backend框架
-- [x] 搜索策略
-- [x] Triton集成
-- [x] 配置文件
-- [x] 测试脚本
-- [ ] 真实硬件验证（需要Ascend 910/910B）
-- [ ] 性能benchmark
-- [ ] 与PyTorch对比
+**结论**：Triton路径性能充足，推荐作为默认选择。
 
 ## 🔗 关键依赖
 
@@ -193,6 +171,21 @@ triton-ascend (BiSheng)
     torch_npu (Runtime)
 ```
 
+## ✅ 验证清单
+
+**框架层（已完成）**：
+- [x] Backend框架 (`ascend_backend.cc`)
+- [x] 搜索策略 (`ascend_strategy.cc`)
+- [x] Triton配置扩展
+- [x] Python配置 (`ascend_config.py`)
+- [x] 测试脚本
+
+**执行层（需Ascend硬件）**：
+- [ ] BiSheng编译器调用
+- [ ] 端到端执行验证
+- [ ] 性能benchmark
+- [ ] 与PyTorch NPU对比
+
 ## 📚 参考资源
 
 - [CANN官网](https://www.hiascend.com/cann)
@@ -201,3 +194,16 @@ triton-ascend (BiSheng)
 - [Ascend文档](https://www.hiascend.com/document)
 - YiRage Triton Transpiler: `src/triton_transpiler/`
 
+## ⚠️ 注意事项
+
+1. **完整执行需要Ascend硬件**
+   - 框架和搜索可在任意系统运行
+   - 实际kernel编译和执行需要CANN环境
+
+2. **版本匹配**
+   - torch_npu版本必须与PyTorch版本匹配
+   - 参考[版本兼容表](https://github.com/Ascend/pytorch#version-support)
+
+3. **设备标识**
+   - Ascend使用 `'npu'` 而非 `'cuda'`
+   - 例如: `torch.device('npu:0')`

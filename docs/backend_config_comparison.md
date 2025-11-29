@@ -292,17 +292,138 @@ size_t const MAX_SMEM_SIZE = (size_t)32 * 1024 * 1024;          // 32 MB (L3 cac
 
 ---
 
-## 三种Backend配置对比总结
+## Ascend Backend：静态配置 + 设备检测
 
-| 维度 | CUDA | MPS | CPU |
-|------|------|-----|-----|
-| **配置方式** | 🟢 动态查询 + 静态常量 | 🟡 静态配置 | 🟡 静态配置 |
-| **硬件感知** | 🟢 完全感知 (运行时API) | 🔴 有限感知 (无直接API) | 🟢 部分感知 (CPU核心数) |
-| **配置生成** | 🟢 动态生成候选配置 | 🟡 预定义配置空间 | 🟡 预定义配置空间 |
-| **自适应性** | 🟢 强（不同GPU自动适配）| 🟡 中（基于CPU核心适配）| 🟡 中（基于CPU核心适配）|
-| **信息来源** | `cudaDeviceProp` API | Apple官方文档 + 经验 | CPU架构知识 + 经验 |
-| **准确性** | 🟢 100%准确 | 🟢 基于官方规格 | 🟢 基于通用架构 |
-| **灵活性** | 🟢 高（Tensor Core检测等）| 🔴 低（固定配置）| 🔴 低（固定配置）|
+### 🔍 信息获取方式
+
+Ascend使用**静态配置** + **npu-smi检测**：
+
+```python
+# python/yirage/ascend_config.py
+def get_ascend_search_config():
+    cpu_count = multiprocessing.cpu_count()
+    search_threads = max(4, int(cpu_count * 0.75))
+    
+    return {
+        # 基于Ascend架构的静态配置
+        "max_num_threadblock_graph_op": 8,
+        "max_num_kernel_graph_op": 5,
+        
+        # Grid维度（AI Core blocks）
+        "grid_dims_to_explore": [
+            (1, 1, 1),    # Single block
+            (8, 1, 1),    # 8 blocks
+            (32, 1, 1),   # 32 blocks (full 910/910B)
+            # ...
+        ],
+        
+        # Block维度
+        "block_dims_to_explore": [
+            (1, 1, 1),    # 1 AI Core
+            (8, 1, 1),    # 8 AI Cores
+            (32, 1, 1),   # 32 AI Cores
+        ],
+        
+        # Forloop ranges - Cube操作优化
+        "franges_to_explore": [4, 8, 16],
+    }
+```
+
+### 📊 Ascend硬件检测
+
+```python
+# python/yirage/ascend_config.py
+def get_ascend_device_info():
+    """通过npu-smi检测设备类型"""
+    try:
+        result = subprocess.run(
+            ['npu-smi', 'info'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        
+        if result.returncode == 0:
+            output = result.stdout
+            
+            if 'Ascend 910B' in output:
+                return {
+                    'device_type': 'Ascend 910B',
+                    'ai_cores': 32,
+                    'hbm_gb': 64,
+                    'l1_kb': 512
+                }
+            elif 'Ascend 910' in output:
+                return {
+                    'device_type': 'Ascend 910',
+                    'ai_cores': 32,
+                    'hbm_gb': 32,
+                    'l1_kb': 256
+                }
+            elif 'Ascend 310P' in output:
+                return {
+                    'device_type': 'Ascend 310P',
+                    'ai_cores': 8,
+                    'hbm_gb': 8,
+                    'l1_kb': 128
+                }
+    except:
+        pass
+    return None
+```
+
+### 📐 Ascend配置常量
+
+```cpp
+// include/yirage/config.h
+#ifdef YIRAGE_BACKEND_ASCEND_ENABLED
+namespace ascend {
+// Ascend 910B: 64GB HBM2e
+size_t const MAX_DMEM_SIZE = (size_t)64 * 1024 * 1024 * 1024;  // 64 GB
+// AI Core L1 Buffer
+size_t const MAX_SMEM_SIZE = 512 * 1024;                        // 512 KB
+}
+#endif
+```
+
+### 📊 Ascend硬件规格对比
+
+| 型号 | AI Cores | HBM | L1 Buffer | 用途 |
+|------|----------|-----|-----------|------|
+| **Ascend 910** | 32 | 32GB | 256KB | 训练 |
+| **Ascend 910B** | 32 | 64GB | 512KB | 训练/推理 |
+| **Ascend 310P** | 8 | 8GB | 128KB | 推理 |
+
+### 🎯 Ascend配置的特点
+
+1. **Cube单元优化**
+   - 原生16x16矩阵乘法
+   - Grid/Block配置基于AI Core数量
+   - Forloop范围为16的倍数优化
+
+2. **L1 Buffer管理**
+   - 256KB-512KB per AI Core
+   - Tile大小受L1限制
+   - 自动数据搬移优化
+
+3. **设备检测**
+   - 通过npu-smi命令检测
+   - 支持910/910B/310P自动识别
+   - 无设备时使用默认配置
+
+---
+
+## 四种Backend配置对比总结
+
+| 维度 | CUDA | MPS | CPU | Ascend |
+|------|------|-----|-----|--------|
+| **配置方式** | 🟢 动态查询 + 静态常量 | 🟡 静态配置 | 🟡 静态配置 | 🟡 静态配置 + npu-smi |
+| **硬件感知** | 🟢 完全感知 (运行时API) | 🔴 有限感知 (无直接API) | 🟢 部分感知 (CPU核心数) | 🟡 通过npu-smi检测 |
+| **配置生成** | 🟢 动态生成候选配置 | 🟡 预定义配置空间 | 🟡 预定义配置空间 | 🟡 预定义配置空间 |
+| **自适应性** | 🟢 强（不同GPU自动适配）| 🟡 中（基于CPU核心适配）| 🟡 中（基于CPU核心适配）| 🟡 中（910/910B/310P适配）|
+| **信息来源** | `cudaDeviceProp` API | Apple官方文档 + 经验 | CPU架构知识 + 经验 | CANN文档 + npu-smi |
+| **准确性** | 🟢 100%准确 | 🟢 基于官方规格 | 🟢 基于通用架构 | 🟢 基于华为规格 |
+| **灵活性** | 🟢 高（Tensor Core检测等）| 🔴 低（固定配置）| 🔴 低（固定配置）| 🟡 中（Cube/Vector选择）|
 
 ---
 
