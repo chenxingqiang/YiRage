@@ -37,6 +37,7 @@ enum BackendType {
   BT_MPS = 1,
   BT_CUDNN = 2,
   BT_CUSPARSELT = 3,
+  BT_ASCEND = 4,         // Huawei Ascend NPU/GPU
   
   // CPU Backends
   BT_CPU = 10,

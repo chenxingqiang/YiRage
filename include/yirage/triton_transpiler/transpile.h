@@ -38,6 +38,10 @@ struct STensorMeta {
 struct TritonTranspilerConfig {
   // CUDA compute capability
   int target_cc;
+  
+  // Ascend NPU support (via BiSheng compiler)
+  bool is_ascend_target = false;
+  std::string ascend_soc = "Ascend910B";  // Ascend910, Ascend910B, Ascend310P
 };
 
 // Result of transpiling a custom kernel operator

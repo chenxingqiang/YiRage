@@ -53,13 +53,14 @@
 
 ## ✨ Key Features
 
-### 🚀 7 Complete Backend Implementations
+### 🚀 8 Complete Backend Implementations
 
 | Backend | Hardware | Key Features | Status |
 |---------|----------|--------------|--------|
 | **CUDA** | NVIDIA GPU | Tensor Core, Warp, Bank Conflict Avoidance | ✅ |
 | **CPU** | x86/ARM | SIMD (AVX512), Cache Blocking, OpenMP | ✅ |
 | **MPS** | Apple Silicon | Metal, Threadgroup, Unified Memory | ✅ |
+| **Ascend** | Huawei NPU | AI Core, Cube Unit, L1 Buffer, BiSheng | ✅ NEW |
 | **Triton** | Compiler | Auto-tuning, Pipelining, Split-K | ✅ |
 | **NKI** | AWS Neuron | SBUF, DMA, BF16 Native | ✅ |
 | **cuDNN** | CUDA Accel | Algorithm Selection, Tensor Op | ✅ |
@@ -89,6 +90,22 @@ from yirage.kernel.mps import MPSOptimizer, MPSKernelConfig
 config = MPSKernelConfig()
 MPSOptimizer.optimize_for_apple_silicon(1024, 1024, 1024, config)
 # Auto-detects: M1/M2/M3, GPU cores, Threadgroup size
+```
+
+#### Example: Ascend Optimizer (Huawei NPU) 🆕
+```python
+import yirage as yr
+
+# Create and optimize for Ascend NPU
+graph = yr.new_kernel_graph()
+X = graph.new_input(dims=(8, 4096), dtype=yr.float16)
+W = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+O = graph.matmul(X, W)
+graph.mark_output(O)
+
+# Optimize using Ascend backend (via BiSheng + Triton)
+optimized = graph.superoptimize(backend='ascend')
+# Auto-configures: AI Core blocks, Cube unit tiles, L1 buffer
 ```
 
 ### 🔍 Backend-Specific Search Strategies
@@ -187,6 +204,7 @@ MPSOptimizer.optimize_for_apple_silicon(m=1024, n=1024, k=1024, config=mps_confi
 - **[API Reference](docs/api.md)** - Complete API documentation
 - **[Backend Guide](docs/mpk/backend_usage.md)** - Backend usage and configuration
 - **[Architecture Design](docs/mpk/multi_backend_design.md)** - System design
+- **[Ascend NPU Guide](docs/ascend_quick_start.md)** - Huawei Ascend integration 🆕
 - **[Contributing](CONTRIBUTING.md)** - Contribution guidelines
 
 ---
@@ -204,6 +222,9 @@ python benchmark/baselines/pytorch/gated_mlp.py -b 8 --backend cuda
 
 # CPU backend
 python benchmark/baselines/pytorch/gated_mlp.py -b 8 --backend cpu
+
+# Ascend backend (Huawei NPU) - requires CANN + torch_npu
+python benchmark/baselines/pytorch/gated_mlp.py -b 8 --backend ascend
 ```
 
 ### Backend Selection
@@ -239,6 +260,8 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 3. Implement `{Backend}Optimizer`
 4. Create `{Backend}SearchStrategy` (optional)
 5. Update CMake configuration
+
+See [Ascend Implementation Guide](docs/ascend_implementation_guide.md) for a complete example.
 
 ---
 

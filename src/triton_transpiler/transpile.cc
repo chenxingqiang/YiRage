@@ -312,7 +312,12 @@ TritonTranspileResult TritonTranspiler::transpile_ugraph() {
   CodeKeeper exec;
   exec.e("if __name__ == \"__main__\":");
   exec.inc_indent();
-  exec.e("device = torch.device('cuda')");
+  
+  if (config.is_ascend_target) {
+    exec.e("device = torch.device('npu')  # Ascend NPU via torch_npu");
+  } else {
+    exec.e("device = torch.device('cuda')");
+  }
 
   CodeKeeper entrance_func;
   std::vector<std::string> input_tensor_names;
@@ -378,7 +383,14 @@ TritonTranspileResult TritonTranspiler::transpile_ugraph() {
   entrance_func.e(
       "def execute_mugraph($, $):", input_tensor_str, output_tensor_str);
   entrance_func.inc_indent();
-  entrance_func.e("device = torch.device('cuda')");
+  
+  // Device selection based on target
+  if (config.is_ascend_target) {
+    entrance_func.e("device = torch.device('npu')  # Ascend NPU");
+  } else {
+    entrance_func.e("device = torch.device('cuda')");
+  }
+  
   for (size_t i = 0; i < middle_tensor_names.size(); i++) {
     entrance_func.e(
         "$ = torch.zeros(($), dtype=torch.float16).to(device=device)",
