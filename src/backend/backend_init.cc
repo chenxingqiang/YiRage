@@ -71,6 +71,10 @@ void register_all_backends() {
 #ifdef YIRAGE_BACKEND_MKL_ENABLED
     registry.register_backend(std::make_unique<MKLBackend>());
 #endif
+
+#ifdef YIRAGE_BACKEND_ASCEND_ENABLED
+    registry.register_backend(std::make_unique<AscendBackend>());
+#endif
 }
 
 } // namespace backend
