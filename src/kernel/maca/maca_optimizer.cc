@@ -21,6 +21,7 @@
  */
 
 #include "yirage/kernel/maca/maca_kernel_config.h"
+#include "yirage/vector_types.h"  // For dim3
 
 #ifdef YIRAGE_BACKEND_MACA_ENABLED
 
