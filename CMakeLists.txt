@@ -328,6 +328,19 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
   # MACA uses CUDA-compatible fingerprint
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
+  
+  # Add MACA SDK include directories
+  # MACA headers are in $MACA_PATH/include (mcr/, mcc/, mcblas/, etc.)
+  if(DEFINED ENV{MACA_PATH})
+    target_include_directories(yirage_runtime PUBLIC $ENV{MACA_PATH}/include)
+    target_link_directories(yirage_runtime PUBLIC $ENV{MACA_PATH}/lib)
+  elseif(DEFINED ENV{MACA_HOME})
+    target_include_directories(yirage_runtime PUBLIC $ENV{MACA_HOME}/include)
+    target_link_directories(yirage_runtime PUBLIC $ENV{MACA_HOME}/lib)
+  elseif(EXISTS "/opt/maca/include")
+    target_include_directories(yirage_runtime PUBLIC /opt/maca/include)
+    target_link_directories(yirage_runtime PUBLIC /opt/maca/lib)
+  endif()
 endif()
 
 if (NOT "${USE_MHA}" STREQUAL "OFF")

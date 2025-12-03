@@ -22,9 +22,9 @@
 #ifdef YIRAGE_BACKEND_MACA_ENABLED
 
 // MACA native runtime API
-// Located in $MACA_PATH/include/
-#include <mc_runtime.h>
-#include <mc_common.h>
+// Located in $MACA_PATH/include/mcr/
+#include <mcr/mc_runtime.h>
+#include <mcc/mc_common.h>
 
 namespace yirage {
 namespace backend {
