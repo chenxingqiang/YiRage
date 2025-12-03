@@ -58,7 +58,9 @@ file(GLOB_RECURSE KERNEL_OPT_SRCS
   src/kernel/mkl/*.cc
   src/kernel/ascend/*.cc
   src/kernel/maca/*.cc
-  src/kernel/maca/*.cpp
+  # Note: src/kernel/maca/*.cpp files contain GPU kernel code that requires
+  # mxcc compiler. They are excluded from standard host builds.
+  # For full MACA kernel support, these should be compiled with mxcc.
 )
 list(APPEND YIRAGE_SRCS ${KERNEL_OPT_SRCS})
 
