@@ -24,7 +24,7 @@
 // MACA native runtime API
 // Located in $MACA_PATH/include/mcr/
 #include <mcr/mc_runtime.h>
-#include <mcc/mc_common.h>
+#include <mcr/mc_common.h>
 
 namespace yirage {
 namespace backend {
