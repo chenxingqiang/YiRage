@@ -24,8 +24,8 @@
 
 #ifdef YIRAGE_BACKEND_MACA_ENABLED
 
-#include <mc_runtime.h>
-#include <mc_common.h>
+#include <mcr/mc_runtime.h>
+#include <mcr/mc_common.h>
 #include <cstdio>
 #include <cstdlib>
 

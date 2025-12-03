@@ -24,7 +24,7 @@
 
 #ifdef YIRAGE_BACKEND_MACA_ENABLED
 
-#include <mc_runtime.h>
+#include <mcr/mc_runtime.h>
 
 namespace yirage {
 namespace kernel {
