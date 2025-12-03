@@ -121,7 +121,7 @@ private:
   bool is_available_;
   int current_device_;
   int device_count_;
-  mcDeviceProp device_prop_;
+  mcDeviceProp_t device_prop_;
   std::string maca_path_;
 };
 
