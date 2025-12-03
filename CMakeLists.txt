@@ -396,8 +396,8 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
     # Link MACA kernel objects to the runtime library
     target_sources(yirage_runtime PRIVATE ${MACA_KERNEL_OBJS})
     
-    # Link MACA runtime library
-    target_link_libraries(yirage_runtime PUBLIC mcruntime)
+    # Link MACA runtime library (add to YIRAGE_LINK_LIBS to maintain consistent signature)
+    list(APPEND YIRAGE_LINK_LIBS mcruntime)
   else()
     message(WARNING "MACA compiler (mxcc) not found - MACA GPU kernels will not be compiled")
   endif()
