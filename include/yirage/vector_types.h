@@ -17,6 +17,11 @@
 
 #ifdef YIRAGE_BACKEND_USE_CUDA
 #include <vector_types.h>
+#elif defined(YIRAGE_BACKEND_MACA_ENABLED)
+// MACA provides its own vector types in mc_runtime.h
+// Don't define them here to avoid conflicts
+// They will be included via maca_backend.h when needed
+#include <mcr/mc_runtime_api.h>
 #else
 struct dim3 {
   unsigned int x, y, z;

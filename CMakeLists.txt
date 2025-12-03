@@ -27,6 +27,10 @@ include_directories(${CMAKE_INCLUDE_PATH})
 include_directories(${CMAKE_BINARY_DIR}) # to include protobuf headeer files
 include_directories("include")
 
+# Add cutlass include directory (required for cmem_tensor.h and other headers)
+# For MACA builds, this uses the MACA SDK's cute/cub libraries via symlinks
+include_directories("deps/cutlass/include")
+
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_LIST_DIR}/cmake)
 
 #add_subdirectory(deps/cutlass)
