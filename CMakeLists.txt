@@ -15,9 +15,9 @@ if (NOT "${USE_CUDA}" STREQUAL "OFF")
   list(APPEND PROJECT_LANGUAGES CUDA)
   message(STATUS "CUDA backend enabled")
 endif()
+# Note: MACA does NOT use CMake's CUDA language - it uses mxcc compiler directly
 if (NOT "${USE_MACA}" STREQUAL "OFF")
-  list(APPEND PROJECT_LANGUAGES CUDA)  # MACA uses CUDA-compatible syntax
-  message(STATUS "MACA backend enabled")
+  message(STATUS "MACA backend enabled (uses mxcc compiler, not CMake CUDA)")
 endif()
 
 project(YIRAGE LANGUAGES ${PROJECT_LANGUAGES})

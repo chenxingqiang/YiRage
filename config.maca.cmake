@@ -43,7 +43,8 @@ macro(find_maca)
         )
         
         foreach(path ${MACA_SEARCH_PATHS})
-            if(EXISTS "${path}/include/cuda_runtime.h")
+            # Check for MACA-specific header (mc_runtime.h) not cuda_runtime.h
+            if(EXISTS "${path}/include/mcr/mc_runtime.h")
                 set(MACA_ROOT ${path})
                 break()
             endif()
@@ -63,11 +64,14 @@ macro(find_maca)
         endif()
         
         # Find mxcc compiler (MACA's CUDA-compatible compiler)
+        # mxcc is located in mxgpu_llvm/bin, not bin
         find_program(MACA_COMPILER mxcc
             PATHS 
+                ${MACA_ROOT}/mxgpu_llvm/bin
                 ${MACA_ROOT}/bin
+                /opt/maca/mxgpu_llvm/bin
                 /opt/maca/bin
-                /usr/local/maca/bin
+                /usr/local/maca/mxgpu_llvm/bin
         )
         
         if(MACA_COMPILER)
