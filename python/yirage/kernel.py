@@ -625,6 +625,24 @@ class KNGraph:
                 print(f"  - Franges: {franges}")
             else:
                 print(f"✓ Ascend backend selected (using custom parameters)")
+        
+        elif backend == "maca":
+            # MetaX MACA GPU-specific optimization
+            if griddims is None and blockdims is None and franges is None:
+                from .maca_config import get_maca_search_config
+                maca_config = get_maca_search_config()
+                griddims = maca_config.get("grid_dims_to_explore")
+                blockdims = maca_config.get("block_dims_to_explore")
+                fmaps = maca_config.get("fmaps_to_explore")
+                franges = maca_config.get("franges_to_explore")
+                print(f"✓ MACA backend: Using MetaX GPU optimized search")
+                print(f"  - warpSize: 64 (NOT 32 like NVIDIA!)")
+                print(f"  - Grids: {len(griddims)} configs (SM blocks)")
+                print(f"  - Blocks: {len(blockdims)} configs (64-thread warp aligned)")
+                print(f"  - Fmaps: {fmaps}")
+                print(f"  - Franges: {franges}")
+            else:
+                print(f"✓ MACA backend selected (using custom parameters)")
                 
         elif backend == "cuda":
             print(f"✓ CUDA backend: Using NVIDIA GPU optimized configuration")
@@ -897,6 +915,86 @@ class KNGraph:
                 return best_graph
             
             return None
+        elif backend == "maca":
+            # MACA backend: profile and select best graph (similar to CUDA)
+            # MACA uses CUDA-compatible runtime, so profiling is similar
+            print(f"MACA backend: Profiling {len(all_graphs)} muGraphs...")
+            print(f"  Note: MACA uses 64-thread warps (vs NVIDIA's 32)")
+            
+            best_graph, best_perf = None, float("inf")
+            handles = deque()
+            
+            # MACA uses similar compilation to CUDA
+            for idx, g in enumerate(all_graphs):
+                dtensors = g.cygraph.get_input_dtensors()
+                input_tensors = list()
+                for t in dtensors:
+                    dims, strides = g.cygraph.get_input_dtensor_shape_and_stride(t)
+                    dtype = convert_dtype_to_torch_type(t.dtype)
+                    # MACA uses CUDA device interface
+                    x = torch.randn(
+                        dims,
+                        dtype=dtype,
+                        device="cuda:{}".format(global_config.gpu_device_id),
+                    )
+                    x = torch.as_strided(x, size=dims, stride=strides)
+                    input_tensors.append(x)
+                starter = torch.cuda.Event(enable_timing=True)
+                ender = torch.cuda.Event(enable_timing=True)
+                if len(handles) == MAX_THREADS:
+                    handles.popleft().wait()
+                handle = g.compile(async_=True, inputs=input_tensors)
+                handles.append(handle)
+            
+            while handles:
+                handles.popleft().wait()
+            
+            for idx, g in enumerate(all_graphs):
+                dtensors = g.cygraph.get_input_dtensors()
+                input_tensors = list()
+                for t in dtensors:
+                    dims, strides = g.cygraph.get_input_dtensor_shape_and_stride(t)
+                    dtype = convert_dtype_to_torch_type(t.dtype)
+                    x = torch.randn(
+                        dims,
+                        dtype=dtype,
+                        device="cuda:{}".format(global_config.gpu_device_id),
+                    )
+                    x = torch.as_strided(x, size=dims, stride=strides)
+                    input_tensors.append(x)
+                starter = torch.cuda.Event(enable_timing=True)
+                ender = torch.cuda.Event(enable_timing=True)
+                if not g.valid_kernels():
+                    print("muGraph {}: {}".format(idx, g.get_error_message()))
+                    continue
+                # Warmup runs
+                for _ in range(warmup_iters):
+                    g(inputs=input_tensors)
+                torch.cuda.synchronize()
+                starter.record()
+                for _ in range(profile_iters):
+                    g(inputs=input_tensors)
+                ender.record()
+                torch.cuda.synchronize()
+                perf = starter.elapsed_time(ender) / profile_iters
+                print("muGraph {}: profiled performance (ms) = {}".format(idx, perf))
+                if perf < best_perf:
+                    best_graph, best_perf = g, perf
+            
+            best_graph.backend = "maca"
+            if use_graph_dataset:
+                graph_dataset.store(
+                    input_graph=self.cygraph,
+                    optimized_graph=best_graph,
+                    imaps=imaps,
+                    omaps=omaps,
+                    griddims=griddims,
+                    blockdims=blockdims,
+                    fmaps=fmaps,
+                    franges=franges,
+                    backend=backend,
+                )
+            return best_graph
         elif backend == "nki":
             return all_graphs
         elif backend == "triton":

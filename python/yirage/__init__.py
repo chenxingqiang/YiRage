@@ -88,6 +88,19 @@ def new_threadblock_graph(
 # Other Configurations
 from .global_config import global_config
 
+# Backend-specific configurations
+from .mps_config import get_mps_search_config, get_mps_memory_config, apply_backend_config
+from .ascend_config import get_ascend_search_config, get_ascend_memory_config, get_ascend_device_info
+from .maca_config import (
+    get_maca_search_config,
+    get_maca_memory_config,
+    get_maca_device_info,
+    is_maca_available,
+    get_maca_sdk_path,
+    apply_maca_config,
+    MACA_WARP_SIZE,
+)
+
 # Graph Datasets
 from .graph_dataset import graph_dataset
 from .version import __version__

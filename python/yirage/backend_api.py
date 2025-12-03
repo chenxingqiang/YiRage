@@ -20,13 +20,13 @@ def get_available_backends() -> List[str]:
     Get list of available backend names.
     
     Returns:
-        List of backend names (e.g., ['cuda', 'cpu', 'mps'])
+        List of backend names (e.g., ['cuda', 'cpu', 'mps', 'maca', 'ascend'])
     
     Example:
         >>> import yirage
         >>> backends = yirage.get_available_backends()
         >>> print(f"Available backends: {backends}")
-        Available backends: ['cpu', 'mps']
+        Available backends: ['cpu', 'mps', 'maca']
     """
     if not HAS_CORE:
         return []
@@ -46,16 +46,16 @@ def is_backend_available(backend: str) -> bool:
     Check if a specific backend is available.
     
     Args:
-        backend: Backend name (e.g., 'cuda', 'cpu', 'mps')
+        backend: Backend name (e.g., 'cuda', 'cpu', 'mps', 'maca', 'ascend')
     
     Returns:
         True if backend is available, False otherwise
     
     Example:
         >>> import yirage
-        >>> if yirage.is_backend_available('cuda'):
-        ...     print("CUDA backend is available")
-        CUDA backend is available
+        >>> if yirage.is_backend_available('maca'):
+        ...     print("MACA backend is available")
+        MACA backend is available
     """
     return backend in get_available_backends()
 
@@ -77,9 +77,11 @@ def get_default_backend() -> Optional[str]:
     if not backends:
         return None
     
-    # Prefer CUDA if available
-    if 'cuda' in backends:
-        return 'cuda'
+    # Priority order: CUDA > MACA > Ascend > MPS > CPU
+    priority = ['cuda', 'maca', 'ascend', 'mps', 'cpu']
+    for backend in priority:
+        if backend in backends:
+            return backend
     
     # Otherwise return first available
     return backends[0]
@@ -107,14 +109,14 @@ def set_default_backend(backend: str) -> bool:
     Set the default backend.
     
     Args:
-        backend: Backend name to set as default
+        backend: Backend name to set as default ('cuda', 'maca', 'mps', 'cpu', 'ascend')
     
     Returns:
         True if successful, False if backend not available
     
     Example:
         >>> import yirage
-        >>> success = yirage.set_default_backend('cuda')
+        >>> success = yirage.set_default_backend('maca')
         >>> print(f"Set default backend: {success}")
         Set default backend: True
     """

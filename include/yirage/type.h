@@ -38,6 +38,7 @@ enum BackendType {
   BT_CUDNN = 2,
   BT_CUSPARSELT = 3,
   BT_ASCEND = 4,         // Huawei Ascend NPU/GPU
+  BT_MACA = 5,           // MetaX MACA GPU (CUDA-compatible)
   
   // CPU Backends
   BT_CPU = 10,

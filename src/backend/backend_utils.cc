@@ -31,6 +31,8 @@ std::string backend_type_to_string(BackendType type) {
       {BT_MPS, "mps"},
       {BT_CUDNN, "cudnn"},
       {BT_CUSPARSELT, "cusparselt"},
+      {BT_ASCEND, "ascend"},
+      {BT_MACA, "maca"},
       // CPU Backends
       {BT_CPU, "cpu"},
       {BT_MKL, "mkl"},
@@ -60,6 +62,8 @@ BackendType string_to_backend_type(std::string const &name) {
       {"mps", BT_MPS},
       {"cudnn", BT_CUDNN},
       {"cusparselt", BT_CUSPARSELT},
+      {"ascend", BT_ASCEND},
+      {"maca", BT_MACA},
       // CPU Backends
       {"cpu", BT_CPU},
       {"mkl", BT_MKL},

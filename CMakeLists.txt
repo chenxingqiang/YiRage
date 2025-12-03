@@ -15,6 +15,10 @@ if (NOT "${USE_CUDA}" STREQUAL "OFF")
   list(APPEND PROJECT_LANGUAGES CUDA)
   message(STATUS "CUDA backend enabled")
 endif()
+if (NOT "${USE_MACA}" STREQUAL "OFF")
+  list(APPEND PROJECT_LANGUAGES CUDA)  # MACA uses CUDA-compatible syntax
+  message(STATUS "MACA backend enabled")
+endif()
 
 project(YIRAGE LANGUAGES ${PROJECT_LANGUAGES})
 
@@ -49,6 +53,8 @@ file(GLOB_RECURSE KERNEL_OPT_SRCS
   src/kernel/cudnn/*.cc
   src/kernel/mkl/*.cc
   src/kernel/ascend/*.cc
+  src/kernel/maca/*.cc
+  src/kernel/maca/*.cpp
 )
 list(APPEND YIRAGE_SRCS ${KERNEL_OPT_SRCS})
 
@@ -108,6 +114,10 @@ endif()
 
 if (NOT "${USE_ASCEND}" STREQUAL "OFF")
   message(STATUS "Ascend backend enabled (requires CANN + torch_npu at runtime)")
+endif()
+
+if (NOT "${USE_MACA}" STREQUAL "OFF")
+  message(STATUS "MACA backend enabled (requires MetaX MACA SDK)")
 endif()
 
 include(CheckCXXCompilerFlag)
@@ -309,6 +319,15 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_ASCEND_ENABLED)
   # Ascend uses CPU fingerprint for development (actual execution needs CANN)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_ASCEND)
+endif()
+
+# MACA Backend (MetaX GPU)
+if (NOT "${USE_MACA}" STREQUAL "OFF")
+  # Include MACA configuration
+  include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
+  # MACA uses CUDA-compatible fingerprint
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
 endif()
 
 if (NOT "${USE_MHA}" STREQUAL "OFF")
