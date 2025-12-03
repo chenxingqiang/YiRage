@@ -335,17 +335,71 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
   # MACA uses CUDA-compatible fingerprint
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
   
-  # Add MACA SDK include directories
-  # MACA headers are in $MACA_PATH/include (mcr/, mcc/, mcblas/, etc.)
+  # Set MACA paths
   if(DEFINED ENV{MACA_PATH})
-    target_include_directories(yirage_runtime PUBLIC $ENV{MACA_PATH}/include)
-    target_link_directories(yirage_runtime PUBLIC $ENV{MACA_PATH}/lib)
+    set(MACA_SDK_PATH $ENV{MACA_PATH})
   elseif(DEFINED ENV{MACA_HOME})
-    target_include_directories(yirage_runtime PUBLIC $ENV{MACA_HOME}/include)
-    target_link_directories(yirage_runtime PUBLIC $ENV{MACA_HOME}/lib)
-  elseif(EXISTS "/opt/maca/include")
-    target_include_directories(yirage_runtime PUBLIC /opt/maca/include)
-    target_link_directories(yirage_runtime PUBLIC /opt/maca/lib)
+    set(MACA_SDK_PATH $ENV{MACA_HOME})
+  else()
+    set(MACA_SDK_PATH "/opt/maca")
+  endif()
+  
+  # Add MACA SDK include directories
+  target_include_directories(yirage_runtime PUBLIC ${MACA_SDK_PATH}/include)
+  target_link_directories(yirage_runtime PUBLIC ${MACA_SDK_PATH}/lib)
+  
+  # Find mxcc compiler for MACA kernel compilation
+  find_program(MXCC_COMPILER mxcc
+    PATHS 
+      ${MACA_SDK_PATH}/mxgpu_llvm/bin
+      ${MACA_SDK_PATH}/bin
+      /opt/maca/mxgpu_llvm/bin
+  )
+  
+  if(MXCC_COMPILER)
+    message(STATUS "Found MACA compiler: ${MXCC_COMPILER}")
+    
+    # Collect MACA GPU kernel source files (.cpp with GPU code)
+    file(GLOB MACA_KERNEL_SRCS src/kernel/maca/*.cpp)
+    
+    # Compile each MACA kernel file with mxcc
+    set(MACA_KERNEL_OBJS "")
+    foreach(MACA_SRC ${MACA_KERNEL_SRCS})
+      get_filename_component(MACA_SRC_NAME ${MACA_SRC} NAME_WE)
+      set(MACA_OBJ ${CMAKE_CURRENT_BINARY_DIR}/maca_kernels/${MACA_SRC_NAME}.o)
+      
+      add_custom_command(
+        OUTPUT ${MACA_OBJ}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/maca_kernels
+        COMMAND ${MXCC_COMPILER} -x maca
+          -c ${MACA_SRC}
+          -o ${MACA_OBJ}
+          -I${PROJECT_SOURCE_DIR}/include
+          -I${MACA_SDK_PATH}/include
+          -I${PROJECT_SOURCE_DIR}/deps/cutlass/include
+          -I${PROJECT_SOURCE_DIR}/deps/json/include
+          -DYIRAGE_BACKEND_MACA_ENABLED
+          -std=c++17
+          -fPIC
+          -O2
+          --maca-path=${MACA_SDK_PATH}
+        DEPENDS ${MACA_SRC}
+        COMMENT "Compiling MACA kernel: ${MACA_SRC_NAME}"
+      )
+      list(APPEND MACA_KERNEL_OBJS ${MACA_OBJ})
+    endforeach()
+    
+    # Create a custom target for MACA kernels
+    add_custom_target(maca_kernels DEPENDS ${MACA_KERNEL_OBJS})
+    add_dependencies(yirage_runtime maca_kernels)
+    
+    # Link MACA kernel objects to the runtime library
+    target_sources(yirage_runtime PRIVATE ${MACA_KERNEL_OBJS})
+    
+    # Link MACA runtime library
+    target_link_libraries(yirage_runtime PUBLIC mcruntime)
+  else()
+    message(WARNING "MACA compiler (mxcc) not found - MACA GPU kernels will not be compiled")
   endif()
 endif()
 
