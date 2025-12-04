@@ -1166,7 +1166,7 @@ cdef class CyTBGraph:
                 operators.append(CyTBOperator(ptr))
             return operators
 
-def search(CyKNGraph input_graph, *, str backend = "cuda", int max_num_new_graphs = 1024, list imaps = None, list omaps = None, list griddims = None, list blockdims = None, list fmaps = None, list franges = None, str previous_checkpoint = None, bool verbose, str default_config = None, bool is_formal_verified):
+def search(CyKNGraph input_graph, *, str backend = "cuda", int max_num_new_graphs = 8192, list imaps = None, list omaps = None, list griddims = None, list blockdims = None, list fmaps = None, list franges = None, str previous_checkpoint = None, bool verbose, str default_config = None, bool is_formal_verified):
     # set cimaps
     cdef vector[MInt3] cimaps
     cimaps.resize(0)
@@ -1227,9 +1227,9 @@ def search(CyKNGraph input_graph, *, str backend = "cuda", int max_num_new_graph
         for i in range(len(franges)):
             cfranges[i] = franges[i]
     # allocate new graphs
-    # currently support up to 1024 new graphs
-    assert max_num_new_graphs <= 1024
-    cdef CppKNGraph* cnewgraphs[1024]
+    # currently support up to 8192 new graphs
+    assert max_num_new_graphs <= 8192
+    cdef CppKNGraph* cnewgraphs[8192]
     # set verbose
     cverbose = verbose
     # set backend
