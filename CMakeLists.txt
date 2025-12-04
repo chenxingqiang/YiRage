@@ -399,9 +399,8 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
   # Include MACA configuration
   include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
-  # MACA uses CPU fingerprint for verification (mxcc doesn't compile .cu files yet)
-  # This still enables parallel search through OpenMP
-  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+  # MACA uses GPU fingerprint for verification (compiled with mxcc)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
   
   # Enable OpenMP for parallel search with MACA
   find_package(OpenMP)
@@ -436,12 +435,12 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
   if(MXCC_COMPILER)
     message(STATUS "Found MACA compiler: ${MXCC_COMPILER}")
     
-    # Collect MACA GPU kernel source files (.cpp with GPU code)
-    file(GLOB MACA_KERNEL_SRCS src/kernel/maca/*.cpp)
+    # Collect MACA GPU kernel source files (.maca files for GPU kernels)
+    file(GLOB MACA_GPU_KERNEL_SRCS src/kernel/maca/*.maca)
     
-    # Compile each MACA kernel file with mxcc
+    # Compile each MACA GPU kernel file with mxcc
     set(MACA_KERNEL_OBJS "")
-    foreach(MACA_SRC ${MACA_KERNEL_SRCS})
+    foreach(MACA_SRC ${MACA_GPU_KERNEL_SRCS})
       get_filename_component(MACA_SRC_NAME ${MACA_SRC} NAME_WE)
       set(MACA_OBJ ${CMAKE_CURRENT_BINARY_DIR}/maca_kernels/${MACA_SRC_NAME}.o)
       
@@ -453,30 +452,39 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
           -o ${MACA_OBJ}
           -I${PROJECT_SOURCE_DIR}/include
           -I${MACA_SDK_PATH}/include
+          -I${MACA_SDK_PATH}/include/mcr
           -I${PROJECT_SOURCE_DIR}/deps/cutlass/include
           -I${PROJECT_SOURCE_DIR}/deps/json/include
           -DYIRAGE_BACKEND_MACA_ENABLED
+          -DYIRAGE_FINGERPRINT_USE_MACA
           -std=c++17
           -fPIC
           -O2
           --maca-path=${MACA_SDK_PATH}
         DEPENDS ${MACA_SRC}
-        COMMENT "Compiling MACA kernel: ${MACA_SRC_NAME}"
+        COMMENT "Compiling MACA GPU kernel: ${MACA_SRC_NAME}"
       )
       list(APPEND MACA_KERNEL_OBJS ${MACA_OBJ})
     endforeach()
     
     # Create a custom target for MACA kernels
-    add_custom_target(maca_kernels DEPENDS ${MACA_KERNEL_OBJS})
-    add_dependencies(yirage_runtime maca_kernels)
-    
-    # Link MACA kernel objects to the runtime library
-    target_sources(yirage_runtime PRIVATE ${MACA_KERNEL_OBJS})
+    if(MACA_KERNEL_OBJS)
+      add_custom_target(maca_kernels DEPENDS ${MACA_KERNEL_OBJS})
+      add_dependencies(yirage_runtime maca_kernels)
+      
+      # Link MACA kernel objects to the runtime library
+      target_sources(yirage_runtime PRIVATE ${MACA_KERNEL_OBJS})
+      message(STATUS "MACA GPU kernels will be compiled: ${MACA_GPU_KERNEL_SRCS}")
+    else()
+      message(STATUS "No MACA GPU kernel files (.maca) found")
+    endif()
     
     # Link MACA runtime library (add to YIRAGE_LINK_LIBS to maintain consistent signature)
     list(APPEND YIRAGE_LINK_LIBS mcruntime)
   else()
     message(WARNING "MACA compiler (mxcc) not found - MACA GPU kernels will not be compiled")
+    # Fall back to CPU fingerprint if mxcc is not available
+    target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
   endif()
 endif()
 
