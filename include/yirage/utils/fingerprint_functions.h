@@ -26,7 +26,7 @@ using namespace yirage::type;
 using namespace yirage::config;
 using namespace std;
 
-#ifdef YIRAGE_FINGERPRINT_USE_CUDA
+#if defined(YIRAGE_FINGERPRINT_USE_CUDA) || defined(YIRAGE_FINGERPRINT_USE_MACA)
 #define __execution_space__ __device__
 #else
 #define __execution_space__
