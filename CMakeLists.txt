@@ -124,6 +124,8 @@ endif()
 
 if (NOT "${USE_MACA}" STREQUAL "OFF")
   message(STATUS "MACA backend enabled (requires MetaX MACA SDK)")
+  # MACA uses device_memory_manager.maca instead of .cc
+  list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
 endif()
 
 include(CheckCXXCompilerFlag)
