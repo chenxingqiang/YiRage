@@ -187,7 +187,7 @@ public:
   void free_fingerprint(std::vector<STensor> const &tensors);
   size_t calculate_shared_memory_usage(TBOperator *new_op);
 
-#ifdef YIRAGE_BACKEND_USE_CUDA
+#if defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_FINGERPRINT_USE_MACA)
   KernelParams get_kernel_params();
   NewKernelParams get_new_kernel_params(bool fingerprint) const;
 #endif

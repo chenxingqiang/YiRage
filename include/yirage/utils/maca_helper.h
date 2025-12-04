@@ -28,9 +28,18 @@
 #include <mcr/mc_common.h>
 #include <cstdio>
 #include <cstdlib>
+#include "yirage/config.h"
+#include "yirage/type.h"
 
 namespace yirage {
 namespace utils {
+
+/**
+ * @brief Structure to hold fingerprint pointers for multi-GPU
+ */
+struct FpPointerList {
+  yirage::type::FPType *ptrs[yirage::config::MAX_NUM_DEVICES];
+};
 
 /**
  * @brief Check MACA API call result and exit on error
