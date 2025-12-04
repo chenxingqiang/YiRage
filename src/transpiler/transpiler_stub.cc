@@ -80,9 +80,11 @@ TritonTranspileResult transpile(kernel::Graph const *graph,
 // Additional stubs for Python bindings
 namespace kernel {
 
+#if !defined(YIRAGE_FINGERPRINT_USE_MACA) && !defined(YIRAGE_FINGERPRINT_USE_CUDA)
 void cython_set_gpu_device_id(int device_id) {
-    // Stub for non-CUDA builds - does nothing
+    // Stub for non-GPU builds - does nothing
 }
+#endif
 
 void Graph::generate_triton_program(char const *filepath) {
     // Stub for non-CUDA builds - does nothing

@@ -28,7 +28,7 @@
 namespace yirage {
 namespace threadblock {
 
-CUTLASS_HOST_DEVICE
+inline CUTLASS_HOST_DEVICE
 void deserialize_forloop_accum_parameters(int const *params,
                                           int &param_idx,
                                           int &accum_num_elements,

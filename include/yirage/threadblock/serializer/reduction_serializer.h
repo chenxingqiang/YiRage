@@ -20,7 +20,7 @@
 namespace yirage {
 namespace threadblock {
 
-CUTLASS_HOST_DEVICE
+inline CUTLASS_HOST_DEVICE
 void deserialize_reduction_op_parameters(int const *params,
                                          int &param_idx,
                                          int &output_num_elements,

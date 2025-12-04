@@ -26,7 +26,7 @@
 namespace yirage {
 namespace threadblock {
 
-CUTLASS_HOST_DEVICE
+inline CUTLASS_HOST_DEVICE
 void deserialize_elementbinary_op_parameters(int const *params,
                                              int &param_idx,
                                              int3 &input1_shape,
