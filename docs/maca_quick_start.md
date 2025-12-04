@@ -1,365 +1,329 @@
-# MetaX MACA Backend Quick Start Guide
+# YiRage MACA Backend Quick Start Guide
 
-## Overview
+本文档基于在 **MetaX C500 GPU** 上的实际成功运行经验编写。
 
-YiRage supports **MetaX MACA** (MetaX Architecture for Compute Acceleration) GPU backend. MACA provides a CUDA-compatible programming model, allowing users to leverage MetaX GPU hardware with familiar CUDA APIs and code.
+## 1. 环境要求
 
-**MetaX Developer Community**: https://developer.metax-tech.com/
+### 硬件
+- MetaX C500 GPU (或其他 MACA 兼容 GPU)
 
-## Hardware Support
+### 软件
+- **MACA SDK**: `/opt/maca` (包含 `mxcc` 编译器)
+- **mcPytorch**: PyTorch 2.6.0+metax3.2.1.3 或兼容版本
+- **Python**: 3.10+
+- **CMake**: 3.24+
+- **Rust**: 最新稳定版
+- **GCC**: 支持 C++17
 
-MetaX MACA backend supports:
-- MetaX C500 series GPUs
-- MetaX C500 Pro series GPUs
-- Future MetaX GPU products
+## 2. 环境配置
 
-### Hardware Specifications (MetaX C500)
-
-| Parameter | Value | Notes |
-|-----------|-------|-------|
-| **warpSize** | **64** | ⚠️ Different from NVIDIA's 32! |
-| Compute Capability | 10.0 | MetaX-specific |
-| Streaming Multiprocessors | 104 | |
-| Max Threads/Block | 1024 | |
-| Max Threads/SM | 2048 | |
-| Registers/Block | 131072 | 2x more than NVIDIA |
-| Shared Memory/Block | 64 KB | |
-| L2 Cache | 8 MB | |
-| Memory Bus Width | 4096 bits | Wide memory bus |
-| HBM Memory | 64 GB | |
-
-### Key Differences from NVIDIA GPUs
-
-> **⚠️ Important**: MetaX GPUs use **64-thread warps** instead of NVIDIA's 32-thread warps!
-
-| Feature | MetaX MACA | NVIDIA CUDA |
-|---------|------------|-------------|
-| **warpSize** | **64** | 32 |
-| Warp shuffle iterations | 6 (log₂64) | 5 (log₂32) |
-| Warp mask type | `uint64_t` | `uint32_t` |
-| Full warp mask | `0xFFFFFFFFFFFFFFFF` | `0xFFFFFFFF` |
-
-This affects:
-- All `__shfl_sync` operations
-- Warp reduction algorithms
-- Ballot operations
-- Thread synchronization within warps
-
-## Prerequisites
-
-### 1. MACA SDK Installation
-
-Download and install the MACA SDK from the MetaX Developer Community:
+### 2.1 设置环境变量
 
 ```bash
-# Set environment variables
-export MACA_HOME=/opt/maca
-export PATH=$MACA_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$MACA_HOME/lib64:$LD_LIBRARY_PATH
+# MACA SDK 路径
+export MACA_PATH=/opt/maca
+export LD_LIBRARY_PATH=${MACA_PATH}/lib:${MACA_PATH}/mxgpu_llvm/lib:${LD_LIBRARY_PATH}
+
+# 可选：添加 mxcc 到 PATH
+export PATH=${MACA_PATH}/mxgpu_llvm/bin:$PATH
 ```
 
-### 2. mcPytorch (Optional)
+### 2.2 验证 mcPytorch
 
-For PyTorch integration, install mcPytorch:
-
-```bash
-# mcPytorch provides PyTorch with MACA backend support
-pip install torch-maca  # or build from source
+```python
+import torch
+print(f"PyTorch: {torch.__version__}")  # 应显示 2.6.0+metax3.2.1.3
+print(f"CUDA available: {torch.cuda.is_available()}")  # True
+print(f"Device: {torch.cuda.get_device_name(0)}")  # MetaX C500
 ```
 
-## Building YiRage with MACA Support
-
-### CMake Configuration
+### 2.3 验证 MACA 编译器
 
 ```bash
-mkdir build && cd build
-cmake .. -DUSE_MACA=ON -DUSE_CUDA=OFF
+which mxcc
+# 应输出: /opt/maca/mxgpu_llvm/bin/mxcc
+```
+
+## 3. 编译 YiRage
+
+### 3.1 安装依赖
+
+```bash
+# Python 依赖
+pip install z3-solver graphviz cython
+
+# Rust (如未安装)
+curl https://sh.rustup.rs -sSf | sh -s -- -y
+source $HOME/.cargo/env
+
+# CMake (如版本过低)
+pip install "cmake>=3.24"
+```
+
+### 3.2 配置 config.cmake
+
+创建 `config.cmake` 文件：
+
+```cmake
+set(USE_CUDA OFF)
+set(USE_MACA ON)
+set(USE_CUDNN OFF)
+set(USE_CPU ON)
+set(USE_ASCEND OFF)
+set(USE_NKI OFF)
+set(USE_MPS OFF)
+```
+
+### 3.3 设置依赖
+
+```bash
+cd YiRage
+
+# Z3 配置 (使用 pip 安装的 z3)
+mkdir -p deps/z3/build
+Z3_BASE=$(python -c "import z3; import os; print(os.path.dirname(z3.__file__))")
+
+cat > deps/z3/build/z3-config.cmake << EOF
+set(Z3_FOUND TRUE)
+set(Z3_VERSION "4.15.4")
+set(Z3_INCLUDE_DIRS "${Z3_BASE}/include")
+set(Z3_LIBRARIES "${Z3_BASE}/lib/libz3.so")
+set(Z3_CXX_INCLUDE_DIRS "${Z3_BASE}/include")
+
+if(NOT TARGET z3::libz3)
+  add_library(z3::libz3 SHARED IMPORTED)
+  set_target_properties(z3::libz3 PROPERTIES
+    IMPORTED_LOCATION "${Z3_BASE}/lib/libz3.so"
+    INTERFACE_INCLUDE_DIRECTORIES "${Z3_BASE}/include"
+  )
+endif()
+EOF
+
+cat > deps/z3/build/Z3Config.cmake << EOF
+include("\${CMAKE_CURRENT_LIST_DIR}/z3-config.cmake")
+EOF
+
+# JSON 配置 (如 deps/json 为空)
+mkdir -p deps/json/include/nlohmann
+curl -sL https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp \
+  -o deps/json/include/nlohmann/json.hpp
+
+cat > deps/json/CMakeLists.txt << EOF
+cmake_minimum_required(VERSION 3.10)
+project(nlohmann_json)
+add_library(nlohmann_json INTERFACE)
+add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
+target_include_directories(nlohmann_json INTERFACE \${CMAKE_CURRENT_SOURCE_DIR}/include)
+EOF
+
+# CUTLASS stub (如 deps/cutlass 为空)
+mkdir -p deps/cutlass/include/cutlass/detail
+cat > deps/cutlass/include/cutlass/cutlass.h << 'EOF'
+#pragma once
+#if defined(__NVCC__) || (defined(__clang__) && (defined(__CUDA__) || defined(__MACA__)))
+#define CUTLASS_HOST_DEVICE __forceinline__ __device__ __host__
+#define CUTLASS_DEVICE __forceinline__ __device__
+#else
+#define CUTLASS_HOST_DEVICE
+#define CUTLASS_DEVICE
+#endif
+namespace cutlass {}
+EOF
+
+cat > deps/cutlass/include/cutlass/detail/helper_macros.hpp << 'EOF'
+#pragma once
+#if defined(__NVCC__) || (defined(__clang__) && (defined(__CUDA__) || defined(__MACA__)))
+#define CUTLASS_HOST_DEVICE __forceinline__ __device__ __host__
+#define CUTLASS_DEVICE __forceinline__ __device__
+#else
+#define CUTLASS_HOST_DEVICE
+#define CUTLASS_DEVICE
+#endif
+EOF
+```
+
+### 3.4 编译
+
+```bash
+mkdir -p build && cd build
+
+cmake .. \
+  -DUSE_CUDA=OFF \
+  -DUSE_MACA=ON \
+  -DUSE_CUDNN=OFF \
+  -DUSE_ASCEND=OFF \
+  -DUSE_NKI=OFF \
+  -DUSE_MPS=OFF \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DZ3_DIR=${PWD}/../deps/z3/build
+
 make -j$(nproc)
 ```
 
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `MACA_HOME` | Primary MACA SDK path | `/opt/maca` |
-| `MACA_PATH` | Alternative SDK path | - |
-
-## Usage
-
-### Python API
-
-```python
-import yirage as yr
-
-# Check MACA availability
-if yr.is_backend_available('maca'):
-    print("MetaX MACA GPU available!")
-
-# Create kernel graph
-graph = yr.new_kernel_graph()
-X = graph.new_input(dims=(8, 4096), dtype=yr.float16)
-W = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
-O = graph.matmul(X, W)
-graph.mark_output(O)
-
-# Optimize for MACA backend
-optimized = graph.superoptimize(backend='maca')
-```
-
-### C++ API
-
-```cpp
-#include "yirage/backend/maca_backend.h"
-
-// Check availability
-auto* backend = yirage::backend::BackendRegistry::get_instance()
-    .get_backend(yirage::type::BT_MACA);
-
-if (backend && backend->is_available()) {
-    std::cout << "MACA backend ready!" << std::endl;
-    std::cout << "Device: " << backend->get_display_name() << std::endl;
-    std::cout << "Memory: " << backend->get_max_memory() / (1024*1024*1024) 
-              << " GB" << std::endl;
-}
-```
-
-### Native MACA Kernel Example
-
-```cpp
-#include <mc_runtime.h>
-#include <mc_common.h>
-
-// MACA kernel using __global__ (same as CUDA)
-__global__ void vectorAdd(const float *A, const float *B, float *C, int n) {
-    int i = blockDim.x * blockIdx.x + threadIdx.x;
-    if (i < n) {
-        C[i] = A[i] + B[i];
-    }
-}
-
-int main() {
-    int n = 50000;
-    size_t size = n * sizeof(float);
-    
-    // Allocate device memory using MACA API (mc* prefix)
-    float *d_A, *d_B, *d_C;
-    mcMalloc(&d_A, size);
-    mcMalloc(&d_B, size);
-    mcMalloc(&d_C, size);
-    
-    // Copy data to device
-    mcMemcpy(d_A, h_A, size, mcMemcpyHostToDevice);
-    mcMemcpy(d_B, h_B, size, mcMemcpyHostToDevice);
-    
-    // Launch kernel (same syntax as CUDA)
-    int threadsPerBlock = 256;
-    int blocksPerGrid = (n + threadsPerBlock - 1) / threadsPerBlock;
-    vectorAdd<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_B, d_C, n);
-    
-    // Copy result back
-    mcMemcpy(h_C, d_C, size, mcMemcpyDeviceToHost);
-    
-    // Free device memory
-    mcFree(d_A);
-    mcFree(d_B);
-    mcFree(d_C);
-    
-    return 0;
-}
-```
-
-### Kernel Configuration
-
-MACA uses CUDA-compatible kernel configurations with MACA-specific optimizations:
-
-```cpp
-#include "yirage/kernel/maca/maca_kernel_config.h"
-
-using namespace yirage::kernel::maca;
-
-// Get architecture configuration for MetaX C500
-auto arch = get_maca_arch_config(100);  // Compute Cap 10.0
-
-// Note: warpSize is 64 on MetaX!
-std::cout << "Warp size: " << arch.warp_size << std::endl;  // 64
-
-// Configure matmul kernel
-auto matmul_config = get_optimal_matmul_config(1024, 1024, 1024, arch);
-
-std::cout << "Tile M: " << matmul_config.tile_m << std::endl;
-std::cout << "Tile N: " << matmul_config.tile_n << std::endl;
-std::cout << "Tile K: " << matmul_config.tile_k << std::endl;
-std::cout << "Stages: " << matmul_config.num_stages << std::endl;
-```
-
-### MACA Warp Utilities
-
-For kernels using warp-level primitives, use the MACA warp utilities:
-
-```cpp
-#include "yirage/kernel/maca/maca_warp_utils.h"
-
-using namespace yirage::kernel::maca;
-
-// MACA warp constants
-constexpr int WARP_SIZE = MACA_WARP_SIZE;  // 64
-constexpr auto FULL_MASK = MACA_FULL_WARP_MASK;  // 64-bit mask
-
-__global__ void reduction_kernel(float* data, int n) {
-    float val = data[threadIdx.x];
-    
-    // Use MACA warp reduce (6 iterations for 64 threads)
-    float sum = maca_warp_reduce_sum(val);
-    
-    // Lane/warp ID for 64-thread warps
-    int lane = maca_lane_id();  // 0-63
-    int warp = maca_warp_id();
-    
-    if (lane == 0) {
-        // First thread of each warp writes result
-        output[warp] = sum;
-    }
-}
-```
-
-## Key Features
-
-### MACA Native API
-
-MACA provides its own native runtime API with `mc*` prefix:
-
-| CUDA API | MACA Native API |
-|----------|-----------------|
-| `cudaMalloc` | `mcMalloc` |
-| `cudaMemcpy` | `mcMemcpy` |
-| `cudaFree` | `mcFree` |
-| `cudaGetDeviceCount` | `mcGetDeviceCount` |
-| `cudaGetDeviceProperties` | `mcGetDeviceProperties` |
-| `cudaDeviceSynchronize` | `mcDeviceSynchronize` |
-| `cudaError_t` | `mcError_t` |
-| `cudaSuccess` | `mcSuccess` |
-| `__global__` kernels | ✅ Supported |
-| Tensor Cores | ✅ Supported (hardware-dependent) |
-
-### Library Mapping
-
-| NVIDIA | MetaX MACA | Description |
-|--------|------------|-------------|
-| cudart | mc_runtime | Runtime API |
-| cublas | mcblas, mcblasLt | BLAS operations |
-| CUTLASS | mctlass | Tile-based GEMM |
-| nccl | mccl | Collective comm |
-| curand | mcrand | Random numbers |
-| cusolver | mcsolver | Linear algebra |
-| cudnn | mcdnn | Deep learning primitives |
-| Flash Attention | mcflashattn | Flash Attention 2.0 |
-
-### MACA High-Performance Libraries
-
-MetaX provides optimized libraries:
-
-**mctlass** (CUTLASS equivalent):
-- Tile-based GEMM with 64-thread warp support
-- Supports SM75/SM80-like configurations
-- Software pipelining and swizzling
-
-**mcflashattn** (Flash Attention):
-```cpp
-#include <flash_attn/flash_attn.h>
-
-// Create attention tensors
-Tensor_t Q = make_contiguous_tensor4d(q_ptr, MCFLASHATTN_DATATYPE_FP16, 
-                                       batch, seqlen, heads, head_dim);
-Tensor_t K = make_contiguous_tensor4d(k_ptr, MCFLASHATTN_DATATYPE_FP16,
-                                       batch, seqlen, heads, head_dim);
-Tensor_t V = make_contiguous_tensor4d(v_ptr, MCFLASHATTN_DATATYPE_FP16,
-                                       batch, seqlen, heads, head_dim);
-
-// Run flash attention
-mcflashattn_forward(Q, K, V, output, softmax_scale, is_causal);
-```
-
-**mcblas / mcblasLt**:
-- High-performance matrix operations
-- Tensor core support
-- Auto-tuning for optimal performance
-
-### Compilation
-
-Use `mxcc` compiler with `-x maca` flag:
+### 3.5 安装 Python 包
 
 ```bash
-mxcc -x maca your_kernel.cpp -o output --maca-path=/opt/maca
+cd ..
+pip install -e .
 ```
 
-## Performance Optimization
-
-### Recommended Practices
-
-1. **Use FP16/BF16**: MACA GPUs have excellent half-precision performance
-2. **Align dimensions**: Use multiples of 16 for tensor dimensions
-3. **Leverage MCCL**: For multi-GPU workloads, use MCCL collective operations
-4. **Profile with MACA tools**: Use MetaX profiling tools for optimization
-
-### Example: Optimized Attention
+## 4. 验证安装
 
 ```python
-import yirage as yr
+import yirage
+import torch
 
-# Configure for MACA attention
-graph = yr.new_kernel_graph()
+print(f"YiRage: {yirage.__version__}")
+print(f"Device: {torch.cuda.get_device_name(0)}")
 
-# Use FP16 for better performance
-Q = graph.new_input(dims=(batch, heads, seq, head_dim), dtype=yr.float16)
-K = graph.new_input(dims=(batch, heads, seq, head_dim), dtype=yr.float16)
-V = graph.new_input(dims=(batch, heads, seq, head_dim), dtype=yr.float16)
+# 创建简单图
+graph = yirage.new_kernel_graph()
+X = graph.new_input(dims=(16, 64), dtype=yirage.float16)
+W = graph.new_input(dims=(64, 64), dtype=yirage.float16)
+Y = graph.matmul(X, W)
+graph.mark_output(Y)
 
-# Flash attention optimized for MACA
-attention = graph.flash_attention(Q, K, V, causal=True)
-graph.mark_output(attention)
+print("✅ YiRage + MACA ready!")
+```
 
-# Superoptimize for MACA
+## 5. 使用示例
+
+### 5.1 基本优化
+
+```python
+import yirage
+import torch
+
+# 创建计算图
+graph = yirage.new_kernel_graph()
+X = graph.new_input(dims=(32, 64), dtype=yirage.float16)
+W = graph.new_input(dims=(64, 64), dtype=yirage.float16)
+B = graph.new_input(dims=(32, 64), dtype=yirage.float16)
+
+# 定义操作: Y = ReLU(X @ W + B)
+XW = graph.matmul(X, W)
+XWB = graph.add(XW, B)
+Y = graph.relu(XWB)
+graph.mark_output(Y)
+
+# 搜索最优融合方案 (首次运行需要几分钟)
+print("Searching for optimal fusion...")
 optimized = graph.superoptimize(
-    backend='maca',
-    options={
-        'use_tensor_cores': True,
-        'tile_size': 128,
-    }
+    backend="maca",    # 使用 MACA 后端
+    config="mlp",      # MLP 配置
+    verbose=False      # 设为 True 可查看搜索进度
 )
+
+if optimized:
+    print(f"Found optimized graph!")
+    
+    # 准备输入
+    x = torch.randn(32, 64, dtype=torch.float16, device="cuda")
+    w = torch.randn(64, 64, dtype=torch.float16, device="cuda")
+    b = torch.randn(32, 64, dtype=torch.float16, device="cuda")
+    
+    # 运行优化后的图
+    result = optimized(x, w, b)
+    print(f"Output shape: {result.shape}")
 ```
 
-## Troubleshooting
+### 5.2 性能对比
 
-### Common Issues
+```python
+import torch
+import time
 
-**Issue**: MACA SDK not found
+# PyTorch 基准
+def pytorch_mlp(x, w, b):
+    return torch.relu(torch.matmul(x, w) + b)
+
+# 准备数据
+x = torch.randn(64, 128, dtype=torch.float16, device="cuda")
+w = torch.randn(128, 128, dtype=torch.float16, device="cuda")
+b = torch.randn(64, 128, dtype=torch.float16, device="cuda")
+
+# 使用 CUDA events 精确计时
+def profile(func, warmup=20, repeat=100):
+    for _ in range(warmup):
+        func()
+    torch.cuda.synchronize()
+    
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
+    
+    start.record()
+    for _ in range(repeat):
+        func()
+    end.record()
+    torch.cuda.synchronize()
+    
+    return start.elapsed_time(end) / repeat
+
+pytorch_time = profile(lambda: pytorch_mlp(x, w, b))
+print(f"PyTorch time: {pytorch_time:.4f} ms")
+
+# YiRage 优化后 (假设 optimized 已创建)
+# yirage_time = profile(lambda: optimized(x, w, b))
+# print(f"YiRage time: {yirage_time:.4f} ms")
+# print(f"Speedup: {pytorch_time / yirage_time:.2f}x")
 ```
-Solution: Set MACA_HOME or MACA_PATH environment variable
-export MACA_HOME=/path/to/maca/sdk
+
+## 6. MACA 特性说明
+
+### 6.1 64 线程 Warp
+
+MACA GPU 使用 **64 线程 warp**（NVIDIA 使用 32）。YiRage 自动处理此差异：
+
+```python
+# 搜索配置会自动适配 64 线程 warp
+optimized = graph.superoptimize(backend="maca", ...)
 ```
 
-**Issue**: Library not found
+### 6.2 搜索时间
+
+- **首次搜索**: 需要几分钟（搜索融合方案）
+- **后续运行**: 可使用 checkpoint 加速
+- **搜索状态**: `verbose=True` 可查看进度
+
+### 6.3 支持的操作
+
+- MatMul (矩阵乘法)
+- Add, Sub, Mul, Div (元素运算)
+- ReLU, GELU, SiLU (激活函数)
+- RMSNorm, LayerNorm (归一化)
+- Reduction (规约操作)
+
+## 7. 故障排除
+
+### 7.1 找不到 mcruntime
+
+```bash
+export LD_LIBRARY_PATH=/opt/maca/lib:$LD_LIBRARY_PATH
 ```
-Solution: Add MACA libraries to LD_LIBRARY_PATH
-export LD_LIBRARY_PATH=$MACA_HOME/lib64:$LD_LIBRARY_PATH
+
+### 7.2 mxcc 编译错误
+
+确保 MACA SDK 版本与 mcPytorch 兼容。
+
+### 7.3 搜索缓冲区溢出
+
+如果出现 `num < max_num_graphs` 错误，搜索找到的图太多。这通常不影响结果。
+
+### 7.4 profiling 失败
+
+确保使用 mcPytorch（不是标准 PyTorch）：
+```python
+import torch
+assert "metax" in torch.__version__.lower()
 ```
 
-**Issue**: Compiler not found
-```
-Solution: Ensure mxcc is in PATH
-export PATH=$MACA_HOME/bin:$PATH
-```
+## 8. 参考
 
-## Resources
+- [MACA SDK 文档](https://www.metax-tech.com/)
+- [YiRage GitHub](https://github.com/chenxingqiang/YiRage)
+- [mcPytorch 文档](https://www.metax-tech.com/pytorch)
 
-- **MetaX Developer Community**: https://developer.metax-tech.com/
-- **vLLM-metax**: https://github.com/MetaX-MACA/vLLM-metax
-- **mcPytorch**: https://github.com/MetaX-MACA/mcPytorch
-- **mcTVM**: https://github.com/MetaX-MACA/mcTVM
+---
 
-## Related Projects
-
-- [vLLM-metax](https://github.com/MetaX-MACA/vLLM-metax) - High-performance LLM inference on MetaX GPUs
-- [FlashMLA](https://github.com/MetaX-MACA/FlashMLA) - Flash attention for MACA
-- [mcPytorch](https://github.com/MetaX-MACA/mcPytorch) - PyTorch with MACA support
-
+*文档版本: 2025-12-04*
+*基于 MetaX C500 GPU 验证*
