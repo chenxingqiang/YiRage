@@ -28,7 +28,7 @@
 namespace yirage {
 namespace threadblock {
 
-inline CUTLASS_HOST_DEVICE
+CUTLASS_HOST_DEVICE
 void deserialize_output_saver_parameters(
     int const *params,
     int &param_idx,

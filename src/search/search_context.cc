@@ -31,7 +31,7 @@ void from_json(json const &j, SearchContext &c) {
       }
     }
   }
-  from_json(j.at("level"), c.level);
+  c.level = j.at("level").get<SearchLevel>();
 }
 
 void to_json(json &j, SearchContext const &c) {

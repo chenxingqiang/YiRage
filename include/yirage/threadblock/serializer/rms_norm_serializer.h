@@ -28,7 +28,7 @@
 namespace yirage {
 namespace threadblock {
 
-inline CUTLASS_HOST_DEVICE
+CUTLASS_HOST_DEVICE
 void deserialize_rms_norm_op_parameters(int const *params,
                                         int &param_idx,
                                         int &output_num_elements,
