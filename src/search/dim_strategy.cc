@@ -167,12 +167,22 @@ std::vector<dim3>
   std::vector<dim3> aligned_cands;
   for (dim3 const &cand : cands) {
     int total_threads = cand.x * cand.y * cand.z;
+    
+    // GPU fingerprint kernels require blockDim.y == 1 && blockDim.z == 1
+    // because they use 1D thread indexing (threadIdx.x only)
+#if defined(YIRAGE_FINGERPRINT_USE_CUDA) || defined(YIRAGE_FINGERPRINT_USE_MACA)
+    bool is_1d_block = (cand.y == 1 && cand.z == 1);
+    if (!is_1d_block) {
+      continue;  // Skip non-1D blocks for GPU fingerprint
+    }
+#endif
+    
     if (total_threads % warp_size == 0 && total_threads <= 1024) {
       aligned_cands.push_back(cand);
     }
   }
   
-  // If no aligned candidates, fall back to warp-aligned defaults
+  // If no aligned candidates, fall back to warp-aligned 1D defaults
   if (aligned_cands.empty()) {
     aligned_cands.push_back({static_cast<unsigned int>(warp_size), 1, 1});      // 1 warp
     aligned_cands.push_back({static_cast<unsigned int>(warp_size * 2), 1, 1});  // 2 warps
