@@ -15,7 +15,7 @@
 
 #pragma once
 
-#if defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_FINGERPRINT_USE_MACA)
+#if defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_FINGERPRINT_USE_MACA) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 
 #include "yirage/kernel/device_tensor.h"
 #include "yirage/threadblock/operator.h"

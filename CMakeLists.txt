@@ -394,6 +394,97 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
     target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
     message(STATUS "OpenMP enabled for Ascend parallel search")
   endif()
+  
+  # Set CANN/Ascend paths
+  if(DEFINED ENV{ASCEND_HOME})
+    set(ASCEND_SDK_PATH $ENV{ASCEND_HOME})
+  elseif(DEFINED ENV{CANN_HOME})
+    set(ASCEND_SDK_PATH $ENV{CANN_HOME})
+  else()
+    set(ASCEND_SDK_PATH "/usr/local/Ascend/ascend-toolkit/latest")
+  endif()
+  
+  # Add Ascend SDK include directories
+  target_include_directories(yirage_runtime PUBLIC 
+    ${ASCEND_SDK_PATH}/include
+    ${ASCEND_SDK_PATH}/include/acl
+  )
+  target_link_directories(yirage_runtime PUBLIC ${ASCEND_SDK_PATH}/lib64)
+  
+  # Find AscendC compiler (ascendc or bisheng)
+  find_program(ASCENDC_COMPILER ascendc
+    PATHS 
+      ${ASCEND_SDK_PATH}/compiler/bin
+      ${ASCEND_SDK_PATH}/bin
+      /usr/local/Ascend/ascend-toolkit/latest/compiler/bin
+  )
+  
+  if(NOT ASCENDC_COMPILER)
+    # Try bisheng compiler as fallback
+    find_program(ASCENDC_COMPILER bisheng
+      PATHS 
+        ${ASCEND_SDK_PATH}/compiler/bin
+        /usr/local/Ascend/ascend-toolkit/latest/compiler/bin
+    )
+  endif()
+  
+  if(ASCENDC_COMPILER)
+    message(STATUS "Found Ascend compiler: ${ASCENDC_COMPILER}")
+    
+    # Remove CPU-based device_memory_manager.cc when using Ascend NPU
+    list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
+    
+    # Collect Ascend NPU kernel source files (.ascend files)
+    file(GLOB ASCEND_GPU_KERNEL_SRCS src/kernel/ascend/*.ascend)
+    
+    # Compile each Ascend NPU kernel file
+    set(ASCEND_KERNEL_OBJS "")
+    foreach(ASCEND_SRC ${ASCEND_GPU_KERNEL_SRCS})
+      get_filename_component(ASCEND_SRC_NAME ${ASCEND_SRC} NAME_WE)
+      set(ASCEND_OBJ ${CMAKE_CURRENT_BINARY_DIR}/ascend_kernels/${ASCEND_SRC_NAME}.o)
+      
+      add_custom_command(
+        OUTPUT ${ASCEND_OBJ}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/ascend_kernels
+        COMMAND ${ASCENDC_COMPILER}
+          -c ${ASCEND_SRC}
+          -o ${ASCEND_OBJ}
+          -I${PROJECT_SOURCE_DIR}/include
+          -I${ASCEND_SDK_PATH}/include
+          -I${ASCEND_SDK_PATH}/include/acl
+          -I${PROJECT_SOURCE_DIR}/deps/cutlass/include
+          -I${PROJECT_SOURCE_DIR}/deps/json/include
+          -DYIRAGE_BACKEND_ASCEND_ENABLED
+          -DYIRAGE_FINGERPRINT_USE_ASCEND
+          -D__ASCEND__
+          -std=c++17
+          -fPIC
+          -O2
+        DEPENDS ${ASCEND_SRC}
+        COMMENT "Compiling Ascend NPU kernel: ${ASCEND_SRC_NAME}"
+      )
+      list(APPEND ASCEND_KERNEL_OBJS ${ASCEND_OBJ})
+    endforeach()
+    
+    # Create a custom target for Ascend kernels
+    if(ASCEND_KERNEL_OBJS)
+      add_custom_target(ascend_kernels DEPENDS ${ASCEND_KERNEL_OBJS})
+      add_dependencies(yirage_runtime ascend_kernels)
+      
+      # Link Ascend kernel objects to the runtime library  
+      target_sources(yirage_runtime PRIVATE ${ASCEND_KERNEL_OBJS})
+      message(STATUS "Ascend NPU kernels: ${ASCEND_GPU_KERNEL_SRCS}")
+    else()
+      message(STATUS "No Ascend NPU kernel files (.ascend) found")
+    endif()
+    
+    # Link Ascend runtime libraries
+    list(APPEND YIRAGE_LINK_LIBS ascendcl acl_op_compiler)
+  else()
+    message(WARNING "Ascend compiler not found - using CPU fallback for fingerprint")
+    # Fall back to CPU fingerprint
+    target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+  endif()
 endif()
 
 # MACA Backend (MetaX GPU)

@@ -1,0 +1,336 @@
+/* Copyright 2025 YiRage Project
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Ascend Customized Kernel Implementation
+ * This file contains the GPU fingerprint kernels for Ascend NPU
+ * Uses AscendC programming model for AI Core execution
+ */
+
+#ifdef YIRAGE_FINGERPRINT_USE_ASCEND
+
+#include "yirage/type.h"
+#include "yirage/config.h"
+#include "yirage/utils/ascend_helper.h"
+#include "yirage/utils/fingerprint_functions.h"
+
+// Ascend threadblock fingerprinters
+#include "yirage/threadblock/ascend/reduction.h"
+#include "yirage/threadblock/ascend/matmul.h"
+#include "yirage/threadblock/ascend/element_unary.h"
+#include "yirage/threadblock/ascend/element_binary.h"
+#include "yirage/threadblock/ascend/input_loader.h"
+#include "yirage/threadblock/ascend/output_saver.h"
+#include "yirage/threadblock/ascend/forloop_accum.h"
+#include "yirage/threadblock/ascend/rms_norm.h"
+#include "yirage/threadblock/ascend/concat.h"
+#include "yirage/threadblock/ascend/all_reduce.h"
+
+// Serializer headers
+#include "yirage/threadblock/serializer/kernel_params.h"
+#include "yirage/threadblock/serializer/input_loader_serializer.h"
+#include "yirage/threadblock/serializer/output_saver_serializer.h"
+#include "yirage/threadblock/serializer/reduction_serializer.h"
+#include "yirage/threadblock/serializer/matmul_serializer.h"
+#include "yirage/threadblock/serializer/element_unary_serializer.h"
+#include "yirage/threadblock/serializer/element_binary_serializer.h"
+#include "yirage/threadblock/serializer/forloop_accum_serializer.h"
+#include "yirage/threadblock/serializer/rms_norm_serializer.h"
+#include "yirage/threadblock/serializer/concat_serializer.h"
+
+// ACL headers for Ascend runtime
+#ifdef __ASCEND__
+#include "acl/acl.h"
+#include "acl/acl_rt.h"
+#endif
+
+namespace yirage {
+namespace kernel {
+
+using namespace yirage::type;
+using namespace yirage::utils;
+using namespace yirage::threadblock;
+
+// Ascend kernel function attribute
+#ifdef __ASCEND__
+#define ASCEND_KERNEL __global__
+#define ASCEND_DEVICE __device__
+#else
+#define ASCEND_KERNEL
+#define ASCEND_DEVICE
+#endif
+
+/**
+ * @brief Main fingerprint kernel for Ascend NPU
+ * 
+ * This kernel executes the fingerprint computation on Ascend AI Cores.
+ * It processes a sequence of threadblock operations encoded in the params array.
+ * 
+ * @param dmem_fp_ptr Device memory fingerprint pointer
+ * @param smem_fp_ptr Shared memory (L1 buffer) fingerprint pointer
+ * @param params Serialized kernel parameters
+ * @param num_operators Number of operators in the kernel
+ */
+ASCEND_KERNEL
+void ascend_fingerprint_kernel(
+    FPType *dmem_fp_ptr,
+    FPType *smem_fp_ptr,
+    int const *params,
+    int num_operators) {
+  
+#ifdef __ASCEND__
+  // Get thread identification for Ascend
+  // In AscendC, we use blockIdx and threadIdx equivalents
+  int thread_id = threadIdx.x;
+  int num_threads = blockDim.x;
+  int block_idx = blockIdx.x + blockIdx.y * gridDim.x + 
+                  blockIdx.z * gridDim.x * gridDim.y;
+#else
+  // Fallback for non-Ascend compilation (testing)
+  int thread_id = 0;
+  int num_threads = 1;
+  int block_idx = 0;
+#endif
+  
+  // Initialize lookup tables in L1 buffer
+  FPType *exp_lookup_table = smem_fp_ptr;
+  FPType *div_p_lookup_table = smem_fp_ptr + config::FP_PQ;
+  FPType *div_q_lookup_table = smem_fp_ptr + 2 * config::FP_PQ;
+  FPType *sqrt_p_lookup_table = smem_fp_ptr + 3 * config::FP_PQ;
+  FPType *sqrt_q_lookup_table = smem_fp_ptr + 4 * config::FP_PQ;
+  
+  // Shared memory working area (after lookup tables)
+  FPType *work_smem = smem_fp_ptr + 5 * config::FP_PQ;
+  
+  int param_idx = 0;
+  
+  // Process each operator in sequence
+  for (int op = 0; op < num_operators; op++) {
+    TBOperatorType op_type = static_cast<TBOperatorType>(params[param_idx++]);
+    
+    switch (op_type) {
+      case TB_INPUT_OP: {
+        int smem_offset, global_offset;
+        int stensor_rows, stensor_cols;
+        int dtensor_rows, dtensor_cols;
+        int dtensor_layout;
+        
+        deserialize_input_loader_parameters(params, param_idx,
+            smem_offset, global_offset,
+            stensor_rows, stensor_cols,
+            dtensor_rows, dtensor_cols,
+            dtensor_layout);
+        
+        TBInputLoaderFingerprinter loader(
+            dmem_fp_ptr, work_smem, smem_offset, global_offset,
+            MatrixCoord(dtensor_rows, dtensor_cols),
+            MatrixCoord(stensor_rows, stensor_cols),
+            dtensor_layout, thread_id, num_threads);
+        break;
+      }
+      
+      case TB_OUTPUT_OP:
+      case TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
+        int smem_offset, global_offset;
+        int stensor_rows, stensor_cols;
+        int dtensor_rows, dtensor_cols;
+        int dtensor_layout;
+        int forloop_dim, forloop_range;
+        
+        deserialize_output_saver_parameters(params, param_idx,
+            smem_offset, global_offset,
+            stensor_rows, stensor_cols,
+            dtensor_rows, dtensor_cols,
+            dtensor_layout, forloop_dim, forloop_range);
+        
+        TBOutputSaverFingerprinter saver(
+            op_type, work_smem, dmem_fp_ptr, smem_offset, global_offset,
+            MatrixCoord(stensor_rows, stensor_cols),
+            MatrixCoord(dtensor_rows, dtensor_cols),
+            dtensor_layout, forloop_dim, forloop_range,
+            div_p_lookup_table, div_q_lookup_table,
+            thread_id, num_threads);
+        break;
+      }
+      
+      case TB_REDUCTION_0_OP:
+      case TB_REDUCTION_1_OP:
+      case TB_REDUCTION_2_OP:
+      case TB_REDUCTION_0_TO_DIMX_OP:
+      case TB_REDUCTION_1_TO_DIMX_OP:
+      case TB_REDUCTION_2_TO_DIMX_OP: {
+        int input_smem_offset, output_smem_offset;
+        int output_num_elements, reduction_degree, inner_range;
+        
+        deserialize_reduction_parameters(params, param_idx,
+            input_smem_offset, output_smem_offset,
+            output_num_elements, reduction_degree, inner_range);
+        
+        TBReductionFingerprinter reduction(
+            op_type, work_smem + input_smem_offset, work_smem + output_smem_offset,
+            output_num_elements, reduction_degree, inner_range,
+            thread_id, num_threads);
+        break;
+      }
+      
+      case TB_MATMUL_OP: {
+        int A_offset, B_offset, C_offset;
+        int m, n, k;
+        
+        deserialize_matmul_parameters(params, param_idx,
+            A_offset, B_offset, C_offset, m, n, k);
+        
+        TBMatmulFingerprinter matmul(
+            work_smem + A_offset, work_smem + B_offset, work_smem + C_offset,
+            m, n, k, thread_id, num_threads);
+        break;
+      }
+      
+      case TB_EXP_OP:
+      case TB_SQUARE_OP:
+      case TB_SQRT_OP:
+      case TB_SILU_OP:
+      case TB_RELU_OP:
+      case TB_CLAMP_OP:
+      case TB_GELU_OP:
+      case TB_TANH_OP: {
+        int smem_offset, num_elements;
+        
+        deserialize_elementunary_op_parameters(params, param_idx,
+            smem_offset, num_elements);
+        
+        TBElementUnaryFingerprinter unary(
+            op_type, work_smem, work_smem, smem_offset, num_elements,
+            exp_lookup_table, thread_id, num_threads);
+        break;
+      }
+      
+      case TB_ADD_OP:
+      case TB_MUL_OP:
+      case TB_DIV_OP: {
+        int input1_offset, input2_offset, output_offset;
+        int num_elements;
+        
+        deserialize_elementbinary_op_parameters(params, param_idx,
+            input1_offset, input2_offset, output_offset, num_elements);
+        
+        TBElementBinaryFingerprinter binary(
+            op_type, work_smem, work_smem, work_smem,
+            input1_offset, input2_offset, output_offset, num_elements,
+            div_p_lookup_table, div_q_lookup_table,
+            thread_id, num_threads);
+        break;
+      }
+      
+      case TB_RMS_NORM_OP: {
+        int smem_offset, num_elements, norm_size;
+        
+        deserialize_rms_norm_parameters(params, param_idx,
+            smem_offset, num_elements, norm_size);
+        
+        TBRmsNormFingerprinter rms(
+            work_smem, work_smem, smem_offset, num_elements, norm_size,
+            div_p_lookup_table, div_q_lookup_table,
+            sqrt_p_lookup_table, sqrt_q_lookup_table,
+            thread_id, num_threads);
+        break;
+      }
+      
+      case TB_FORLOOP_ACCUM_NO_RED_OP:
+      case TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
+      case TB_FORLOOP_ACCUM_RED_LD_MEAN_OP:
+      case TB_FORLOOP_ACCUM_RED_LD_RMS_OP: {
+        int input_offset, output_offset;
+        int num_elements, forloop_dim, forloop_range;
+        
+        deserialize_forloop_accum_parameters(params, param_idx,
+            input_offset, output_offset, num_elements,
+            forloop_dim, forloop_range);
+        
+        TBForloopAccumFingerprinter accum(
+            op_type, work_smem, work_smem,
+            input_offset, output_offset, num_elements,
+            div_p_lookup_table, div_q_lookup_table,
+            forloop_dim, forloop_range,
+            thread_id, num_threads);
+        break;
+      }
+      
+      case TB_CONCAT_0_OP:
+      case TB_CONCAT_1_OP:
+      case TB_CONCAT_2_OP: {
+        int input_offset, output_offset, num_elements;
+        
+        deserialize_concat_parameters(params, param_idx,
+            input_offset, output_offset, num_elements);
+        
+        TBConcatFingerprinter concat(
+            work_smem, work_smem, input_offset, output_offset, num_elements,
+            thread_id, num_threads);
+        break;
+      }
+      
+      default:
+        // Unknown operator, skip
+        break;
+    }
+    
+#ifdef __ASCEND__
+    // Synchronize threads after each operation
+    __syncthreads();
+#endif
+  }
+}
+
+/**
+ * @brief Launch fingerprint kernel on Ascend NPU
+ * 
+ * @param dmem_fp_ptr Device memory pointer
+ * @param smem_fp_ptr Shared memory pointer
+ * @param params Kernel parameters
+ * @param num_operators Number of operators
+ * @param grid_dim Grid dimensions
+ * @param block_dim Block dimensions
+ * @param stream ACL stream
+ */
+void launch_ascend_fingerprint_kernel(
+    FPType *dmem_fp_ptr,
+    FPType *smem_fp_ptr,
+    int const *params,
+    int num_operators,
+    dim3 grid_dim,
+    dim3 block_dim,
+    void *stream) {
+  
+#ifdef __ASCEND__
+  // Launch kernel on Ascend NPU
+  ascend_fingerprint_kernel<<<grid_dim, block_dim, 0, (aclrtStream)stream>>>(
+      dmem_fp_ptr, smem_fp_ptr, params, num_operators);
+  
+  // Check for launch errors
+  aclError err = aclrtSynchronizeStream((aclrtStream)stream);
+  if (err != ACL_SUCCESS) {
+    fprintf(stderr, "Ascend kernel launch failed: %d\n", (int)err);
+  }
+#else
+  // CPU fallback for testing without Ascend hardware
+  // Execute kernel serially
+  ascend_fingerprint_kernel(dmem_fp_ptr, smem_fp_ptr, params, num_operators);
+#endif
+}
+
+} // namespace kernel
+} // namespace yirage
+
+#endif // YIRAGE_FINGERPRINT_USE_ASCEND
+

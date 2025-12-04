@@ -28,6 +28,14 @@ using namespace std;
 
 #if defined(YIRAGE_FINGERPRINT_USE_CUDA) || defined(YIRAGE_FINGERPRINT_USE_MACA)
 #define __execution_space__ __device__
+#elif defined(YIRAGE_FINGERPRINT_USE_ASCEND)
+// Ascend uses __aicore__ attribute for AI Core functions, but fingerprint 
+// functions run on host during verification, so no attribute needed
+#ifdef __ASCEND__
+#define __execution_space__ __device__
+#else
+#define __execution_space__
+#endif
 #else
 #define __execution_space__
 #endif

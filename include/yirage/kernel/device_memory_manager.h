@@ -27,12 +27,15 @@
 #ifdef YIRAGE_FINGERPRINT_USE_MACA
 #include <mcr/mc_runtime.h>
 #endif
+#ifdef YIRAGE_FINGERPRINT_USE_ASCEND
+// Ascend ACL headers included in source files when __ASCEND__ is defined
+#endif
 namespace yirage {
 namespace kernel {
 
 class DeviceMemoryManager {
 public:
-  int num_devices;
+  int num_gpus;
 #if defined(YIRAGE_FINGERPRINT_USE_CUDA)
   DeviceMemoryManager(int device_id, int num_gpus);
   static void set_gpu_device_id(int gpu_id);
@@ -44,6 +47,11 @@ public:
   static void set_gpu_device_id(int gpu_id);
   int gpu_id;
   // Note: MACA stream and blas handles can be added when needed
+#elif defined(YIRAGE_FINGERPRINT_USE_ASCEND)
+  DeviceMemoryManager(int num_gpus, int device_id);
+  static void set_gpu_device_id(int gpu_id);
+  int gpu_id;
+  void *stream;  // aclrtStream
 #else
   DeviceMemoryManager();
 #endif
@@ -68,6 +76,23 @@ public:
   // communication
   char *fp_base_ptr[yirage::config::MAX_NUM_DEVICES];
   char *stensor_fp_base_ptr;
+  
+#if defined(YIRAGE_FINGERPRINT_USE_ASCEND)
+  // Ascend-specific memory management
+  void *dmem_fp_ptr;  // Device memory for fingerprint
+  void *smem_fp_ptr;  // L1 buffer (shared memory equivalent)
+  size_t dmem_fp_size;
+  size_t smem_fp_size;
+  size_t dmem_fp_offset;
+  size_t smem_fp_offset;
+  
+  yirage::type::FPType *allocate_dmem_fingerprint(size_t size, bool reset = false);
+  yirage::type::FPType *allocate_smem_fingerprint(size_t size, bool reset = false);
+  void copy_to_device(void *dst, void const *src, size_t size);
+  void copy_to_host(void *dst, void const *src, size_t size);
+  void synchronize();
+  void *get_stream();
+#endif
 };
 
 void cython_set_gpu_device_id(int gpu_id);
