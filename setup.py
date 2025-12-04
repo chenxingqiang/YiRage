@@ -154,6 +154,7 @@ def config_cython():
                         "z3",
                         "abstract_subexpr",
                         "formal_verifier",
+                        "gomp",  # OpenMP library for parallel search
                     ] + (["cudadevrt", "cudart_static", "cudart", "cuda"] if macros and any("CUDA" in str(m) for m in macros) else [])
                       + (["mcruntime"] if macros and any("MACA" in str(m) for m in macros) else []),
                     library_dirs=[
@@ -165,9 +166,10 @@ def config_cython():
                     + cuda_library_dirs
                     + maca_library_dirs,
                     define_macros=macros,
-                    extra_compile_args=["-std=c++17"],
+                    extra_compile_args=["-std=c++17", "-fopenmp"],
                     extra_link_args=[
                         "-fPIC",
+                        "-fopenmp",  # OpenMP for parallel search
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'abstract_subexpr', 'release')}",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'formal_verifier', 'release')}",
                         f"-Wl,-rpath,{maca_home}/lib",  # MACA runtime library path
