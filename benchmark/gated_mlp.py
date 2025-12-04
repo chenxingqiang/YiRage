@@ -1,3 +1,9 @@
+import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'python'))
+os.environ['MACA_PATH'] = '/opt/maca'
+os.environ['LD_LIBRARY_PATH'] = '/opt/maca/lib:' + os.environ.get('LD_LIBRARY_PATH', '')
+
 import yirage as yr
 import numpy as np
 import torch
@@ -6,9 +12,9 @@ import time
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--bs', type=int, default=1)
+    parser.add_argument('-b', '--batch', type=int, default=8, help='Batch size')
     parser.add_argument('--file', type=str, default='gated_mlp.json')
-    parser.add_argument('--backend', type=str, default='cuda', choices=['cuda', 'mps', 'cpu'])
+    parser.add_argument('--backend', type=str, default='cuda', choices=['cuda', 'mps', 'cpu', 'maca'])
     parser.add_argument('--warmup', type=int, default=16)
     parser.add_argument('--profile', type=int, default=1000)
     parser.add_argument('--benchmark_iters', type=int, default=100)
@@ -16,7 +22,8 @@ if __name__ == "__main__":
     parser.add_argument('--fast', action='store_true', help='Fast test mode: skip optimization, use cached graph')
 
     args = parser.parse_args()
-    batch_size = args.bs
+    batch_size = args.batch
+    print(f"Batch size: {batch_size}")
     backend = args.backend
     
     # Fast mode: reduce iterations for quick testing
@@ -36,7 +43,10 @@ if __name__ == "__main__":
     filename = f'benchmark/saved_mugraphs/{backend}/{args.file}'
     
     # Select device
-    if backend == 'cuda' and torch.cuda.is_available():
+    # MACA uses CUDA interface via mcPytorch
+    if backend == 'maca' and torch.cuda.is_available():
+        device = 'cuda:0'  # MACA maps to CUDA device
+    elif backend == 'cuda' and torch.cuda.is_available():
         device = 'cuda:0'
     elif backend == 'mps' and torch.backends.mps.is_available():
         device = 'mps'
@@ -45,11 +55,11 @@ if __name__ == "__main__":
     
     print(f"Backend: {backend}, Device: {device}")
 
-    # Create graph
+    # Create graph (match PyTorch baseline: X[batch, 4096] @ W[4096, 4096])
     graph = yr.new_kernel_graph()
-    X = graph.new_input(dims=(8, 64), dtype=yr.float16)
-    W1 = graph.new_input(dims=(64, 64), dtype=yr.float16)
-    W2 = graph.new_input(dims=(64, 64), dtype=yr.float16)
+    X = graph.new_input(dims=(batch_size, 4096), dtype=yr.float16)
+    W1 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
+    W2 = graph.new_input(dims=(4096, 4096), dtype=yr.float16)
     O1 = graph.matmul(X, W1)
     O2 = graph.matmul(X, W2)
     O1 = graph.silu(O1)
@@ -88,9 +98,9 @@ if __name__ == "__main__":
             profile_iters=profile_iters
         )
 
-    # Create input tensors
+    # Create input tensors (match PyTorch baseline dimensions)
     input_tensors = [
-        torch.randn(8, 4096, dtype=torch.float16, device=device),
+        torch.randn(batch_size, 4096, dtype=torch.float16, device=device),
         torch.randn(4096, 4096, dtype=torch.float16, device=device),
         torch.randn(4096, 4096, dtype=torch.float16, device=device)
     ]

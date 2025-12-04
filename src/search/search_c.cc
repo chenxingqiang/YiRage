@@ -5,7 +5,9 @@
 #include "yirage/search/op_utils.h"
 #include "yirage/search/search.h"
 #include "yirage/utils/containers.h"
+#include "yirage/type.h"
 
+#include <cstring>
 #include <fstream>
 #include <iostream>
 
@@ -44,6 +46,23 @@ int cython_search(yirage::kernel::Graph const *input_graph,
   {
     search::GeneratorConfig config =
         search::GeneratorConfig::get_default_config();
+    
+    // Set backend type from parameter
+    if (backend != nullptr) {
+      std::string backend_str(backend);
+      config.backend_type = type::string_to_backend_type(backend_str);
+      
+      // Set warp size based on backend
+      if (config.backend_type == type::BT_MACA) {
+        config.warp_size = 64;  // MetaX MACA uses 64-thread warps
+        std::cout << "[Search] Using MACA backend (warpSize=64)" << std::endl;
+      } else if (config.backend_type == type::BT_CUDA) {
+        config.warp_size = 32;  // NVIDIA CUDA uses 32-thread warps
+      } else {
+        config.warp_size = 32;  // Default
+      }
+    }
+    
     if (default_config != nullptr) {
       if (!strcmp(default_config, "attention")) {
         config.enable_attention_specific_optimization();

@@ -158,13 +158,35 @@ std::vector<dim3>
     DimStrategy::get_block_dim_cand(std::vector<DTensor> const &tensors,
                                     dim3 grid_dim) {
   std::vector<dim3> cands = config.block_dim_to_explore;
-  cands.push_back({128, 1, 1});
+  
+  // Add default fallback based on warp size
+  int warp_size = config.warp_size > 0 ? config.warp_size : 32;
+  cands.push_back({static_cast<unsigned int>(warp_size * 4), 1, 1});  // 4 warps
+  
+  // Filter candidates to ensure warp alignment for the target backend
+  std::vector<dim3> aligned_cands;
+  for (dim3 const &cand : cands) {
+    int total_threads = cand.x * cand.y * cand.z;
+    if (total_threads % warp_size == 0 && total_threads <= 1024) {
+      aligned_cands.push_back(cand);
+    }
+  }
+  
+  // If no aligned candidates, fall back to warp-aligned defaults
+  if (aligned_cands.empty()) {
+    aligned_cands.push_back({static_cast<unsigned int>(warp_size), 1, 1});      // 1 warp
+    aligned_cands.push_back({static_cast<unsigned int>(warp_size * 2), 1, 1});  // 2 warps
+    aligned_cands.push_back({static_cast<unsigned int>(warp_size * 4), 1, 1});  // 4 warps
+  }
+  
+  aligned_cands = deduplicate(aligned_cands);
+  
   if (config.randomized_branches) {
     std::random_device rd;
     std::mt19937 g(rd());
-    std::shuffle(cands.begin(), cands.end(), g);
+    std::shuffle(aligned_cands.begin(), aligned_cands.end(), g);
   }
-  return cands;
+  return aligned_cands;
 }
 
 bool is_all_replicate_x(std::vector<int3> const &input_maps) {

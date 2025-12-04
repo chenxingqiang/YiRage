@@ -30,6 +30,12 @@ struct GeneratorConfig {
   size_t search_thread;
 
   VerifierType verifier_type;
+  
+  // Backend type for target-specific optimizations
+  type::BackendType backend_type = type::BT_CUDA;
+  
+  // Warp size for the target backend (CUDA=32, MACA=64)
+  int warp_size = 32;
 
   std::vector<type::KNOperatorType> knop_to_explore;
   std::vector<type::TBOperatorType> tbop_to_explore;
@@ -60,6 +66,8 @@ NLOHMANN_DEFINE_TYPE_NON_INTRUSIVE(GeneratorConfig,
                                    max_num_threadblock_graph_inputs,
                                    max_num_threadblock_graph_outputs,
                                    search_thread,
+                                   backend_type,
+                                   warp_size,
                                    knop_to_explore,
                                    tbop_to_explore,
                                    imap_to_explore,

@@ -5,14 +5,17 @@ import time
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-b', '--batch', type=int, required=True)
-parser.add_argument('--backend', type=str, default='cuda', choices=['cuda', 'mps', 'cpu'],
-                    help='Backend device: cuda, mps, or cpu')
+parser.add_argument('--backend', type=str, default='cuda', choices=['cuda', 'mps', 'cpu', 'maca'],
+                    help='Backend device: cuda, mps, cpu, or maca')
 args = parser.parse_args()
 print("Batch size", args.batch)
 print("Backend", args.backend)
 
 # Select device based on backend argument
-if args.backend == 'cuda' and torch.cuda.is_available():
+# MACA uses CUDA interface via mcPytorch
+if args.backend == 'maca' and torch.cuda.is_available():
+    device = 'cuda'  # MACA maps to CUDA device
+elif args.backend == 'cuda' and torch.cuda.is_available():
     device = 'cuda'
 elif args.backend == 'mps' and torch.backends.mps.is_available():
     device = 'mps'

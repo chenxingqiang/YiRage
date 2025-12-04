@@ -12,6 +12,8 @@ GeneratorConfig GeneratorConfig::get_default_config() {
       2 /* max_num_threadblock_graph_outputs */,
       16 /* search_thread */,
       VerifierType::PROBABILISTIC_VERIFIER,
+      type::BT_CUDA /* backend_type - default to CUDA */,
+      32 /* warp_size - default to CUDA's 32 */,
       {
           type::KN_MATMUL_OP,
           type::KN_EXP_OP,
@@ -79,6 +81,8 @@ void GeneratorConfig::enable_concat_matmul_transformation() {
 
 void GeneratorConfig::show() const {
   printf("========== Search Configuration ==========\n");
+  printf("  backend_type: %d (CUDA=0, MACA=5)\n", static_cast<int>(backend_type));
+  printf("  warp_size: %d\n", warp_size);
   printf("  max num threadblock graph op: %zu\n", max_num_threadblock_graph_op);
   printf("  max num kernel_graph op: %zu\n", max_num_kernel_graph_op);
   printf("  max num threadblock graphs: %zu\n", max_num_threadblock_graphs);
