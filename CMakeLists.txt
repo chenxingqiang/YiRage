@@ -289,9 +289,17 @@ elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
   # Ascend NPU - don't define CPU fingerprint, Ascend has its own
   message(STATUS "Using Ascend fingerprint (parallel search enabled)")
 else()
-  # When no GPU backend is enabled, use CPU fingerprint (single-threaded)
+  # CPU fingerprint - still enable parallel search with OpenMP
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
-  message(STATUS "Using CPU fingerprint (parallel search disabled)")
+  
+  # Enable OpenMP for parallel search even with CPU fingerprint
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for CPU parallel search")
+  else()
+    message(WARNING "OpenMP not found - search will be single-threaded")
+  endif()
 endif()
 
 if (NOT "${USE_CPU}" STREQUAL "OFF")
@@ -330,9 +338,14 @@ if (NOT "${USE_NKI}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_NKI_ENABLED)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_NKI)  # Backward compatibility
   # NKI (AWS Trainium/Inferentia) - use CPU fingerprint for development
-  # TODO: Add NKI-native fingerprint when available
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
-  message(STATUS "NKI backend: Using CPU fingerprint (parallel search disabled)")
+  
+  # Enable OpenMP for parallel search with NKI
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for NKI parallel search")
+  endif()
 endif()
 
 if (NOT "${USE_TRITON}" STREQUAL "OFF")

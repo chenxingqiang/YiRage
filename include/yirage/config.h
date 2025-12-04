@@ -20,14 +20,9 @@
 // ============================================================================
 // Parallel Search Configuration
 // ============================================================================
-// Enable parallel search for any GPU-based fingerprint backend
-// Only CPU fingerprint requires single-threaded execution
-#if defined(YIRAGE_FINGERPRINT_USE_CUDA) || \
-    defined(YIRAGE_FINGERPRINT_USE_MACA) || \
-    defined(YIRAGE_FINGERPRINT_USE_ASCEND) || \
-    defined(YIRAGE_USE_FORMAL_VERIFIER)
+// Enable parallel search for ALL backends (GPU and CPU)
+// OpenMP is used for multi-threaded search to maximize CPU utilization
 #define YIRAGE_ENABLE_PARALLEL_SEARCH
-#endif
 
 // ============================================================================
 
