@@ -24,18 +24,26 @@
 #ifdef YIRAGE_FINGERPRINT_USE_CUDA
 #include <cublas_v2.h>
 #endif
+#ifdef YIRAGE_FINGERPRINT_USE_MACA
+#include <mcr/mc_runtime.h>
+#endif
 namespace yirage {
 namespace kernel {
 
 class DeviceMemoryManager {
 public:
   int num_devices;
-#ifdef YIRAGE_FINGERPRINT_USE_CUDA
+#if defined(YIRAGE_FINGERPRINT_USE_CUDA)
   DeviceMemoryManager(int device_id, int num_gpus);
   static void set_gpu_device_id(int gpu_id);
   int gpu_id;
   cudaStream_t stream[yirage::config::MAX_NUM_DEVICES];
   cublasHandle_t blas[yirage::config::MAX_NUM_DEVICES];
+#elif defined(YIRAGE_FINGERPRINT_USE_MACA)
+  DeviceMemoryManager(int device_id, int num_gpus);
+  static void set_gpu_device_id(int gpu_id);
+  int gpu_id;
+  // Note: MACA stream and blas handles can be added when needed
 #else
   DeviceMemoryManager();
 #endif
