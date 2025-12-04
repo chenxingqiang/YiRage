@@ -308,18 +308,41 @@ endif()
 
 if (NOT "${USE_MPS}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MPS_ENABLED)
+  
+  # Enable OpenMP for parallel search with MPS (Apple Metal)
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for MPS parallel search")
+  else()
+    # On macOS, OpenMP might need libomp from Homebrew
+    message(STATUS "OpenMP not found for MPS - try: brew install libomp")
+  endif()
 endif()
 
 if (NOT "${USE_CUDNN}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDNN_ENABLED)
+  # CUDNN uses CUDA's OpenMP, already linked above
 endif()
 
 if (NOT "${USE_MKL}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MKL_ENABLED)
+  # MKL has its own OpenMP, enable parallel search
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for MKL parallel search")
+  endif()
 endif()
 
 if (NOT "${USE_MKLDNN}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MKLDNN_ENABLED)
+  # MKLDNN/oneDNN uses OpenMP internally
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for MKLDNN parallel search")
+  endif()
 endif()
 
 if (NOT "${USE_OPENMP}" STREQUAL "OFF")
@@ -332,6 +355,12 @@ endif()
 
 if (NOT "${USE_XEON}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_XEON_ENABLED)
+  # Intel Xeon - enable parallel search with OpenMP
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for Xeon parallel search")
+  endif()
 endif()
 
 if (NOT "${USE_NKI}" STREQUAL "OFF")
