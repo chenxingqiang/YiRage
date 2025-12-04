@@ -1,3 +1,8 @@
+// CPU implementation of DeviceMemoryManager
+// For CUDA/MACA backends, see device_memory_manager.cu/maca files
+
+#ifdef YIRAGE_FINGERPRINT_USE_CPU
+
 #include "yirage/kernel/device_memory_manager.h"
 #include "yirage/utils/math_utils.h"
 
@@ -8,8 +13,6 @@ using namespace yirage::type;
 using namespace yirage::config;
 
 DeviceMemoryManager *DeviceMemoryManager::singleton = nullptr;
-
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
 DeviceMemoryManager::DeviceMemoryManager() {
   num_devices = 1; // Default to 1 device for non-CUDA environments
   auto initizalize_exp_lookup_table =
@@ -73,7 +76,8 @@ DeviceMemoryManager *DeviceMemoryManager::get_instance() {
   }
   return singleton;
 }
-#endif
 
 } // namespace kernel
 } // namespace yirage
+
+#endif // YIRAGE_FINGERPRINT_USE_CPU
