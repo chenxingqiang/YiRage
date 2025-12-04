@@ -471,11 +471,16 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
     
     # Create a custom target for MACA kernels
     if(MACA_KERNEL_OBJS)
-      add_custom_target(maca_kernels DEPENDS ${MACA_KERNEL_OBJS})
+      add_custom_target(maca_kernels ALL DEPENDS ${MACA_KERNEL_OBJS})
       add_dependencies(yirage_runtime maca_kernels)
       
-      # Link MACA kernel objects to the runtime library  
-      target_sources(yirage_runtime PRIVATE ${MACA_KERNEL_OBJS})
+      # Link MACA kernel objects by adding them to link libraries
+      # Using OBJECT_LIBRARY approach for proper linking
+      set_source_files_properties(${MACA_KERNEL_OBJS} PROPERTIES 
+        EXTERNAL_OBJECT true
+        GENERATED true
+      )
+      target_link_libraries(yirage_runtime PUBLIC ${MACA_KERNEL_OBJS})
       message(STATUS "MACA GPU kernels: ${MACA_GPU_KERNEL_SRCS}")
     else()
       message(STATUS "No MACA GPU kernel files (.maca) found")
