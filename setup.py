@@ -46,6 +46,14 @@ cuda_library_dirs = [
     os.path.join(cuda_home, "lib64", "stubs"),
 ]
 
+# MACA SDK paths (MetaX GPU)
+maca_home = os.environ.get("MACA_PATH") or os.environ.get("MACA_HOME") or "/opt/maca"
+maca_include_dir = os.path.join(maca_home, "include")
+maca_library_dirs = [
+    os.path.join(maca_home, "lib"),
+    os.path.join(maca_home, "lib64"),
+]
+
 z3_path = path.dirname(z3.__file__)
 
 # Use version.py to get package version
@@ -61,6 +69,7 @@ def get_backend_macros(config_file):
         "USE_CUDNN": None,
         "USE_MPS": None,
         "USE_CUSPARSELT": None,
+        "USE_MACA": None,  # MetaX MACA GPU backend
         # CPU Backends
         "USE_CPU": None,
         "USE_MKL": None,
@@ -99,6 +108,8 @@ def get_backend_macros(config_file):
             if flag_name == "USE_CUDA":
                 macros.append(("YIRAGE_BACKEND_USE_CUDA", None))
                 macros.append(("YIRAGE_FINGERPRINT_USE_CUDA", None))
+            elif flag_name == "USE_MACA":
+                macros.append(("YIRAGE_FINGERPRINT_USE_MACA", None))
             elif flag_name == "USE_NKI":
                 macros.append(("YIRAGE_BACKEND_USE_NKI", None))
                 macros.append(("YIRAGE_FINGERPRINT_USE_CPU", None))
@@ -136,26 +147,30 @@ def config_cython():
                         path.join(yirage_path, "build", "formal_verifier", "release"),
                         path.join(z3_path, "include"),
                         cuda_include_dir,
+                        maca_include_dir,
                     ],
                     libraries=[
                         "yirage_runtime",
                         "z3",
                         "abstract_subexpr",
                         "formal_verifier",
-                    ] + (["cudadevrt", "cudart_static", "cudart", "cuda"] if macros and any("CUDA" in str(m) for m in macros) else []),
+                    ] + (["cudadevrt", "cudart_static", "cudart", "cuda"] if macros and any("CUDA" in str(m) for m in macros) else [])
+                      + (["mcruntime"] if macros and any("MACA" in str(m) for m in macros) else []),
                     library_dirs=[
                         path.join(yirage_path, "build"),
                         path.join(z3_path, "lib"),
                         path.join(yirage_path, "build", "abstract_subexpr", "release"),
                         path.join(yirage_path, "build", "formal_verifier", "release"),
                     ]
-                    + cuda_library_dirs,
+                    + cuda_library_dirs
+                    + maca_library_dirs,
                     define_macros=macros,
                     extra_compile_args=["-std=c++17"],
                     extra_link_args=[
                         "-fPIC",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'abstract_subexpr', 'release')}",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'formal_verifier', 'release')}",
+                        f"-Wl,-rpath,{maca_home}/lib",  # MACA runtime library path
                     ],
                     language="c++",
                 )
