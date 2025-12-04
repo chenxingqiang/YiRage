@@ -17,6 +17,20 @@
 #include <cstddef>
 #include <cstdint>
 
+// ============================================================================
+// Parallel Search Configuration
+// ============================================================================
+// Enable parallel search for any GPU-based fingerprint backend
+// Only CPU fingerprint requires single-threaded execution
+#if defined(YIRAGE_FINGERPRINT_USE_CUDA) || \
+    defined(YIRAGE_FINGERPRINT_USE_MACA) || \
+    defined(YIRAGE_FINGERPRINT_USE_ASCEND) || \
+    defined(YIRAGE_USE_FORMAL_VERIFIER)
+#define YIRAGE_ENABLE_PARALLEL_SEARCH
+#endif
+
+// ============================================================================
+
 namespace yirage {
 namespace config {
 

@@ -274,12 +274,22 @@ if (NOT "${USE_CUDA}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)  # Backward compatibility
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CUDA)
+  
+  # Enable OpenMP for parallel search with CUDA
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for CUDA parallel search")
+  endif()
 elseif (NOT "${USE_MACA}" STREQUAL "OFF")
   # MACA is CUDA-compatible, use MACA fingerprint (enables parallel search)
   # Don't define YIRAGE_FINGERPRINT_USE_CPU here - it disables OpenMP
   message(STATUS "Using MACA fingerprint (parallel search enabled)")
+elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
+  # Ascend NPU - don't define CPU fingerprint, Ascend has its own
+  message(STATUS "Using Ascend fingerprint (parallel search enabled)")
 else()
-  # When both CUDA and MACA are disabled, use CPU fingerprint (single-threaded)
+  # When no GPU backend is enabled, use CPU fingerprint (single-threaded)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
   message(STATUS "Using CPU fingerprint (parallel search disabled)")
 endif()
@@ -319,7 +329,10 @@ endif()
 if (NOT "${USE_NKI}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_NKI_ENABLED)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_NKI)  # Backward compatibility
+  # NKI (AWS Trainium/Inferentia) - use CPU fingerprint for development
+  # TODO: Add NKI-native fingerprint when available
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+  message(STATUS "NKI backend: Using CPU fingerprint (parallel search disabled)")
 endif()
 
 if (NOT "${USE_TRITON}" STREQUAL "OFF")
@@ -328,8 +341,15 @@ endif()
 
 if (NOT "${USE_ASCEND}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_ASCEND_ENABLED)
-  # Ascend uses CPU fingerprint for development (actual execution needs CANN)
+  # Ascend NPU fingerprint (enables parallel search)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_ASCEND)
+  
+  # Enable OpenMP for parallel search with Ascend
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for Ascend parallel search")
+  endif()
 endif()
 
 # MACA Backend (MetaX GPU)
