@@ -399,8 +399,9 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
   # Include MACA configuration
   include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
-  # MACA uses CUDA-compatible fingerprint (enables parallel search)
-  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
+  # MACA uses CPU fingerprint for verification (mxcc doesn't compile .cu files yet)
+  # This still enables parallel search through OpenMP
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
   
   # Enable OpenMP for parallel search with MACA
   find_package(OpenMP)
