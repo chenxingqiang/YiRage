@@ -941,17 +941,15 @@ class KNGraph:
             best_graph, best_perf = None, float("inf")
             
             if not maca_available:
-                # No MACA GPU available - return first valid graph
-                for idx, g in enumerate(all_graphs):
-                    if g.valid_kernels():
-                        best_graph = g
-                        print(f"  Selected muGraph {idx} (first valid)")
-                        break
-                    else:
-                        print(f"  muGraph {idx}: {g.get_error_message()}")
-                
-                if best_graph is None:
-                    print("  Warning: No valid graphs found!")
+                # No mcPytorch available - return first graph without profiling
+                # The graph will be compiled when executed
+                print(f"  Skipping profiling (mcPytorch not available)")
+                print(f"  Returning first graph from {len(all_graphs)} candidates")
+                if len(all_graphs) > 0:
+                    best_graph = all_graphs[0]
+                    print(f"  ✓ Selected muGraph 0")
+                else:
+                    print("  Warning: No graphs found!")
                     return None
             else:
                 # MACA GPU available - profile and select best
