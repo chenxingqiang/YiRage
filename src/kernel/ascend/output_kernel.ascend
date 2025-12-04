@@ -1,0 +1,50 @@
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * This file is part of YiRage (Yi Revolutionary AGile Engine)
+ * 
+ * Ascend Output Kernel
+ * 
+ * Output tensor operations for Huawei Ascend NPU backend.
+ */
+
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/output.h"
+#include "yirage/utils/ascend_helper.h"
+#include <cassert>
+
+#ifdef __ASCEND__
+#include "acl/acl.h"
+#endif
+
+namespace yirage {
+namespace kernel {
+
+using namespace yirage::type;
+using namespace yirage::config;
+
+#ifdef YIRAGE_FINGERPRINT_USE_ASCEND
+
+bool KNOutputOp::fingerprint(void) {
+  // Output operation is a no-op for fingerprint computation
+  // The output tensor already has the correct fingerprint from previous ops
+  return true;
+}
+
+#endif // YIRAGE_FINGERPRINT_USE_ASCEND
+
+} // namespace kernel
+} // namespace yirage
+

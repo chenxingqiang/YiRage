@@ -1,0 +1,109 @@
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * This file is part of YiRage (Yi Revolutionary AGile Engine)
+ * 
+ * Ascend Input Kernel
+ * 
+ * Input tensor operations for Huawei Ascend NPU backend.
+ */
+
+#include "yirage/kernel/device_memory_manager.h"
+#include "yirage/kernel/graph.h"
+#include "yirage/kernel/input.h"
+#include "yirage/utils/ascend_helper.h"
+#include "yirage/utils/fingerprint_functions.h"
+#include <cassert>
+
+#ifdef __ASCEND__
+#include "acl/acl.h"
+#endif
+
+namespace yirage {
+namespace kernel {
+
+using namespace yirage::type;
+using namespace yirage::config;
+using namespace yirage::utils;
+
+#ifdef YIRAGE_FINGERPRINT_USE_ASCEND
+
+/**
+ * @brief Initialize input tensor fingerprint on Ascend
+ */
+#ifdef __ASCEND__
+__global__
+#endif
+void initialize_input_fingerprint_ascend(yirage::type::FPType *output_ptr,
+                                         int num_elements,
+                                         int seed) {
+#ifdef __ASCEND__
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  int stride = blockDim.x * gridDim.x;
+#else
+  int tid = 0;
+  int stride = 1;
+#endif
+  
+  for (int i = tid; i < num_elements; i += stride) {
+    // Initialize with deterministic values based on position and seed
+    output_ptr[i] = (i + seed) % FP_PQ;
+  }
+}
+
+bool KNInputOp::fingerprint(void) {
+  assert(kgraph->gpu_dim.y == 1);
+  assert(kgraph->gpu_dim.z == 1);
+  
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
+  
+#ifdef __ASCEND__
+  checkACL(aclrtSetDevice(dmm->gpu_id));
+#endif
+
+  DTensor const &output = output_tensors[0];
+  int num_elements = output.num_elements();
+  
+  int const num_threads_per_blk = 256;
+  int num_blocks =
+      (num_elements + num_threads_per_blk - 1) / num_threads_per_blk;
+  
+  // Use guid as seed for deterministic initialization
+  int seed = static_cast<int>(guid) % FP_PQ;
+  
+  for (int gpu_id = 0; gpu_id < kgraph->gpu_dim.x; gpu_id++) {
+    yirage::type::FPType *output_ptr =
+        reinterpret_cast<yirage::type::FPType *>(
+            dmm->fp_base_ptr[gpu_id] + output.fp_offset);
+    
+#ifdef __ASCEND__
+    initialize_input_fingerprint_ascend<<<num_blocks, num_threads_per_blk>>>(
+        output_ptr, num_elements, seed);
+    checkACL(aclrtSynchronizeDevice());
+#else
+    // CPU fallback
+    for (int i = 0; i < num_elements; i++) {
+      output_ptr[i] = (i + seed) % FP_PQ;
+    }
+#endif
+  }
+  return true;
+}
+
+#endif // YIRAGE_FINGERPRINT_USE_ASCEND
+
+} // namespace kernel
+} // namespace yirage
+
