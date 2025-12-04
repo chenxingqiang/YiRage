@@ -120,6 +120,10 @@ size_t const MAX_SMEM_SIZE = mps::MAX_SMEM_SIZE;
 #elif defined(YIRAGE_FINGERPRINT_USE_CUDA)
 size_t const MAX_DMEM_FP_SIZE = (size_t)2 * 1024 * 1024 * 1024; // 2 GB
 size_t const MAX_SMEM_FP_SIZE = (size_t)1024 * 1024;            // 1 MB
+#elif defined(YIRAGE_FINGERPRINT_USE_MACA)
+// MetaX MACA GPU - similar memory limits to CUDA
+size_t const MAX_DMEM_FP_SIZE = (size_t)2 * 1024 * 1024 * 1024; // 2 GB
+size_t const MAX_SMEM_FP_SIZE = (size_t)1024 * 1024;            // 1 MB
 #else
 size_t const MAX_DMEM_FP_SIZE = (size_t)64 * 1024 * 1024 * 1024; // 64 GB
 size_t const MAX_SMEM_FP_SIZE = (size_t)64 * 1024 * 1024;        // 64 MB
