@@ -40,7 +40,7 @@ public:
   cudaStream_t stream[yirage::config::MAX_NUM_DEVICES];
   cublasHandle_t blas[yirage::config::MAX_NUM_DEVICES];
 #elif defined(YIRAGE_FINGERPRINT_USE_MACA)
-  DeviceMemoryManager(int device_id, int num_gpus);
+  DeviceMemoryManager(int num_gpus, int device_id);
   static void set_gpu_device_id(int gpu_id);
   int gpu_id;
   // Note: MACA stream and blas handles can be added when needed
