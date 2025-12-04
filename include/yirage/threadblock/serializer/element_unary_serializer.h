@@ -15,9 +15,13 @@
 
 #pragma once
 
-#ifdef YIRAGE_BACKEND_USE_CUDA
+#if defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_FINGERPRINT_USE_MACA)
 
+#ifdef YIRAGE_BACKEND_USE_CUDA
 #include <vector_types.h>
+#elif defined(YIRAGE_FINGERPRINT_USE_MACA)
+#include <common/__clang_maca_vector_types.h>
+#endif
 
 namespace yirage {
 namespace threadblock {
