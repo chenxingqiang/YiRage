@@ -31,6 +31,9 @@ using namespace yirage::config;
 
 #ifdef YIRAGE_FINGERPRINT_USE_MACA
 
+// Static member initialization
+DeviceMemoryManager *DeviceMemoryManager::singleton = nullptr;
+
 DeviceMemoryManager::DeviceMemoryManager(int _num_gpus, int _gpu_id)
     : num_devices(_num_gpus), gpu_id(_gpu_id) {
   // fingerprint related fields
