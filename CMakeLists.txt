@@ -274,9 +274,14 @@ if (NOT "${USE_CUDA}" STREQUAL "OFF")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)  # Backward compatibility
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CUDA)
+elseif (NOT "${USE_MACA}" STREQUAL "OFF")
+  # MACA is CUDA-compatible, use MACA fingerprint (enables parallel search)
+  # Don't define YIRAGE_FINGERPRINT_USE_CPU here - it disables OpenMP
+  message(STATUS "Using MACA fingerprint (parallel search enabled)")
 else()
-  # When CUDA is disabled, use CPU fingerprint
+  # When both CUDA and MACA are disabled, use CPU fingerprint (single-threaded)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+  message(STATUS "Using CPU fingerprint (parallel search disabled)")
 endif()
 
 if (NOT "${USE_CPU}" STREQUAL "OFF")
@@ -332,8 +337,17 @@ if (NOT "${USE_MACA}" STREQUAL "OFF")
   # Include MACA configuration
   include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
-  # MACA uses CUDA-compatible fingerprint
+  # MACA uses CUDA-compatible fingerprint (enables parallel search)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
+  
+  # Enable OpenMP for parallel search with MACA
+  find_package(OpenMP)
+  if(OpenMP_CXX_FOUND)
+    target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
+    message(STATUS "OpenMP enabled for MACA parallel search")
+  else()
+    message(WARNING "OpenMP not found - MACA search will be single-threaded")
+  endif()
   
   # Set MACA paths
   if(DEFINED ENV{MACA_PATH})
