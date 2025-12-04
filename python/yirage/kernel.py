@@ -915,6 +915,106 @@ class KNGraph:
                 return best_graph
             
             return None
+        elif backend == "ascend":
+            # Ascend NPU backend: profile and select best graph
+            # Uses torch_npu for Huawei Ascend NPUs
+            print(f"Ascend backend: Processing {len(all_graphs)} muGraphs...")
+            print(f"  Note: Ascend uses AI Cores with Cube/Vector units")
+            
+            # Check if Ascend NPU is available
+            ascend_available = False
+            try:
+                import torch_npu
+                if torch.npu.is_available():
+                    ascend_available = True
+                    device_name = torch.npu.get_device_name(0)
+                    print(f"  Detected Ascend NPU: {device_name}")
+            except (ImportError, AttributeError, RuntimeError):
+                print(f"  Warning: torch_npu not available or NPU not detected")
+                print(f"  Using CPU fallback for profiling")
+            
+            best_graph, best_perf = None, float("inf")
+            
+            if ascend_available:
+                # Profile on Ascend NPU
+                for idx, g in enumerate(all_graphs):
+                    dtensors = g.cygraph.get_input_dtensors()
+                    input_tensors = list()
+                    for t in dtensors:
+                        dims, strides = g.cygraph.get_input_dtensor_shape_and_stride(t)
+                        dtype = convert_dtype_to_torch_type(t.dtype)
+                        x = torch.randn(dims, dtype=dtype, device="npu:0")
+                        x = torch.as_strided(x, size=dims, stride=strides)
+                        input_tensors.append(x)
+                    
+                    if not g.valid_kernels():
+                        print(f"  muGraph[{idx}]: {g.get_error_message()}")
+                        continue
+                    
+                    # Warmup
+                    for _ in range(warmup_iters):
+                        g(inputs=input_tensors)
+                    torch.npu.synchronize()
+                    
+                    # Profile using NPU events
+                    starter = torch.npu.Event(enable_timing=True)
+                    ender = torch.npu.Event(enable_timing=True)
+                    starter.record()
+                    for _ in range(profile_iters):
+                        g(inputs=input_tensors)
+                    ender.record()
+                    torch.npu.synchronize()
+                    perf = starter.elapsed_time(ender) / profile_iters
+                    print(f"  muGraph[{idx}]: {perf:.4f} ms")
+                    if perf < best_perf:
+                        best_graph, best_perf = g, perf
+            else:
+                # CPU fallback profiling
+                import time
+                for idx, g in enumerate(all_graphs):
+                    dtensors = g.cygraph.get_input_dtensors()
+                    input_tensors = list()
+                    for t in dtensors:
+                        dims, strides = g.cygraph.get_input_dtensor_shape_and_stride(t)
+                        dtype = convert_dtype_to_torch_type(t.dtype)
+                        x = torch.randn(dims, dtype=dtype, device="cpu")
+                        x = torch.as_strided(x, size=dims, stride=strides)
+                        input_tensors.append(x)
+                    
+                    # Warmup
+                    for _ in range(warmup_iters):
+                        try:
+                            g(inputs=input_tensors)
+                        except:
+                            continue
+                    
+                    # Profile
+                    start_time = time.perf_counter()
+                    for _ in range(profile_iters):
+                        try:
+                            g(inputs=input_tensors)
+                        except:
+                            break
+                    elapsed_ms = (time.perf_counter() - start_time) / profile_iters * 1000
+                    print(f"  muGraph[{idx}]: {elapsed_ms:.4f} ms (CPU fallback)")
+                    if elapsed_ms < best_perf:
+                        best_graph, best_perf = g, perf
+            
+            if best_graph is not None:
+                best_graph.backend = "ascend"
+                if use_graph_dataset:
+                    graph_dataset.store(
+                        input_graph=self.cygraph,
+                        optimized_graph=best_graph,
+                        imaps=imaps,
+                        omaps=omaps,
+                        griddims=griddims,
+                        blockdims=blockdims,
+                        fmaps=fmaps,
+                        franges=franges,
+                        backend=backend,
+                    )
+            return best_graph
         elif backend == "maca":
             # MACA backend: profile and select best graph
             # MACA uses CUDA-compatible runtime via mcPytorch

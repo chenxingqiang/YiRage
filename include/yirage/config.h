@@ -124,6 +124,11 @@ size_t const MAX_SMEM_FP_SIZE = (size_t)1024 * 1024;            // 1 MB
 // MetaX MACA GPU - similar memory limits to CUDA
 size_t const MAX_DMEM_FP_SIZE = (size_t)2 * 1024 * 1024 * 1024; // 2 GB
 size_t const MAX_SMEM_FP_SIZE = (size_t)1024 * 1024;            // 1 MB
+#elif defined(YIRAGE_FINGERPRINT_USE_ASCEND)
+// Huawei Ascend NPU - uses CPU fallback for fingerprint
+// Memory limits based on Ascend 910B (64GB HBM, 512KB L1)
+size_t const MAX_DMEM_FP_SIZE = (size_t)64 * 1024 * 1024 * 1024; // 64 GB
+size_t const MAX_SMEM_FP_SIZE = (size_t)64 * 1024 * 1024;        // 64 MB (CPU fallback)
 #else
 size_t const MAX_DMEM_FP_SIZE = (size_t)64 * 1024 * 1024 * 1024; // 64 GB
 size_t const MAX_SMEM_FP_SIZE = (size_t)64 * 1024 * 1024;        // 64 MB
