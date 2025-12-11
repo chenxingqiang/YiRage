@@ -434,7 +434,12 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
     # Remove CPU-based device_memory_manager.cc when using Ascend NPU
     list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
     
+    # Add Ascend-specific device_memory_manager (Host-side ACL API, compiled with g++)
+    list(APPEND YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/ascend/device_memory_manager.cc)
+    
     # Collect Ascend NPU kernel source files (.ascend files)
+    # Note: .cc files in ascend/ are Host-side code, compiled with g++
+    # .ascend files are Device-side NPU kernels, compiled with bisheng
     file(GLOB ASCEND_GPU_KERNEL_SRCS src/kernel/ascend/*.ascend)
     
     # Compile each Ascend NPU kernel file
