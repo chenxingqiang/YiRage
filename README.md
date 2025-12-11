@@ -16,6 +16,8 @@
 
 ## 🎯 About YiRage
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/chenxingqiang/YiRage)
+
 **YiRage** (Yield Revolutionary AGile Engine) extends Mirage with comprehensive **multi-backend support**, enabling LLM inference optimization across diverse hardware platforms.
 
 ### YiRage = Mirage + Multi-Backend Architecture
