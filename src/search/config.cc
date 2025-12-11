@@ -81,8 +81,33 @@ void GeneratorConfig::enable_concat_matmul_transformation() {
 
 void GeneratorConfig::show() const {
   printf("========== Search Configuration ==========\n");
-  printf("  backend_type: %d (CUDA=0, MACA=5)\n", static_cast<int>(backend_type));
-  printf("  warp_size: %d\n", warp_size);
+  
+  // Show backend-specific information
+  // Map backend_type enum to name
+  const char* backend_name = "UNKNOWN";
+  switch (backend_type) {
+    case type::BT_CUDA:     backend_name = "CUDA"; break;
+    case type::BT_MPS:      backend_name = "MPS"; break;
+    case type::BT_CUDNN:    backend_name = "CUDNN"; break;
+    case type::BT_CUSPARSELT: backend_name = "CUSPARSELT"; break;
+    case type::BT_ASCEND:   backend_name = "ASCEND"; break;
+    case type::BT_MACA:     backend_name = "MACA"; break;
+    case type::BT_CPU:      backend_name = "CPU"; break;
+    default: backend_name = "UNKNOWN"; break;
+  }
+  printf("  backend_type: %s (%d)\n", backend_name, static_cast<int>(backend_type));
+  
+  if (backend_type == type::BT_ASCEND) {
+    printf("  architecture: Huawei Ascend NPU (AI Core based)\n");
+    printf("  parallelism: AI Core blocks (no warp concept)\n");
+    printf("  cube_unit: 16x16 matrix tiles\n");
+  } else if (backend_type == type::BT_MACA) {
+    printf("  warp_size: %d (MetaX 64-thread warps)\n", warp_size);
+  } else if (backend_type == type::BT_CUDA) {
+    printf("  warp_size: %d (NVIDIA 32-thread warps)\n", warp_size);
+  } else {
+    printf("  warp_size: %d\n", warp_size);
+  }
   printf("  max num threadblock graph op: %zu\n", max_num_threadblock_graph_op);
   printf("  max num kernel_graph op: %zu\n", max_num_kernel_graph_op);
   printf("  max num threadblock graphs: %zu\n", max_num_threadblock_graphs);

@@ -52,14 +52,22 @@ int cython_search(yirage::kernel::Graph const *input_graph,
       std::string backend_str(backend);
       config.backend_type = type::string_to_backend_type(backend_str);
       
-      // Set warp size based on backend
+      // Set backend-specific configurations
       if (config.backend_type == type::BT_MACA) {
         config.warp_size = 64;  // MetaX MACA uses 64-thread warps
         std::cout << "[Search] Using MACA backend (warpSize=64)" << std::endl;
       } else if (config.backend_type == type::BT_CUDA) {
         config.warp_size = 32;  // NVIDIA CUDA uses 32-thread warps
+        std::cout << "[Search] Using CUDA backend (warpSize=32)" << std::endl;
+      } else if (config.backend_type == type::BT_ASCEND) {
+        // Ascend NPU uses AI Cores, not warps
+        // Set warp_size to 1 since Ascend doesn't have warp concept
+        config.warp_size = 1;
+        std::cout << "[Search] Using Ascend NPU backend (AI Core based)" << std::endl;
+        std::cout << "  - No warp concept, using AI Core parallelism" << std::endl;
+        std::cout << "  - Cube operations: 16x16 matrix tiles" << std::endl;
       } else {
-        config.warp_size = 32;  // Default
+        config.warp_size = 1;  // CPU/other backends
       }
     }
     

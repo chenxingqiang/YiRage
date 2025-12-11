@@ -239,6 +239,12 @@ try:
     os.makedirs(yirage_path, exist_ok=True)
     os.chdir(yirage_path)
     build_dir = os.path.join(yirage_path, "build")
+    
+    # Check if library already exists and skip rebuild if SKIP_BUILD is set
+    runtime_lib = os.path.join(build_dir, "libyirage_runtime.a")
+    skip_cmake_build = os.environ.get("SKIP_BUILD") and os.path.exists(runtime_lib)
+    if skip_cmake_build:
+        print(f"Found existing runtime library at {runtime_lib}, skipping cmake build...")
 
     cc_path = shutil.which("gcc")
     os.environ["CC"] = cc_path if cc_path else "/usr/bin/gcc"
@@ -248,25 +254,48 @@ try:
 
     # Create the build directory if it does not exist
     os.makedirs(build_dir, exist_ok=True)
-    subprocess.check_call(
-        [
-            "cmake",
-            "..",
-            "-DCMAKE_BUILD_TYPE=Debug",
-            "-DZ3_CXX_INCLUDE_DIRS=" + z3_path + "/include/",
-            "-DZ3_LIBRARIES=" + path.join(z3_path, "lib", "libz3.so"),
-            '-DABSTRACT_SUBEXPR_LIB=' + path.join(yirage_path, 'build', 'abstract_subexpr', 'release'),
-            '-DABSTRACT_SUBEXPR_LIBRARIES=' + path.join(yirage_path, 'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so'),
-            '-DFORMAL_VERIFIER_LIB=' + path.join(yirage_path, 'build', 'formal_verifier', 'release'),
-            '-DFORMAL_VERIFIER_LIBRARIES=' + path.join(yirage_path, 'build', 'formal_verifier', 'release', 'libformal_verifier.so'),
-            "-DCMAKE_C_COMPILER=" + os.environ["CC"],
-            "-DCMAKE_CXX_COMPILER=" + os.environ["CXX"],
-        ],
-        cwd=build_dir,
-        env=os.environ.copy(),
-    )
-    subprocess.check_call(["make", "-j8"], cwd=build_dir, env=os.environ.copy())
-    print("YiRage runtime library built successfully.")
+    # Build cmake command with backend options from environment
+    cmake_args = [
+        "cmake",
+        "..",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DZ3_CXX_INCLUDE_DIRS=" + z3_path + "/include/",
+        "-DZ3_LIBRARIES=" + path.join(z3_path, "lib", "libz3.so"),
+        '-DABSTRACT_SUBEXPR_LIB=' + path.join(yirage_path, 'build', 'abstract_subexpr', 'release'),
+        '-DABSTRACT_SUBEXPR_LIBRARIES=' + path.join(yirage_path, 'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so'),
+        '-DFORMAL_VERIFIER_LIB=' + path.join(yirage_path, 'build', 'formal_verifier', 'release'),
+        '-DFORMAL_VERIFIER_LIBRARIES=' + path.join(yirage_path, 'build', 'formal_verifier', 'release', 'libformal_verifier.so'),
+        "-DCMAKE_C_COMPILER=" + os.environ["CC"],
+        "-DCMAKE_CXX_COMPILER=" + os.environ["CXX"],
+    ]
+    
+    # Add backend options from environment variables
+    backend_env_vars = ["USE_CUDA", "USE_MACA", "USE_ASCEND", "USE_CPU", "USE_MPS"]
+    for var in backend_env_vars:
+        val = os.environ.get(var)
+        if val is not None:
+            cmake_args.append(f"-D{var}={val}")
+    
+    # Add Z3_DIR from environment if set
+    z3_dir = os.environ.get("Z3_DIR")
+    if z3_dir:
+        cmake_args.append(f"-DZ3_DIR={z3_dir}")
+    
+    # Add extra CXX flags if needed (e.g., for Z3 include)
+    cxxflags = os.environ.get("CXXFLAGS", "")
+    if cxxflags:
+        cmake_args.append(f"-DCMAKE_CXX_FLAGS={cxxflags}")
+    
+    if not skip_cmake_build:
+        subprocess.check_call(
+            cmake_args,
+            cwd=build_dir,
+            env=os.environ.copy(),
+        )
+        subprocess.check_call(["make", "-j8"], cwd=build_dir, env=os.environ.copy())
+        print("YiRage runtime library built successfully.")
+    else:
+        print("Using pre-built runtime library.")
 except subprocess.CalledProcessError as e:
     print("Failed to build runtime library.")
     raise SystemExit(e.returncode)
