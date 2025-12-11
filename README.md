@@ -141,12 +141,40 @@ optimized = graph.superoptimize(backend='maca')
 
 ### Installation
 
+#### Standard Installation (CUDA/CPU/MPS)
+
 ```bash
 # From GitHub
 git clone https://github.com/chenxingqiang/YiRage.git
 cd YiRage
 pip install -e .
 export YIRAGE_HOME=$(pwd)
+```
+
+#### Huawei Ascend NPU Installation
+
+For Ascend NPU systems, follow the complete installation guide:
+
+📖 **[Ascend Installation Guide](docs/ascend_installation_guide.md)**
+
+Quick steps:
+```bash
+# 1. Load Ascend environment
+export LD_LIBRARY_PATH=/usr/local/Ascend/driver/lib64:/usr/local/Ascend/driver/lib64/driver:$LD_LIBRARY_PATH
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
+# 2. Install dependencies
+pip install triton-ascend z3-solver
+
+# 3. Build and install
+cp config.ascend.cmake config.cmake
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+cd .. && pip install -e .
+
+# 4. Verify
+python tests/ascend/test_triton_integration.py
 ```
 
 ### Basic Usage
@@ -224,8 +252,15 @@ MPSOptimizer.optimize_for_apple_silicon(m=1024, n=1024, k=1024, config=mps_confi
 - **[API Reference](docs/api.md)** - Complete API documentation
 - **[Backend Guide](docs/mpk/backend_usage.md)** - Backend usage and configuration
 - **[Architecture Design](docs/mpk/multi_backend_design.md)** - System design
-- **[Ascend NPU Guide](docs/ascend_quick_start.md)** - Huawei Ascend integration
-- **[MACA GPU Guide](docs/maca_quick_start.md)** - MetaX MACA integration 🆕
+
+### Hardware-Specific Guides
+
+| Platform | Guide | Description |
+|----------|-------|-------------|
+| **Huawei Ascend NPU** | [Installation Guide](docs/ascend_installation_guide.md) | Complete setup, build, and test instructions |
+| **Huawei Ascend NPU** | [Quick Start](docs/ascend_quick_start.md) | Quick API usage examples |
+| **MetaX MACA GPU** | [Quick Start](docs/maca_quick_start.md) | MetaX GPU integration 🆕 |
+
 - **[Contributing](CONTRIBUTING.md)** - Contribution guidelines
 
 ---
