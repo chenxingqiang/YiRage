@@ -14,7 +14,7 @@ using namespace yirage::config;
 
 DeviceMemoryManager *DeviceMemoryManager::singleton = nullptr;
 DeviceMemoryManager::DeviceMemoryManager() {
-  num_devices = 1; // Default to 1 device for non-CUDA environments
+  num_gpus = 1; // Default to 1 device for non-CUDA environments
   auto initizalize_exp_lookup_table =
       [](FPType *table, int size, int base, int modulus) {
         table[0] = 1;
@@ -50,7 +50,7 @@ DeviceMemoryManager::DeviceMemoryManager() {
   initialize_sqrt_lookup_table(sqrt_p_lookup_table, FP_P, FP_P);
   initialize_sqrt_lookup_table(sqrt_q_lookup_table, FP_Q, FP_Q);
 
-  for (int i = 0; i < num_devices; ++i) {
+  for (int i = 0; i < num_gpus; ++i) {
     fp_base_ptr[i] = new char[MAX_DMEM_FP_SIZE];
   }
   stensor_fp_base_ptr =
@@ -64,7 +64,7 @@ DeviceMemoryManager::~DeviceMemoryManager() {
   delete[] sqrt_p_lookup_table;
   delete[] sqrt_q_lookup_table;
 
-  for (int i = 0; i < num_devices; ++i) {
+  for (int i = 0; i < num_gpus; ++i) {
     delete[] fp_base_ptr[i];
   }
   delete[] stensor_fp_base_ptr;

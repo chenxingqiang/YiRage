@@ -530,6 +530,7 @@ bool KNCustomizedOp::fingerprint(void) {
       }
     }
   }
+  return true;
 }
 #endif
 

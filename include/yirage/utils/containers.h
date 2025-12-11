@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include "yirage/vector_types.h"
 #include <algorithm>
 #include <unordered_set>

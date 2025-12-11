@@ -131,7 +131,7 @@ bool KNRMSNormOp::fingerprint(void) {
   kernel::DeviceMemoryManager *dmm =
       kernel::DeviceMemoryManager::get_instance();
 
-  for (int device_id = 0; device_id < dmm->num_devices; ++device_id) {
+  for (int device_id = 0; device_id < dmm->num_gpus; ++device_id) {
     FPType *input_ptr = reinterpret_cast<FPType *>(dmm->fp_base_ptr[device_id] +
                                                    input_tensors[0].fp_offset);
     FPType *output_ptr = reinterpret_cast<FPType *>(
