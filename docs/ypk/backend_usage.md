@@ -4,19 +4,49 @@
 
 YiRage now supports multiple computation backends, allowing you to run your models on different hardware accelerators and CPU platforms. This guide explains how to use the multi-backend system.
 
+```mermaid
+flowchart LR
+    subgraph "User Code"
+        A[yr.PersistentKernel<br/>backend='cuda']
+    end
+
+    subgraph "Backend Selection"
+        B{Backend<br/>Available?}
+        C{Fallback<br/>Available?}
+    end
+
+    subgraph "Backends"
+        D[CUDA<br/>NVIDIA GPU]
+        E[CPU<br/>x86/ARM]
+        F[MPS<br/>Apple Silicon]
+        G[Ascend<br/>Huawei NPU]
+        H[MACA<br/>MetaX GPU]
+    end
+
+    A --> B
+    B -->|Yes| D
+    B -->|No| C
+    C -->|Yes| E & F & G & H
+    C -->|No| I[Error]
+
+    style A fill:#e1f5fe
+    style D fill:#c8e6c9
+    style I fill:#ffcdd2
+```
+
 ## Available Backends
 
-| Backend | Description | Hardware |
-|---------|-------------|----------|
-| **cuda** | NVIDIA CUDA | NVIDIA GPUs |
-| **cpu** | CPU execution | x86/ARM CPUs |
-| **mps** | Metal Performance Shaders | Apple Silicon (M1/M2/M3) |
-| **cudnn** | CUDA Deep Neural Network library | NVIDIA GPUs |
-| **mkl** | Intel Math Kernel Library | Intel CPUs |
-| **mkldnn** | Intel oneDNN | Intel CPUs |
-| **openmp** | OpenMP parallelization | Multi-core CPUs |
-| **nki** | AWS Neuron Kernel Interface | AWS Inferentia/Trainium |
-| **triton** | OpenAI Triton | NVIDIA GPUs |
+| Backend | Description | Hardware | Status |
+|---------|-------------|----------|--------|
+| **cuda** | NVIDIA CUDA | NVIDIA GPUs | ✅ Production |
+| **cpu** | CPU execution | x86/ARM CPUs | ✅ Production |
+| **mps** | Metal Performance Shaders | Apple Silicon (M1/M2/M3/M4) | ✅ Production |
+| **ascend** | Huawei Ascend NPU | Ascend 910/910B/310P | ✅ Production |
+| **maca** | MetaX MACA | MetaX C500 GPU | ✅ Production |
+| **cudnn** | CUDA Deep Neural Network library | NVIDIA GPUs | ✅ Accelerator |
+| **mkl** | Intel Math Kernel Library | Intel CPUs | ✅ Accelerator |
+| **nki** | AWS Neuron Kernel Interface | AWS Inferentia/Trainium | ✅ Production |
+| **triton** | OpenAI Triton Compiler | NVIDIA/Ascend | ✅ Production |
 
 ## Checking Available Backends
 

@@ -4,44 +4,47 @@
 
 基于[Ascend/pytorch](https://github.com/Ascend/pytorch)和[Ascend/triton-ascend](https://github.com/Ascend/triton-ascend)的集成方案：
 
+```mermaid
+flowchart TB
+    subgraph "YiRage Application"
+        A[graph.superoptimize<br/>backend='ascend']
+    end
+
+    subgraph "YiRage Ascend Backend"
+        B[Search Strategy<br/>ascend_strategy.cc]
+        C[Triton Transpiler<br/>复用 - REUSED!]
+        
+        B --> C
+    end
+
+    subgraph "编译路径"
+        D[NVIDIA Path<br/>nvcc/ptxas]
+        E[Ascend Path<br/>triton-ascend BiSheng]
+    end
+
+    subgraph "运行时"
+        F[CUDA GPU<br/>NVIDIA]
+        G[torch_npu]
+        H[CANN Runtime]
+        I[Ascend NPU<br/>910/910B/310P]
+    end
+
+    A --> B
+    C --> D & E
+    D --> F
+    E --> G --> H --> I
+
+    style A fill:#e1f5fe
+    style C fill:#fff3e0
+    style E fill:#c8e6c9
+    style I fill:#ffcdd2
 ```
-┌─────────────────────────────────────────────────────────┐
-│                  YiRage Application                     │
-│            graph.superoptimize(backend='ascend')        │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-┌──────────────────────▼──────────────────────────────────┐
-│              YiRage Ascend Backend                      │
-│  ┌─────────────────────────────────────────────┐        │
-│  │ Search Strategy (ascend_strategy.cc)        │        │
-│  │ - AI Core utilization                       │        │
-│  │ - L1 buffer optimization                    │        │
-│  │ - Cube operation selection                  │        │
-│  └────────────────┬────────────────────────────┘        │
-│                   │                                      │
-│  ┌────────────────▼────────────────────────────┐        │
-│  │ Triton Transpiler (REUSED!)                 │        │
-│  │ - Same code for CUDA and Ascend             │        │
-│  │ - Device: 'npu' for Ascend                  │        │
-│  │ - Device: 'cuda' for NVIDIA                 │        │
-│  └────────────────┬────────────────────────────┘        │
-└───────────────────┼─────────────────────────────────────┘
-                    │
-        ┌───────────┴───────────┐
-        │                       │
-┌───────▼──────┐       ┌────────▼─────────┐
-│ NVIDIA Path  │       │   Ascend Path    │
-│              │       │                  │
-│ nvcc/ptxas   │       │ triton-ascend    │
-│      ↓       │       │  (BiSheng)       │
-│  CUDA GPU    │       │      ↓           │
-└──────────────┘       │  torch_npu       │
-                       │      ↓           │
-                       │  CANN Runtime    │
-                       │      ↓           │
-                       │  Ascend NPU      │
-                       └──────────────────┘
-```
+
+### 关键设计点
+
+- **Search Strategy**: AI Core利用率、L1 buffer优化、Cube操作选择
+- **Triton Transpiler**: 复用现有代码，支持CUDA和Ascend
+- **设备标识**: `'npu'` for Ascend, `'cuda'` for NVIDIA
 
 ## 组件依赖关系
 

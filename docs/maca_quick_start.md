@@ -2,6 +2,33 @@
 
 本文档基于在 **MetaX C500 GPU** 上的实际成功运行经验编写。
 
+## 架构概览
+
+```mermaid
+flowchart LR
+    subgraph "YiRage"
+        A[Python API<br/>yirage.new_kernel_graph]
+        B[superoptimize<br/>backend='maca']
+    end
+
+    subgraph "MACA Toolchain"
+        C[mxcc Compiler<br/>MACA 编译器]
+        D[mcruntime<br/>运行时库]
+        E[mcPytorch<br/>PyTorch 适配]
+    end
+
+    subgraph "Hardware"
+        F[MetaX C500 GPU<br/>64-thread Warp]
+    end
+
+    A --> B --> C --> D --> F
+    E --> F
+
+    style A fill:#e1f5fe
+    style C fill:#fff3e0
+    style F fill:#e1bee7
+```
+
 ## 1. 环境要求
 
 ### 硬件

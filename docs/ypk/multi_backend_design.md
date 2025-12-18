@@ -34,25 +34,34 @@ Referencing `torch.backends`, the following backends are planned:
 
 ### 3.1 Backend Abstraction Layer Architecture
 
-```
-┌─────────────────────────────────────────────────┐
-│           Python API Layer                      │
-│   PersistentKernel(backend="cuda", ...)        │
-└────────────────┬────────────────────────────────┘
-                 │
-┌────────────────▼────────────────────────────────┐
-│         Backend Manager (C++)                   │
-│  - Backend Registration                         │
-│  - Backend Selection                            │
-│  - Capability Query                             │
-└────────────────┬────────────────────────────────┘
-                 │
-     ┌───────────┴───────────┬──────────┬─────────┐
-     │                       │          │         │
-┌────▼──────┐  ┌─────▼──────┐  ┌──▼───┐  ┌──▼───┐
-│CUDA       │  │CPU         │  │MPS   │  │ ...  │
-│Backend    │  │Backend     │  │Backend│ │      │
-└───────────┘  └────────────┘  └──────┘  └──────┘
+```mermaid
+graph TB
+    subgraph "Python API Layer"
+        A[PersistentKernel<br/>backend='cuda', ...]
+    end
+
+    subgraph "Backend Manager C++"
+        B[Backend Registration<br/>注册]
+        C[Backend Selection<br/>选择]
+        D[Capability Query<br/>能力查询]
+    end
+
+    subgraph "Backend Implementations"
+        E[CUDA<br/>Backend]
+        F[CPU<br/>Backend]
+        G[MPS<br/>Backend]
+        H[Ascend<br/>Backend]
+        I[MACA<br/>Backend]
+        J[...<br/>Others]
+    end
+
+    A --> B & C & D
+    B & C & D --> E & F & G & H & I & J
+
+    style A fill:#e1f5fe
+    style B fill:#fff3e0
+    style C fill:#fff3e0
+    style D fill:#fff3e0
 ```
 
 ### 3.2 Core Interface Definition

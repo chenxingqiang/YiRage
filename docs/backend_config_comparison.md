@@ -1,4 +1,38 @@
-# Backend配置机制对比分析：CUDA vs MPS vs CPU
+# Backend配置机制对比分析：CUDA vs MPS vs CPU vs Ascend
+
+## 架构概览
+
+```mermaid
+graph TB
+    subgraph "Backend配置架构"
+        A[YiRage Search Engine<br/>搜索引擎]
+    end
+
+    subgraph "配置获取方式"
+        B[CUDA<br/>动态运行时查询]
+        C[MPS<br/>静态配置文件]
+        D[CPU<br/>基于缓存的静态配置]
+        E[Ascend<br/>静态配置 + npu-smi检测]
+    end
+
+    subgraph "硬件信息源"
+        F[cudaDeviceProp<br/>NVIDIA API]
+        G[Apple官方文档<br/>Metal Feature Set]
+        H[CPU架构知识<br/>Cache Hierarchy]
+        I[CANN文档 + npu-smi<br/>华为规格]
+    end
+
+    A --> B & C & D & E
+    B --> F
+    C --> G
+    D --> H
+    E --> I
+
+    style B fill:#76ff03
+    style C fill:#ffeb3b
+    style D fill:#ffeb3b
+    style E fill:#ffeb3b
+```
 
 ## 为什么需要这些配置信息？
 

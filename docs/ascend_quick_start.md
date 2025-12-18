@@ -66,6 +66,34 @@ print(f"✅ Executed on Ascend NPU: {outputs[0].shape}")
 
 YiRage for Ascend的设计基于Triton复用：
 
+```mermaid
+flowchart LR
+    subgraph "Input"
+        A[YiRage Graph<br/>计算图]
+    end
+
+    subgraph "Path 1: Triton 推荐"
+        B[Triton Code<br/>.py]
+        C[BiSheng Compiler<br/>华为编译器]
+    end
+
+    subgraph "Path 2: Ascend C 可选"
+        D[Ascend C Code<br/>.cpp]
+        E[ascendc Compiler<br/>原生编译器]
+    end
+
+    subgraph "Output"
+        F[Ascend NPU<br/>AI Core执行]
+    end
+
+    A --> B --> C --> F
+    A --> D --> E --> F
+
+    style B fill:#c8e6c9
+    style D fill:#fff9c4
+    style F fill:#ffcdd2
+```
+
 ### Path 1: Triton（推荐）⭐⭐⭐⭐⭐
 
 ```
@@ -159,16 +187,31 @@ YiRage Ascend backend依赖以下华为开源项目：
 
 ## 🔄 YiRage集成方式
 
-```
-YiRage Triton Transpiler (复用)
-        ↓
-    Triton Code
-        ↓
-triton-ascend (BiSheng)
-        ↓
-    Ascend NPU
-        ↑
-    torch_npu (Runtime)
+```mermaid
+flowchart TB
+    subgraph "YiRage Framework"
+        A[YiRage Triton Transpiler<br/>复用现有转译器]
+    end
+
+    subgraph "Code Generation"
+        B[Triton Code<br/>.py Kernel]
+    end
+
+    subgraph "Ascend Toolchain"
+        C[triton-ascend<br/>BiSheng Compiler]
+        D[torch_npu<br/>Runtime]
+    end
+
+    subgraph "Hardware"
+        E[Ascend NPU<br/>910/910B/310P]
+    end
+
+    A --> B --> C --> E
+    D --> E
+
+    style A fill:#e1f5fe
+    style C fill:#fff3e0
+    style E fill:#ffcdd2
 ```
 
 ## ✅ 验证清单
