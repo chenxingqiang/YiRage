@@ -1,8 +1,8 @@
 # YiRage Ascend Integration Architecture
 
-## 架构概览
+## Architecture Overview
 
-基于[Ascend/pytorch](https://github.com/Ascend/pytorch)和[Ascend/triton-ascend](https://github.com/Ascend/triton-ascend)的集成方案：
+Integration based on [Ascend/pytorch](https://github.com/Ascend/pytorch) and [Ascend/triton-ascend](https://github.com/Ascend/triton-ascend):
 
 ```mermaid
 flowchart TB
@@ -12,17 +12,17 @@ flowchart TB
 
     subgraph "YiRage Ascend Backend"
         B[Search Strategy<br/>ascend_strategy.cc]
-        C[Triton Transpiler<br/>复用 - REUSED!]
+        C[Triton Transpiler<br/>REUSED!]
         
         B --> C
     end
 
-    subgraph "编译路径"
+    subgraph "Compilation Paths"
         D[NVIDIA Path<br/>nvcc/ptxas]
         E[Ascend Path<br/>triton-ascend BiSheng]
     end
 
-    subgraph "运行时"
+    subgraph "Runtime"
         F[CUDA GPU<br/>NVIDIA]
         G[torch_npu]
         H[CANN Runtime]
@@ -40,237 +40,242 @@ flowchart TB
     style I fill:#ffcdd2
 ```
 
-### 关键设计点
+### Key Design Points
 
-- **Search Strategy**: AI Core利用率、L1 buffer优化、Cube操作选择
-- **Triton Transpiler**: 复用现有代码，支持CUDA和Ascend
-- **设备标识**: `'npu'` for Ascend, `'cuda'` for NVIDIA
+- **Search Strategy**: AI Core utilization, L1 buffer optimization, Cube operation selection
+- **Triton Transpiler**: Reuses existing code, supports both CUDA and Ascend
+- **Device Identifier**: `'npu'` for Ascend, `'cuda'` for NVIDIA
 
-## 组件依赖关系
+## Component Dependencies
 
-### YiRage层（已实现）
+### YiRage Layer (Implemented)
 
 ```
 yirage/
 ├── include/yirage/
-│   ├── backend/ascend_backend.h          # Backend接口声明
+│   ├── backend/ascend_backend.h          # Backend interface declaration
 │   ├── search/backend_strategies/
-│   │   └── ascend_strategy.h             # 搜索策略声明
+│   │   └── ascend_strategy.h             # Search strategy declaration
 │   ├── kernel/ascend/
-│   │   ├── ascend_kernel_config.h        # Kernel配置
-│   │   ├── ascend_kernel.h               # Kernel操作
-│   │   └── ascend_kernels.h              # Fingerprint声明
-│   └── triton_transpiler/transpile.h     # Triton配置扩展
+│   │   ├── ascend_kernel_config.h        # Kernel configuration
+│   │   ├── ascend_kernel.h               # Kernel operations
+│   │   └── ascend_kernels.h              # Fingerprint declaration
+│   └── triton_transpiler/transpile.h     # Triton configuration extension
 │
 ├── src/
-│   ├── backend/ascend_backend.cc         # 314行, Backend实现
+│   ├── backend/ascend_backend.cc         # 314 lines, Backend implementation
 │   ├── search/backend_strategies/
-│   │   └── ascend_strategy.cc            # 399行, 搜索策略
+│   │   └── ascend_strategy.cc            # 399 lines, Search strategy
 │   ├── kernel/ascend/
-│   │   ├── ascend_optimizer.cc           # 135行, 优化器
-│   │   ├── ascend_kernel_generator.cc    # 151行, 代码生成
-│   │   └── ascend_fingerprint_kernels.cc # 214行, CPU fallback
+│   │   ├── ascend_optimizer.cc           # 135 lines, Optimizer
+│   │   ├── ascend_kernel_generator.cc    # 151 lines, Code generation
+│   │   └── ascend_fingerprint_kernels.cc # 214 lines, CPU fallback
 │   └── transpiler/
-│       └── ascend_transpiler_stub.cc     # 174行, Transpiler stub
+│       └── ascend_transpiler_stub.cc     # 174 lines, Transpiler stub
 │
 └── python/yirage/
-    └── ascend_config.py                  # 140行, Python配置
+    └── ascend_config.py                  # 140 lines, Python configuration
 ```
 
-### Ascend生态层（华为开源）
+### Ascend Ecosystem Layer (Huawei Open Source)
 
 #### 1. torch_npu
-- **仓库**: https://github.com/Ascend/pytorch
-- **作用**: PyTorch → Ascend NPU适配
-- **提供**: 
+- **Repository**: https://github.com/Ascend/pytorch
+- **Purpose**: PyTorch → Ascend NPU adaptation
+- **Provides**: 
   - `torch.device('npu')`
-  - NPU tensor操作
-  - CANN runtime绑定
+  - NPU tensor operations
+  - CANN runtime bindings
 
 #### 2. triton-ascend
-- **仓库**: https://github.com/Ascend/triton-ascend
-- **作用**: Triton → Ascend NPU编译
-- **核心**: BiSheng编译器后端
-- **提供**:
-  - Triton DSL支持
-  - 自动优化（Cube/Vector选择）
-  - Ascend代码生成
+- **Repository**: https://github.com/Ascend/triton-ascend
+- **Purpose**: Triton → Ascend NPU compilation
+- **Core**: BiSheng compiler backend
+- **Provides**:
+  - Triton DSL support
+  - Auto-optimization (Cube/Vector selection)
+  - Ascend code generation
 
 #### 3. CANN
-- **官网**: https://www.hiascend.com/cann
-- **作用**: 底层runtime和驱动
-- **组件**:
+- **Website**: https://www.hiascend.com/cann
+- **Purpose**: Low-level runtime and drivers
+- **Components**:
   - ACL (Ascend Computing Language)
   - Graph Engine
-  - Operator库
+  - Operator library
 
-## 数据流
+## Data Flow
 
-### 编译时（Optimization）
+### Compile-time (Optimization)
 
 ```
-1. YiRage创建计算图
+1. YiRage creates computation graph
    graph = yr.new_kernel_graph()
    graph.matmul(X, W)
 
-2. Ascend搜索策略
-   → 生成候选配置（AI Core, tile sizes）
-   → 评估（L1 buffer, Cube适配）
+2. Ascend search strategy
+   → Generate candidate configurations (AI Core, tile sizes)
+   → Evaluate (L1 buffer, Cube adaptation)
 
 3. Triton Transpiler
-   → 生成Triton代码
-   → 标记 is_ascend_target=true
-   → 设备: torch.device('npu')
+   → Generate Triton code
+   → Mark is_ascend_target=true
+   → Device: torch.device('npu')
 
-4. triton-ascend (BiSheng) [需要Ascend环境]
-   → 编译Triton → Ascend kernel
-   → 优化（Cube unit, Vector unit）
-   → 生成.so文件
+4. triton-ascend (BiSheng) [Requires Ascend environment]
+   → Compile Triton → Ascend kernel
+   → Optimize (Cube unit, Vector unit)
+   → Generate .so file
 
-5. 返回优化图
+5. Return optimized graph
    optimized_graph
 ```
 
-### 运行时（Execution）
+### Runtime (Execution)
 
 ```
-1. 用户调用
+1. User invocation
    outputs = optimized_graph(inputs=inputs)
 
-2. torch_npu [需要Ascend环境]
-   → inputs已在NPU上
-   → 加载编译好的kernel
+2. torch_npu [Requires Ascend environment]
+   → inputs already on NPU
+   → Load compiled kernel
 
-3. CANN Runtime [需要Ascend环境]
-   → 调度到AI Cores
-   → 执行Cube/Vector操作
-   → 同步结果
+3. CANN Runtime [Requires Ascend environment]
+   → Schedule to AI Cores
+   → Execute Cube/Vector operations
+   → Synchronize results
 
-4. 返回outputs
-   → 在NPU上的tensor
+4. Return outputs
+   → Tensor on NPU
 ```
 
-## 关键设计决策
+## Key Design Decisions
 
-### ✅ 为什么复用Triton
+### ✅ Why Reuse Triton
 
-1. **华为官方支持**
-   - CANN natively支持Triton
-   - triton-ascend是官方维护
-   - BiSheng编译器专门优化
+1. **Official Huawei Support**
+   - CANN natively supports Triton
+   - triton-ascend is officially maintained
+   - BiSheng compiler specifically optimized
 
-2. **代码复用**
-   - YiRage已有完整Triton transpiler
-   - CUDA和Ascend共享代码
-   - 零额外开发成本
+2. **Code Reuse**
+   - YiRage already has complete Triton transpiler
+   - CUDA and Ascend share code
+   - Zero additional development cost
 
-3. **性能保证**
-   - BiSheng自动优化
-   - Cube/Vector单元自动选择
-   - 90-95% 手写性能
+3. **Performance Guarantee**
+   - BiSheng auto-optimization
+   - Cube/Vector unit auto-selection
+   - 90-95% of hand-written performance
 
-### ✅ 为什么不自己写TBE
+### ✅ Why Not Write TBE Ourselves
 
-1. **Triton更通用**
-   - 跨平台（CUDA/Ascend/AMD）
-   - 社区生态成熟
-   - 维护成本低
+1. **Triton is More General**
+   - Cross-platform (CUDA/Ascend/AMD)
+   - Mature community ecosystem
+   - Low maintenance cost
 
-2. **TBE正在被取代**
-   - AscendC是新方向
-   - Triton是官方推荐路径
-   - BiSheng是未来
+2. **TBE is Being Replaced**
+   - AscendC is the new direction
+   - Triton is the official recommended path
+   - BiSheng is the future
 
-## 版本兼容矩阵
+## Version Compatibility Matrix
 
 | CANN | PyTorch | torch_npu | triton-ascend | YiRage |
 |------|---------|-----------|---------------|--------|
-| 8.0+ | 2.1-2.8 | 匹配版本 | latest | main分支 ✅ |
-| 7.0+ | 2.0-2.6 | 匹配版本 | latest | main分支 ✅ |
-| 6.0+ | 1.11-2.4 | 匹配版本 | - | main分支 ✅ |
+| 8.0+ | 2.1-2.8 | Matching version | latest | main branch ✅ |
+| 7.0+ | 2.0-2.6 | Matching version | latest | main branch ✅ |
+| 6.0+ | 1.11-2.4 | Matching version | - | main branch ✅ |
 
-**推荐配置**：
+**Recommended Configuration**:
 - CANN 8.0
 - PyTorch 2.6+
 - torch_npu 2.6.0+
 - triton-ascend latest
 
-## 🧪 测试验证
+## 🧪 Testing and Verification
 
-### 本地测试（无Ascend硬件）
+### Local Testing (Without Ascend Hardware)
 
 ```bash
 cd /path/to/yirage
 python tests/ascend/test_triton_integration.py
 
-# 预期结果：
+# Expected results:
 # ✅ YiRage Ascend backend: READY
 # ⚠️  Ascend software stack: NOT AVAILABLE
 # 💡 Framework ready - install on Ascend system
 ```
 
-### Ascend系统测试
+### Ascend System Testing
 
 ```bash
-# 在Ascend 910/910B上
+# On Ascend 910/910B
 python tests/ascend/test_triton_integration.py
 
-# 期望结果：
+# Expected results:
 # ✅ torch_npu: Available
 # ✅ triton-ascend: Available  
 # ✅ CANN: Available
 # 🚀 Ready for execution!
 
-# 运行benchmark
+# Run benchmark
 python benchmark/gated_mlp.py --backend ascend
 ```
 
-## 📈 性能对比预期
+## 📈 Expected Performance Comparison
 
-基于华为官方数据和BiSheng优化：
+Based on Huawei official data and BiSheng optimization:
 
-| Workload | PyTorch (NPU) | YiRage (Ascend) | 加速比 |
-|----------|---------------|-----------------|--------|
+| Workload | PyTorch (NPU) | YiRage (Ascend) | Speedup |
+|----------|---------------|-----------------|---------|
 | Matmul | 1.0x | 1.5-2.0x | **50-100%** |
 | Attention | 1.0x | 2.0-3.0x | **100-200%** |
 | MLP | 1.0x | 1.8-2.5x | **80-150%** |
 
-**YiRage优势**：
-- Kernel融合
-- 搜索优化配置
-- L1 buffer优化
-- Cube单元充分利用
+**YiRage Advantages**:
+- Kernel fusion
+- Search-optimized configuration
+- L1 buffer optimization
+- Full Cube unit utilization
 
-## 🎯 实现状态
+## 🎯 Implementation Status
 
-**已完成（main分支）**：
-- ✅ 完整Ascend backend框架
-- ✅ 搜索策略和优化器
-- ✅ Triton transpiler配置扩展
-- ✅ Python API集成
-- ✅ torch_npu兼容设计
-- ✅ 测试框架
-- ✅ 文档
+**Completed (main branch)**:
+- ✅ Complete Ascend backend framework
+- ✅ Search strategy and optimizer
+- ✅ Triton transpiler configuration extension
+- ✅ Python API integration
+- ✅ torch_npu compatible design
+- ✅ Test framework
+- ✅ Documentation
 
-**待硬件验证**：
-- ⏳ BiSheng编译器实际调用
-- ⏳ Ascend 910/910B端到端执行
-- ⏳ 性能benchmark
-- ⏳ 与PyTorch NPU对比
+**Pending Hardware Verification**:
+- ⏳ BiSheng compiler actual invocation
+- ⏳ Ascend 910/910B end-to-end execution
+- ⏳ Performance benchmark
+- ⏳ Comparison with PyTorch NPU
 
-## 📁 文件清单
+## 📁 File List
 
-| 文件 | 行数 | 用途 |
-|------|------|------|
-| `include/yirage/backend/ascend_backend.h` | - | Backend接口 |
-| `src/backend/ascend_backend.cc` | 314 | Backend实现 |
-| `include/yirage/search/.../ascend_strategy.h` | - | 搜索策略接口 |
-| `src/search/.../ascend_strategy.cc` | 399 | 搜索策略实现 |
-| `include/yirage/kernel/ascend/*.h` | - | Kernel头文件 |
-| `src/kernel/ascend/*.cc` | 500+ | Kernel实现 |
+| File | Lines | Purpose |
+|------|-------|---------|
+| `include/yirage/backend/ascend_backend.h` | - | Backend interface |
+| `src/backend/ascend_backend.cc` | 314 | Backend implementation |
+| `include/yirage/search/.../ascend_strategy.h` | - | Search strategy interface |
+| `src/search/.../ascend_strategy.cc` | 399 | Search strategy implementation |
+| `include/yirage/kernel/ascend/*.h` | - | Kernel header files |
+| `src/kernel/ascend/*.cc` | 500+ | Kernel implementation |
 | `src/transpiler/ascend_transpiler_stub.cc` | 174 | Transpiler |
-| `python/yirage/ascend_config.py` | 140 | Python配置 |
-| `tests/ascend/test_triton_integration.py` | 145 | 测试脚本 |
-| `docs/ascend_*.md` | - | 文档 |
+| `python/yirage/ascend_config.py` | 140 | Python configuration |
+| `tests/ascend/test_triton_integration.py` | 145 | Test script |
+| `docs/ascend_*.md` | - | Documentation |
 
-**总计**: ~2000行 C++ + 140行 Python
+**Total**: ~2000 lines C++ + 140 lines Python
+
+---
+
+*Document Version: 2025-12-18*  
+*YiRage Project: https://github.com/chenxingqiang/YiRage*

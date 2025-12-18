@@ -1,8 +1,8 @@
 # YiRage MACA Backend Quick Start Guide
 
-本文档基于在 **MetaX C500 GPU** 上的实际成功运行经验编写。
+This document is based on practical experience running on **MetaX C500 GPU**.
 
-## 架构概览
+## Architecture Overview
 
 ```mermaid
 flowchart LR
@@ -12,9 +12,9 @@ flowchart LR
     end
 
     subgraph "MACA Toolchain"
-        C[mxcc Compiler<br/>MACA 编译器]
-        D[mcruntime<br/>运行时库]
-        E[mcPytorch<br/>PyTorch 适配]
+        C[mxcc Compiler]
+        D[mcruntime Library]
+        E[mcPytorch]
     end
 
     subgraph "Hardware"
@@ -29,67 +29,67 @@ flowchart LR
     style F fill:#e1bee7
 ```
 
-## 1. 环境要求
+## 1. Requirements
 
-### 硬件
-- MetaX C500 GPU (或其他 MACA 兼容 GPU)
+### Hardware
+- MetaX C500 GPU (or other MACA-compatible GPU)
 
-### 软件
-- **MACA SDK**: `/opt/maca` (包含 `mxcc` 编译器)
-- **mcPytorch**: PyTorch 2.6.0+metax3.2.1.3 或兼容版本
+### Software
+- **MACA SDK**: `/opt/maca` (contains `mxcc` compiler)
+- **mcPytorch**: PyTorch 2.6.0+metax3.2.1.3 or compatible version
 - **Python**: 3.10+
 - **CMake**: 3.24+
-- **Rust**: 最新稳定版
-- **GCC**: 支持 C++17
+- **Rust**: Latest stable version
+- **GCC**: C++17 support
 
-## 2. 环境配置
+## 2. Environment Setup
 
-### 2.1 设置环境变量
+### 2.1 Set Environment Variables
 
 ```bash
-# MACA SDK 路径
+# MACA SDK path
 export MACA_PATH=/opt/maca
 export LD_LIBRARY_PATH=${MACA_PATH}/lib:${MACA_PATH}/mxgpu_llvm/lib:${LD_LIBRARY_PATH}
 
-# 可选：添加 mxcc 到 PATH
+# Optional: Add mxcc to PATH
 export PATH=${MACA_PATH}/mxgpu_llvm/bin:$PATH
 ```
 
-### 2.2 验证 mcPytorch
+### 2.2 Verify mcPytorch
 
 ```python
 import torch
-print(f"PyTorch: {torch.__version__}")  # 应显示 2.6.0+metax3.2.1.3
+print(f"PyTorch: {torch.__version__}")  # Should show 2.6.0+metax3.2.1.3
 print(f"CUDA available: {torch.cuda.is_available()}")  # True
 print(f"Device: {torch.cuda.get_device_name(0)}")  # MetaX C500
 ```
 
-### 2.3 验证 MACA 编译器
+### 2.3 Verify MACA Compiler
 
 ```bash
 which mxcc
-# 应输出: /opt/maca/mxgpu_llvm/bin/mxcc
+# Should output: /opt/maca/mxgpu_llvm/bin/mxcc
 ```
 
-## 3. 编译 YiRage
+## 3. Build YiRage
 
-### 3.1 安装依赖
+### 3.1 Install Dependencies
 
 ```bash
-# Python 依赖
+# Python dependencies
 pip install z3-solver graphviz cython
 
-# Rust (如未安装)
+# Rust (if not installed)
 curl https://sh.rustup.rs -sSf | sh -s -- -y
 source $HOME/.cargo/env
 
-# CMake (如版本过低)
+# CMake (if version is too old)
 pip install "cmake>=3.24"
 ```
 
-### 3.2 配置 config.cmake
+### 3.2 Configure config.cmake
 
-创建 `config.cmake` 文件：
+Create `config.cmake` file:
 
 ```cmake
 set(USE_CUDA OFF)
@@ -101,12 +101,12 @@ set(USE_NKI OFF)
 set(USE_MPS OFF)
 ```
 
-### 3.3 设置依赖
+### 3.3 Setup Dependencies
 
 ```bash
 cd YiRage
 
-# Z3 配置 (使用 pip 安装的 z3)
+# Z3 configuration (using pip-installed z3)
 mkdir -p deps/z3/build
 Z3_BASE=$(python -c "import z3; import os; print(os.path.dirname(z3.__file__))")
 
@@ -130,7 +130,7 @@ cat > deps/z3/build/Z3Config.cmake << EOF
 include("\${CMAKE_CURRENT_LIST_DIR}/z3-config.cmake")
 EOF
 
-# JSON 配置 (如 deps/json 为空)
+# JSON configuration (if deps/json is empty)
 mkdir -p deps/json/include/nlohmann
 curl -sL https://github.com/nlohmann/json/releases/download/v3.11.2/json.hpp \
   -o deps/json/include/nlohmann/json.hpp
@@ -143,7 +143,7 @@ add_library(nlohmann_json::nlohmann_json ALIAS nlohmann_json)
 target_include_directories(nlohmann_json INTERFACE \${CMAKE_CURRENT_SOURCE_DIR}/include)
 EOF
 
-# CUTLASS stub (如 deps/cutlass 为空)
+# CUTLASS stub (if deps/cutlass is empty)
 mkdir -p deps/cutlass/include/cutlass/detail
 cat > deps/cutlass/include/cutlass/cutlass.h << 'EOF'
 #pragma once
@@ -169,7 +169,7 @@ cat > deps/cutlass/include/cutlass/detail/helper_macros.hpp << 'EOF'
 EOF
 ```
 
-### 3.4 编译
+### 3.4 Build
 
 ```bash
 mkdir -p build && cd build
@@ -187,14 +187,14 @@ cmake .. \
 make -j$(nproc)
 ```
 
-### 3.5 安装 Python 包
+### 3.5 Install Python Package
 
 ```bash
 cd ..
 pip install -e .
 ```
 
-## 4. 验证安装
+## 4. Verify Installation
 
 ```python
 import yirage
@@ -203,7 +203,7 @@ import torch
 print(f"YiRage: {yirage.__version__}")
 print(f"Device: {torch.cuda.get_device_name(0)}")
 
-# 创建简单图
+# Create simple graph
 graph = yirage.new_kernel_graph()
 X = graph.new_input(dims=(16, 64), dtype=yirage.float16)
 W = graph.new_input(dims=(64, 64), dtype=yirage.float16)
@@ -213,63 +213,63 @@ graph.mark_output(Y)
 print("✅ YiRage + MACA ready!")
 ```
 
-## 5. 使用示例
+## 5. Usage Examples
 
-### 5.1 基本优化
+### 5.1 Basic Optimization
 
 ```python
 import yirage
 import torch
 
-# 创建计算图
+# Create computation graph
 graph = yirage.new_kernel_graph()
 X = graph.new_input(dims=(32, 64), dtype=yirage.float16)
 W = graph.new_input(dims=(64, 64), dtype=yirage.float16)
 B = graph.new_input(dims=(32, 64), dtype=yirage.float16)
 
-# 定义操作: Y = ReLU(X @ W + B)
+# Define operation: Y = ReLU(X @ W + B)
 XW = graph.matmul(X, W)
 XWB = graph.add(XW, B)
 Y = graph.relu(XWB)
 graph.mark_output(Y)
 
-# 搜索最优融合方案 (首次运行需要几分钟)
+# Search for optimal fusion scheme (first run takes a few minutes)
 print("Searching for optimal fusion...")
 optimized = graph.superoptimize(
-    backend="maca",    # 使用 MACA 后端
-    config="mlp",      # MLP 配置
-    verbose=False      # 设为 True 可查看搜索进度
+    backend="maca",    # Use MACA backend
+    config="mlp",      # MLP configuration
+    verbose=False      # Set to True to see search progress
 )
 
 if optimized:
     print(f"Found optimized graph!")
     
-    # 准备输入
+    # Prepare inputs
     x = torch.randn(32, 64, dtype=torch.float16, device="cuda")
     w = torch.randn(64, 64, dtype=torch.float16, device="cuda")
     b = torch.randn(32, 64, dtype=torch.float16, device="cuda")
     
-    # 运行优化后的图
+    # Run optimized graph
     result = optimized(x, w, b)
     print(f"Output shape: {result.shape}")
 ```
 
-### 5.2 性能对比
+### 5.2 Performance Comparison
 
 ```python
 import torch
 import time
 
-# PyTorch 基准
+# PyTorch baseline
 def pytorch_mlp(x, w, b):
     return torch.relu(torch.matmul(x, w) + b)
 
-# 准备数据
+# Prepare data
 x = torch.randn(64, 128, dtype=torch.float16, device="cuda")
 w = torch.randn(128, 128, dtype=torch.float16, device="cuda")
 b = torch.randn(64, 128, dtype=torch.float16, device="cuda")
 
-# 使用 CUDA events 精确计时
+# Use CUDA events for precise timing
 def profile(func, warmup=20, repeat=100):
     for _ in range(warmup):
         func()
@@ -289,68 +289,68 @@ def profile(func, warmup=20, repeat=100):
 pytorch_time = profile(lambda: pytorch_mlp(x, w, b))
 print(f"PyTorch time: {pytorch_time:.4f} ms")
 
-# YiRage 优化后 (假设 optimized 已创建)
+# YiRage optimized (assuming optimized is already created)
 # yirage_time = profile(lambda: optimized(x, w, b))
 # print(f"YiRage time: {yirage_time:.4f} ms")
 # print(f"Speedup: {pytorch_time / yirage_time:.2f}x")
 ```
 
-## 6. MACA 特性说明
+## 6. MACA Features
 
-### 6.1 64 线程 Warp
+### 6.1 64-Thread Warp
 
-MACA GPU 使用 **64 线程 warp**（NVIDIA 使用 32）。YiRage 自动处理此差异：
+MACA GPU uses **64-thread warp** (NVIDIA uses 32). YiRage handles this automatically:
 
 ```python
-# 搜索配置会自动适配 64 线程 warp
+# Search configuration automatically adapts to 64-thread warp
 optimized = graph.superoptimize(backend="maca", ...)
 ```
 
-### 6.2 搜索时间
+### 6.2 Search Time
 
-- **首次搜索**: 需要几分钟（搜索融合方案）
-- **后续运行**: 可使用 checkpoint 加速
-- **搜索状态**: `verbose=True` 可查看进度
+- **First search**: Takes a few minutes (searching fusion schemes)
+- **Subsequent runs**: Can use checkpoint to accelerate
+- **Search status**: Use `verbose=True` to see progress
 
-### 6.3 支持的操作
+### 6.3 Supported Operations
 
-- MatMul (矩阵乘法)
-- Add, Sub, Mul, Div (元素运算)
-- ReLU, GELU, SiLU (激活函数)
-- RMSNorm, LayerNorm (归一化)
-- Reduction (规约操作)
+- MatMul (matrix multiplication)
+- Add, Sub, Mul, Div (element-wise operations)
+- ReLU, GELU, SiLU (activation functions)
+- RMSNorm, LayerNorm (normalization)
+- Reduction (reduction operations)
 
-## 7. 故障排除
+## 7. Troubleshooting
 
-### 7.1 找不到 mcruntime
+### 7.1 Cannot find mcruntime
 
 ```bash
 export LD_LIBRARY_PATH=/opt/maca/lib:$LD_LIBRARY_PATH
 ```
 
-### 7.2 mxcc 编译错误
+### 7.2 mxcc compilation error
 
-确保 MACA SDK 版本与 mcPytorch 兼容。
+Ensure MACA SDK version is compatible with mcPytorch.
 
-### 7.3 搜索缓冲区溢出
+### 7.3 Search buffer overflow
 
-如果出现 `num < max_num_graphs` 错误，搜索找到的图太多。这通常不影响结果。
+If you see `num < max_num_graphs` error, the search found too many graphs. This usually doesn't affect results.
 
-### 7.4 profiling 失败
+### 7.4 Profiling failure
 
-确保使用 mcPytorch（不是标准 PyTorch）：
+Ensure using mcPytorch (not standard PyTorch):
 ```python
 import torch
 assert "metax" in torch.__version__.lower()
 ```
 
-## 8. 参考
+## 8. References
 
-- [MACA SDK 文档](https://www.metax-tech.com/)
+- [MACA SDK Documentation](https://www.metax-tech.com/)
 - [YiRage GitHub](https://github.com/chenxingqiang/YiRage)
-- [mcPytorch 文档](https://www.metax-tech.com/pytorch)
+- [mcPytorch Documentation](https://www.metax-tech.com/pytorch)
 
 ---
 
-*文档版本: 2025-12-04*
-*基于 MetaX C500 GPU 验证*
+*Document Version: 2025-12-18*  
+*Verified on MetaX C500 GPU*
