@@ -29,17 +29,66 @@
 
 ## 🏗️ Architecture
 
-<div align="center">
-  <img src="img/architecture.drawio.svg" alt="YiRage Architecture" width="900"/>
-</div>
+```mermaid
+graph TB
+    subgraph "Python API Layer"
+        A[yirage.new_kernel_graph] --> B[Backend Selection]
+        B --> C[get_available_backends]
+        B --> D[PersistentKernel]
+        D --> E[superoptimize]
+    end
+
+    subgraph "Backend Manager (C++)"
+        F[BackendRegistry<br/>Singleton, Thread-safe]
+        G[BackendFactory]
+        H[StrategyFactory]
+        F --> G
+        F --> H
+    end
+
+    subgraph "Backend Implementations"
+        I[CUDA<br/>NVIDIA GPU]
+        J[CPU<br/>x86/ARM]
+        K[MPS<br/>Apple Silicon]
+        L[Ascend<br/>Huawei NPU]
+        M[MACA<br/>MetaX GPU]
+        N[Triton<br/>Compiler]
+        O[NKI<br/>AWS Neuron]
+        P[cuDNN/MKL<br/>Accelerators]
+    end
+
+    subgraph "Hardware Layer"
+        Q[NVIDIA GPU<br/>Tensor Cores]
+        R[Intel/AMD CPU<br/>AVX512/NEON]
+        S[Apple M1/M2/M3<br/>Metal]
+        T[Ascend 910/310<br/>AI Core]
+        U[MetaX C500<br/>MACA Cores]
+        V[AWS Inferentia<br/>Neuron]
+    end
+
+    E --> F
+    G --> I & J & K & L & M & N & O & P
+    I --> Q
+    J --> R
+    K --> S
+    L --> T
+    M --> U
+    O --> V
+
+    style A fill:#e1f5fe
+    style F fill:#fff3e0
+    style I fill:#c8e6c9
+    style L fill:#ffcdd2
+    style M fill:#f3e5f5
+```
 
 ### Three-Layer Design
 
 **Layer 1: Python API**
-- Backend query and selection
-- Kernel graph creation
+- Backend query and selection (`get_available_backends()`)
+- Kernel graph creation (`new_kernel_graph()`)
 - Hardware-specific optimizers
-- Search strategy access
+- Search strategy access (`superoptimize()`)
 
 **Layer 2: Backend Manager (C++)**
 - BackendRegistry (singleton, thread-safe)
@@ -47,7 +96,7 @@
 - Automatic initialization on import
 
 **Layer 3: Backend Implementations**
-- 7 complete backends with hardware-specific optimizations
+- 9 complete backends with hardware-specific optimizations
 - Each backend includes optimizer and search strategy
 - Direct hardware mapping for maximum performance
 
@@ -131,6 +180,39 @@ optimized = graph.superoptimize(backend='maca')
 ```
 
 ### 🔍 Backend-Specific Search Strategies
+
+```mermaid
+flowchart LR
+    subgraph Input
+        A[Kernel Graph]
+    end
+
+    subgraph "Search Engine"
+        B[Candidate Generator]
+        C[Fingerprint Verifier]
+        D[Performance Profiler]
+        B --> C --> D
+    end
+
+    subgraph "Backend Strategies"
+        E[CUDA Strategy<br/>Tensor Core, Warp]
+        F[MPS Strategy<br/>SIMD, Threadgroup]
+        G[Ascend Strategy<br/>AI Core, Cube]
+        H[MACA Strategy<br/>64-thread Warp]
+    end
+
+    subgraph Output
+        I[Optimized Kernel]
+    end
+
+    A --> B
+    D --> E & F & G & H
+    E & F & G & H --> I
+
+    style B fill:#e3f2fd
+    style D fill:#fff8e1
+    style I fill:#c8e6c9
+```
 
 - **5 Independent Search Strategies** with hardware-specific optimization
 - **15 Candidate Generation Dimensions**
