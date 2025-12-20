@@ -24,12 +24,12 @@ using namespace yirage::config;
 
 #ifdef YIRAGE_FINGERPRINT_USE_CUDA
 DeviceMemoryManager::DeviceMemoryManager(int _num_gpus, int _gpu_id)
-    : num_devices(_num_gpus), gpu_id(_gpu_id) {
+    : num_gpus(_num_gpus), gpu_id(_gpu_id) {
   // fingerprint related fields
   checkCUDA(cudaSetDevice(gpu_id));
   printf("YiRage::DeviceMemoryManager: gpu_id(%d) num_gpus(%d)",
          gpu_id,
-         num_devices);
+         num_gpus);
   // Part 1: exponential lookup table
   // make future tensors 16 bytes aligned
   checkCUDA(
@@ -124,14 +124,14 @@ DeviceMemoryManager::DeviceMemoryManager(int _num_gpus, int _gpu_id)
                        sizeof(FPType) * FP_Q,
                        cudaMemcpyHostToDevice));
   // data and fingerprints
-  for (int i = 0; i < num_devices; i++) {
+  for (int i = 0; i < num_gpus; i++) {
     // Note that we allocate all fingerprint buffers
     // on the 0-th GPU to avoid inter-GPU communication
     // for computing fingerprints
     // In addition, we allocate an extra space for storing
     // stensors' fingerprints in the device memory
     if (i == 0) {
-      for (int k = 0; k < num_devices; k++) {
+      for (int k = 0; k < num_gpus; k++) {
         checkCUDA(
             cudaMalloc(&fp_base_ptr[k], yirage::config::MAX_DMEM_FP_SIZE));
       }
@@ -144,14 +144,14 @@ DeviceMemoryManager::DeviceMemoryManager(int _num_gpus, int _gpu_id)
 }
 
 DeviceMemoryManager::~DeviceMemoryManager() {
-  for (int i = 0; i < num_devices; i++) {
+  for (int i = 0; i < num_gpus; i++) {
     if (i == 0) {
       checkCUDA(cudaFree(exp_lookup_table));
       checkCUDA(cudaFree(div_p_lookup_table));
       checkCUDA(cudaFree(div_q_lookup_table));
       checkCUDA(cudaFree(sqrt_p_lookup_table));
       checkCUDA(cudaFree(sqrt_q_lookup_table));
-      for (int k = 0; k < num_devices; k++) {
+      for (int k = 0; k < num_gpus; k++) {
         checkCUDA(cudaFree(fp_base_ptr[i]));
       }
       checkCUDA(cudaFree(stensor_fp_base_ptr));
