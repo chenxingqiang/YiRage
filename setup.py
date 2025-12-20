@@ -150,13 +150,10 @@ def config_cython():
                         maca_include_dir,
                     ],
                     libraries=[
-                        # Note: yirage_runtime is linked via --whole-archive in extra_link_args
+                        # Note: Core libraries linked via extra_link_args for proper order
                         "z3",
-                        "abstract_subexpr",
-                        "formal_verifier",
                         "gomp",  # OpenMP library for parallel search
-                    ] + (["cudadevrt", "cudart_static", "cudart", "cuda"] if macros and any("CUDA" in str(m) for m in macros) else [])
-                      + (["mcruntime"] if macros and any("MACA" in str(m) for m in macros) else []),
+                    ] + (["mcruntime"] if macros and any("MACA" in str(m) for m in macros) else []),
                     library_dirs=[
                         path.join(yirage_path, "build"),
                         path.join(z3_path, "lib"),
@@ -175,6 +172,17 @@ def config_cython():
                         f"-L{path.join(yirage_path, 'build')}",
                         f"-lyirage_runtime",
                         f"-Wl,--no-whole-archive",
+                        # Rust libraries AFTER yirage_runtime (they resolve its symbols)
+                        f"-L{path.join(yirage_path, 'build', 'abstract_subexpr', 'release')}",
+                        f"-labstract_subexpr",
+                        f"-L{path.join(yirage_path, 'build', 'formal_verifier', 'release')}",
+                        f"-lformal_verifier",
+                        # CUDA runtime libraries (after yirage_runtime which needs them)
+                        "-L/usr/local/cuda/lib64",
+                        "-L/usr/local/cuda-12.1/lib64",
+                        "-lcudart",
+                        "-Wl,-rpath,/usr/local/cuda/lib64",
+                        "-Wl,-rpath,/usr/local/cuda-12.1/lib64",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'abstract_subexpr', 'release')}",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'formal_verifier', 'release')}",
                         f"-Wl,-rpath,{maca_home}/lib",  # MACA runtime library path
@@ -187,48 +195,55 @@ def config_cython():
         print("WARNING: cython is not installed!!!")
         raise SystemExit(1)
     
-# Install Rust if not yet available
-try:
-    # Attempt to run a Rust command to check if Rust is installed
-    subprocess.check_output(['cargo', '--version'])
-except FileNotFoundError:
-    print("Rust/Cargo not found, installing it...")
-    # Rust is not installed, so install it using rustup
-    try:
-        subprocess.run("curl https://sh.rustup.rs -sSf | sh -s -- -y", shell=True, check=True)
-        print("Rust and Cargo installed successfully.")
-    except subprocess.CalledProcessError as e:
-        print(f"Error: {e}")
-    # Add the cargo binary directory to the PATH
-    os.environ["PATH"] = f"{os.path.join(os.environ.get('HOME', '/root'), '.cargo', 'bin')}:{os.environ.get('PATH', '')}"
-
 yirage_path = path.dirname(__file__)
-# z3_path = os.path.join(yirage_path, 'deps', 'z3', 'build')
-# os.environ['Z3_DIR'] = z3_path
 if yirage_path == '':
     yirage_path = '.'
 
-try:
-    subprocess.check_output(['cargo', 'build', '--release', '--target-dir', '../../../../build/abstract_subexpr'], cwd='src/search/abstract_expr/abstract_subexpr')
-except subprocess.CalledProcessError as e:
-    print("Failed to build abstract_subexpr Rust library, building it ...")
-    try:
-        subprocess.run(['cargo', 'build', '--release', '--target-dir', '../../../../build/abstract_subexpr'], cwd='src/search/abstract_expr/abstract_subexpr', check=True)
-        print("Abstract_subexpr Rust library built successfully.")
-    except subprocess.CalledProcessError as e:
-        print("Failed to build abstract_subexpr Rust library.")
-    os.environ['ABSTRACT_SUBEXPR_LIB'] = os.path.join(yirage_path,'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so')
+# Skip Rust build if SKIP_BUILD is set and libraries already exist
+skip_rust_build = os.environ.get("SKIP_BUILD") and (
+    os.path.exists(os.path.join(yirage_path, 'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so')) and
+    os.path.exists(os.path.join(yirage_path, 'build', 'formal_verifier', 'release', 'libformal_verifier.so'))
+)
 
-try:
-    subprocess.check_output(['cargo', 'build', '--release', '--target-dir', '../../../../build/formal_verifier'], cwd='src/search/verification/formal_verifier_equiv')
-except subprocess.CalledProcessError as e:
-    print("Failed to build formal_verifier Rust library, building it ...")
+if skip_rust_build:
+    print("Skipping Rust library builds (SKIP_BUILD set and libraries exist)")
+else:
+    # Install Rust if not yet available
     try:
-        subprocess.run(['cargo', 'build', '--release', '--target-dir', '../../../../build/formal_verifier'], cwd='src/search/verification/formal_verifier_equiv', check=True)
-        print("formal_verifier Rust library built successfully.")
+        # Attempt to run a Rust command to check if Rust is installed
+        subprocess.check_output(['cargo', '--version'])
+    except FileNotFoundError:
+        print("Rust/Cargo not found, installing it...")
+        # Rust is not installed, so install it using rustup
+        try:
+            subprocess.run("curl https://sh.rustup.rs -sSf | sh -s -- -y", shell=True, check=True)
+            print("Rust and Cargo installed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error: {e}")
+        # Add the cargo binary directory to the PATH
+        os.environ["PATH"] = f"{os.path.join(os.environ.get('HOME', '/root'), '.cargo', 'bin')}:{os.environ.get('PATH', '')}"
+
+    try:
+        subprocess.check_output(['cargo', 'build', '--release', '--target-dir', '../../../../build/abstract_subexpr'], cwd='src/search/abstract_expr/abstract_subexpr')
     except subprocess.CalledProcessError as e:
-        print("Failed to build formal_verifier Rust library.")
-    os.environ['FORMAL_VERIFIER_LIB'] = os.path.join(yirage_path,'build', 'formal_verifier', 'release', 'libformal_verifier.so')
+        print("Failed to build abstract_subexpr Rust library, building it ...")
+        try:
+            subprocess.run(['cargo', 'build', '--release', '--target-dir', '../../../../build/abstract_subexpr'], cwd='src/search/abstract_expr/abstract_subexpr', check=True)
+            print("Abstract_subexpr Rust library built successfully.")
+        except subprocess.CalledProcessError as e:
+            print("Failed to build abstract_subexpr Rust library.")
+        os.environ['ABSTRACT_SUBEXPR_LIB'] = os.path.join(yirage_path,'build', 'abstract_subexpr', 'release', 'libabstract_subexpr.so')
+
+    try:
+        subprocess.check_output(['cargo', 'build', '--release', '--target-dir', '../../../../build/formal_verifier'], cwd='src/search/verification/formal_verifier_equiv')
+    except subprocess.CalledProcessError as e:
+        print("Failed to build formal_verifier Rust library, building it ...")
+        try:
+            subprocess.run(['cargo', 'build', '--release', '--target-dir', '../../../../build/formal_verifier'], cwd='src/search/verification/formal_verifier_equiv', check=True)
+            print("formal_verifier Rust library built successfully.")
+        except subprocess.CalledProcessError as e:
+            print("Failed to build formal_verifier Rust library.")
+        os.environ['FORMAL_VERIFIER_LIB'] = os.path.join(yirage_path,'build', 'formal_verifier', 'release', 'libformal_verifier.so')
 
 
 # build YiRage runtime library
