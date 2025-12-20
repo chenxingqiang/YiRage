@@ -67,31 +67,33 @@ print(f"✅ Executed on Ascend NPU: {outputs[0].shape}")
 YiRage for Ascend is designed based on Triton reuse:
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'lineColor': '#42a5f5'}}}%%
 flowchart LR
-    subgraph "Input"
-        A[YiRage Graph<br/>Computation Graph]
+    subgraph INPUT["📥 Input"]
+        A["<b>YiRage Graph</b><br/><i>Computation Graph</i>"]
     end
 
-    subgraph "Path 1: Triton Recommended"
-        B[Triton Code<br/>.py]
-        C[BiSheng Compiler<br/>Huawei Compiler]
+    subgraph PATH1["⭐ Path 1: Triton (Recommended)"]
+        B["Triton Code<br/><code>.py</code>"]
+        C["<b>BiSheng Compiler</b><br/><i>Huawei Optimized</i>"]
     end
 
-    subgraph "Path 2: Ascend C Optional"
-        D[Ascend C Code<br/>.cpp]
-        E[ascendc Compiler<br/>Native Compiler]
+    subgraph PATH2["📋 Path 2: Ascend C (Optional)"]
+        D["Ascend C Code<br/><code>.cpp</code>"]
+        E["ascendc Compiler<br/><i>Native</i>"]
     end
 
-    subgraph "Output"
-        F[Ascend NPU<br/>AI Core Execution]
+    subgraph OUTPUT["📤 Output"]
+        F["<b>Ascend NPU</b><br/><i>AI Core Execution</i>"]
     end
 
     A --> B --> C --> F
-    A --> D --> E --> F
+    A -.-> D -.-> E -.-> F
 
-    style B fill:#c8e6c9
-    style D fill:#fff9c4
-    style F fill:#ffcdd2
+    style INPUT fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style PATH1 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style PATH2 fill:#fffde7,stroke:#f9a825,stroke-width:1px,stroke-dasharray: 5 5
+    style OUTPUT fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 ```
 
 ### Path 1: Triton (Recommended) ⭐⭐⭐⭐⭐
@@ -188,30 +190,32 @@ YiRage Ascend backend depends on the following Huawei open-source projects:
 ## 🔄 YiRage Integration Flow
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'lineColor': '#42a5f5'}}}%%
 flowchart TB
-    subgraph "YiRage Framework"
-        A[YiRage Triton Transpiler<br/>Reuse Existing Transpiler]
+    subgraph YIRAGE["🔷 YiRage Framework"]
+        A["<b>Triton Transpiler</b><br/><i>Code Reuse ✓</i>"]
     end
 
-    subgraph "Code Generation"
-        B[Triton Code<br/>.py Kernel]
+    subgraph CODEGEN["📝 Code Generation"]
+        B["Triton Kernel<br/><code>.py</code>"]
     end
 
-    subgraph "Ascend Toolchain"
-        C[triton-ascend<br/>BiSheng Compiler]
-        D[torch_npu<br/>Runtime]
+    subgraph ASCEND["🔶 Ascend Toolchain"]
+        C["<b>triton-ascend</b><br/><i>BiSheng Compiler</i>"]
+        D["<b>torch_npu</b><br/><i>PyTorch Runtime</i>"]
     end
 
-    subgraph "Hardware"
-        E[Ascend NPU<br/>910/910B/310P]
+    subgraph HW["🖥️ Hardware"]
+        E["<b>Ascend NPU</b><br/>910 / 910B / 310P"]
     end
 
     A --> B --> C --> E
     D --> E
 
-    style A fill:#e1f5fe
-    style C fill:#fff3e0
-    style E fill:#ffcdd2
+    style YIRAGE fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style CODEGEN fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style ASCEND fill:#fff8e1,stroke:#ffa000,stroke-width:2px
+    style HW fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 ```
 
 ## ✅ Verification Checklist

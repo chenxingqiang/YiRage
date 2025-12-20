@@ -5,28 +5,28 @@
 Integration based on [Ascend/pytorch](https://github.com/Ascend/pytorch) and [Ascend/triton-ascend](https://github.com/Ascend/triton-ascend):
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'primaryTextColor': '#1565c0', 'lineColor': '#42a5f5'}}}%%
 flowchart TB
-    subgraph "YiRage Application"
-        A[graph.superoptimize<br/>backend='ascend']
+    subgraph APP["🚀 Application Layer"]
+        A["<b>graph.superoptimize()</b><br/><i>backend='ascend'</i>"]
     end
 
-    subgraph "YiRage Ascend Backend"
-        B[Search Strategy<br/>ascend_strategy.cc]
-        C[Triton Transpiler<br/>REUSED!]
-        
+    subgraph BACKEND["⚙️ YiRage Ascend Backend"]
+        B["<b>Search Strategy</b><br/><code>ascend_strategy.cc</code>"]
+        C["<b>Triton Transpiler</b><br/><i>Code Reuse ✓</i>"]
         B --> C
     end
 
-    subgraph "Compilation Paths"
-        D[NVIDIA Path<br/>nvcc/ptxas]
-        E[Ascend Path<br/>triton-ascend BiSheng]
+    subgraph COMPILE["🔧 Compilation Paths"]
+        D["NVIDIA Path<br/><code>nvcc / ptxas</code>"]
+        E["Ascend Path<br/><code>BiSheng Compiler</code>"]
     end
 
-    subgraph "Runtime"
-        F[CUDA GPU<br/>NVIDIA]
-        G[torch_npu]
-        H[CANN Runtime]
-        I[Ascend NPU<br/>910/910B/310P]
+    subgraph RUNTIME["🖥️ Hardware Runtime"]
+        F["CUDA GPU"]
+        G["torch_npu"]
+        H["CANN Runtime"]
+        I["<b>Ascend NPU</b><br/>910 / 910B / 310P"]
     end
 
     A --> B
@@ -34,10 +34,10 @@ flowchart TB
     D --> F
     E --> G --> H --> I
 
-    style A fill:#e1f5fe
-    style C fill:#fff3e0
-    style E fill:#c8e6c9
-    style I fill:#ffcdd2
+    style APP fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style BACKEND fill:#fff8e1,stroke:#ffa000,stroke-width:2px
+    style COMPILE fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style RUNTIME fill:#fce4ec,stroke:#c2185b,stroke-width:2px
 ```
 
 ### Key Design Points

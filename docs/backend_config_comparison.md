@@ -3,23 +3,24 @@
 ## Architecture Overview
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'lineColor': '#546e7a'}}}%%
 graph TB
-    subgraph "Backend Configuration Architecture"
-        A[YiRage Search Engine]
+    subgraph ENGINE["🔍 YiRage Search Engine"]
+        A["<b>Kernel Optimizer</b><br/><i>Configuration Manager</i>"]
     end
 
-    subgraph "Configuration Retrieval Methods"
-        B[CUDA<br/>Dynamic Runtime Query]
-        C[MPS<br/>Static Configuration File]
-        D[CPU<br/>Cache-based Static Config]
-        E[Ascend<br/>Static Config + npu-smi Detection]
+    subgraph METHODS["⚙️ Configuration Retrieval Methods"]
+        B["<b>CUDA</b><br/>Dynamic Runtime Query"]
+        C["<b>MPS</b><br/>Static Config File"]
+        D["<b>CPU</b><br/>Cache-based Static"]
+        E["<b>Ascend</b><br/>Static + npu-smi"]
     end
 
-    subgraph "Hardware Information Sources"
-        F[cudaDeviceProp<br/>NVIDIA API]
-        G[Apple Documentation<br/>Metal Feature Set]
-        H[CPU Architecture Knowledge<br/>Cache Hierarchy]
-        I[CANN Docs + npu-smi<br/>Huawei Specifications]
+    subgraph SOURCES["📊 Hardware Information Sources"]
+        F["cudaDeviceProp<br/><i>NVIDIA API</i>"]
+        G["Apple Docs<br/><i>Metal Feature Set</i>"]
+        H["Architecture Specs<br/><i>Cache Hierarchy</i>"]
+        I["CANN + npu-smi<br/><i>Huawei Specs</i>"]
     end
 
     A --> B & C & D & E
@@ -28,10 +29,13 @@ graph TB
     D --> H
     E --> I
 
-    style B fill:#76ff03
-    style C fill:#ffeb3b
-    style D fill:#ffeb3b
-    style E fill:#ffeb3b
+    style ENGINE fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style METHODS fill:#fff8e1,stroke:#ffa000,stroke-width:2px
+    style SOURCES fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style B fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    style C fill:#ffe0b2,stroke:#ef6c00,stroke-width:2px
+    style D fill:#bbdefb,stroke:#1565c0,stroke-width:2px
+    style E fill:#f8bbd9,stroke:#ad1457,stroke-width:2px
 ```
 
 ## Why Do We Need These Configuration Parameters?
