@@ -23,6 +23,9 @@ using namespace yirage::type;
 using namespace yirage::config;
 
 #ifdef YIRAGE_FINGERPRINT_USE_CUDA
+// Static singleton instance
+DeviceMemoryManager *DeviceMemoryManager::singleton = nullptr;
+
 DeviceMemoryManager::DeviceMemoryManager(int _num_gpus, int _gpu_id)
     : num_gpus(_num_gpus), gpu_id(_gpu_id) {
   // fingerprint related fields

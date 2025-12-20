@@ -150,7 +150,7 @@ def config_cython():
                         maca_include_dir,
                     ],
                     libraries=[
-                        "yirage_runtime",
+                        # Note: yirage_runtime is linked via --whole-archive in extra_link_args
                         "z3",
                         "abstract_subexpr",
                         "formal_verifier",
@@ -170,6 +170,11 @@ def config_cython():
                     extra_link_args=[
                         "-fPIC",
                         "-fopenmp",  # OpenMP for parallel search
+                        # Force include all symbols from static library (required for static singleton)
+                        f"-Wl,--whole-archive",
+                        f"-L{path.join(yirage_path, 'build')}",
+                        f"-lyirage_runtime",
+                        f"-Wl,--no-whole-archive",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'abstract_subexpr', 'release')}",
                         f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'formal_verifier', 'release')}",
                         f"-Wl,-rpath,{maca_home}/lib",  # MACA runtime library path
