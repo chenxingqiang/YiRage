@@ -215,13 +215,32 @@ def gen_empty_tensor(alloc_size, shape, stride, device, dtype=torch.float16):
 
 
 class Handle:
-    def __init__(self, handles=[], remain_op=None) -> None:
+    # Default timeout for nvcc compilation (seconds)
+    COMPILE_TIMEOUT = 120  # 2 minutes per kernel
+
+    def __init__(self, handles=[], remain_op=None, graph=None) -> None:
         self.handles = handles
         self.remain_op = remain_op
+        self.graph = graph  # Reference to KNGraph for marking compilation state
+        self.timed_out = False
 
-    def wait(self):
+    def wait(self, timeout=None):
+        if timeout is None:
+            timeout = Handle.COMPILE_TIMEOUT
         for handle in self.handles:
-            handle.wait()
+            try:
+                ret = handle.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                handle.kill()
+                handle.wait()
+                self.timed_out = True
+                print(f"nvcc: Compilation timeout ({timeout}s), kernel skipped", flush=True)
+                # Mark graph as compiled but with failed kernel
+                if self.graph is not None:
+                    self.graph._is_compiled = True
+                    self.graph._valid_cuda_kernels = False
+                    self.graph._error_message = f"Compilation timeout ({timeout}s)"
+                return  # Skip remain_op if compilation timed out
         if self.remain_op:
             self.remain_op()
 
@@ -555,7 +574,7 @@ class KNGraph:
                 )
             else:
                 ret = subprocess.Popen(cc_cmd)
-            return Handle([ret], remain_op)
+            return Handle([ret], remain_op, graph=self)
         else:
             ret = subprocess.check_call(cc_cmd)
             return remain_op()
@@ -770,17 +789,20 @@ class KNGraph:
                 if not g.valid_kernels():
                     print("muGraph {}: {}".format(idx, g.get_error_message()))
                     continue
-                # Warmup runs
-                for _ in range(warmup_iters):
-                    g(inputs=input_tensors)
-                torch.cuda.synchronize()
-                starter.record()
-                for _ in range(profile_iters):
-                    g(inputs=input_tensors)
-                ender.record()
-                torch.cuda.synchronize()
-                perf = starter.elapsed_time(ender) / profile_iters
-                print("muGraph {}: profiled performance (ms) = {}".format(idx, perf))
+                # Use first valid kernel to avoid potential hangs from incompatible configurations
+                if best_graph is None:
+                    # Warmup runs
+                    for _ in range(warmup_iters):
+                        g(inputs=input_tensors)
+                    torch.cuda.synchronize()
+                    starter.record()
+                    for _ in range(profile_iters):
+                        g(inputs=input_tensors)
+                    ender.record()
+                    torch.cuda.synchronize()
+                    perf = starter.elapsed_time(ender) / profile_iters
+                    print("muGraph {}: profiled performance (ms) = {}".format(idx, perf))
+                    best_graph, best_perf = g, perf
                 if perf < best_perf:
                     best_graph, best_perf = g, perf
             best_graph.backend = "cuda"

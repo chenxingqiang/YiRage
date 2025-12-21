@@ -95,7 +95,8 @@ Test Results:
 2. **Superoptimizer works** - discovers and compiles optimized kernels for V100
 3. **Multiple muGraphs generated** - search finds many candidate kernel configurations
 4. **Software workarounds required** - V100 lacks hardware features like `ldmatrix` and `cp.async`
-5. **Compilation overhead** - some kernels may take longer to compile due to complex template instantiation
+5. **First-valid-kernel strategy** - uses first successfully compiled kernel to avoid potential execution hangs
+6. **Small matrix overhead** - for very small matrices, PyTorch's highly optimized cuBLAS may be faster
 
 ## Known Limitations
 
