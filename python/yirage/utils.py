@@ -3,7 +3,13 @@ import torch
 # This function returns the shared memory limit (in bytes)
 # for the given GPU hardware architecture
 def get_shared_memory_capacity(target_cc):
-    if target_cc == 80:
+    if target_cc == 70:
+        # V100 GPUs (Volta)
+        return 96 * 1024
+    elif target_cc == 75:
+        # T4 GPUs (Turing)
+        return 64 * 1024
+    elif target_cc == 80:
         # A100 GPUs
         return 163 * 1024
     elif target_cc == 86:

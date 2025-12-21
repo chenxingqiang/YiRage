@@ -154,17 +154,38 @@ def get_cc_cmd(
         so_path,
     ]
 
-    if target == 90:
+    if target == 70:
+        # V100 (Volta)
+        specific_cmd = [
+            "-arch=sm_70",
+            "-gencode=arch=compute_70,code=sm_70",
+        ] + (["-DYIRAGE_ENABLE_PROFILER"] if profiling else [])
+    elif target == 75:
+        # T4 (Turing)
+        specific_cmd = [
+            "-arch=sm_75",
+            "-gencode=arch=compute_75,code=sm_75",
+        ] + (["-DYIRAGE_ENABLE_PROFILER"] if profiling else [])
+    elif target == 80:
+        # A100 (Ampere)
+        specific_cmd = [
+            "-arch=sm_80",
+            "-gencode=arch=compute_80,code=sm_80",
+        ] + (["-DYIRAGE_ENABLE_PROFILER"] if profiling else [])
+    elif target == 90:
+        # H100 (Hopper)
         specific_cmd = [
             "-arch=sm_90a",
             "-gencode=arch=compute_90a,code=sm_90a",
         ] + (["-DYIRAGE_ENABLE_PROFILER"] if profiling else [])
     elif target == 100:
+        # B200 (Blackwell)
         specific_cmd = [
             "-arch=sm_100a",
             "-gencode=arch=compute_100a,code=sm_100a",
         ] + (["-DYIRAGE_ENABLE_PROFILER"] if profiling else [])
     else:
+        # Fallback to native detection
         specific_cmd = [
             "-arch=native",
         ] + (["-DYIRAGE_ENABLE_PROFILER"] if profiling else [])
@@ -361,9 +382,10 @@ class KNGraph:
             for meta in results["output_directives"]
         ]
 
+        # Use int64 for compatibility with older PyTorch versions (uint64 was added later)
         prodiler_buffer_tensor = torch.empty(
             results["profiler_buf_size"],
-            dtype=torch.uint64,
+            dtype=torch.int64,
             device=input_tensors[0].device,
         ).contiguous()
 

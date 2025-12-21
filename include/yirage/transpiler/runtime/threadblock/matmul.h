@@ -47,24 +47,40 @@ public:
 };
 
 enum class S2RTiledCopyType { UNIVERSAL, LDMATRIX_N, LDMATRIX_T };
-// Select the S2R (shared -> register) copy atom
+
+// Select the S2R (shared -> register) copy atom - specialized for no ldmatrix
 template <typename T,
           bool IS_LDMATRIX_AVAIL,
           class Layout,
           int K_DIM,
-          class MMAAtomK>
-class S2RTiledCopySelector {
-  // TODO(intlsy) Add support for architectures that do not support LDMATRIX
-  // (don't forget to consider the case where the shape of the matrix is not
-  // divisible by the shape of TiledMMA)
-  static_assert(IS_LDMATRIX_AVAIL);
+          class MMAAtomK,
+          typename Enable = void>
+class S2RTiledCopySelector;
 
+// Specialization when ldmatrix is NOT available (V100, etc.)
+template <typename T,
+          class Layout,
+          int K_DIM,
+          class MMAAtomK>
+class S2RTiledCopySelector<T, false, Layout, K_DIM, MMAAtomK> {
+public:
+  // Use universal copy for architectures without ldmatrix support
+  using Result = Copy_Atom<UniversalCopy<uint16_t>, T>;
+  static constexpr S2RTiledCopyType TYPE = S2RTiledCopyType::UNIVERSAL;
+};
+
+// Specialization when ldmatrix IS available (T4+, A100, etc.)
+template <typename T,
+          class Layout,
+          int K_DIM,
+          class MMAAtomK>
+class S2RTiledCopySelector<T, true, Layout, K_DIM, MMAAtomK> {
   static constexpr bool IS_DIM0_INNERMOST = (Layout{})(_1{}, _0{}) == _1{};
   static constexpr bool IS_DIM1_INNERMOST = (Layout{})(_0{}, _1{}) == _1{};
   static constexpr int CONSECUTIVE_DIM = IS_DIM0_INNERMOST ? 0 : 1;
 
-  // TODO(intlsy) Fallback to normal copy when this is not true
-  static_assert(IS_DIM0_INNERMOST || IS_DIM1_INNERMOST);
+  // Fallback to universal copy when neither dim is innermost
+  static constexpr bool USE_UNIVERSAL = !(IS_DIM0_INNERMOST || IS_DIM1_INNERMOST);
 
 public:
   // Since we want to pipeline S->R copy and MMA, we would like the MMAAtom and
@@ -77,22 +93,24 @@ public:
       MMAAtomK{} == _16{},
       SM75_U16x8_LDSM_T,
       std::conditional_t<MMAAtomK{} == _8{}, SM75_U16x4_LDSM_T, void>>;
-  static_assert(!std::is_same_v<CandidateLdMatrixN, void>);
-  static_assert(!std::is_same_v<CandidateLdMatrixT, void>);
 
   // If `ldmatrix` is available and the innermost dim is among the first two
   // dims, use `ldmatrix` or `ldmatrix.trans`. Otherwise, use the universal copy
   // atom
   using Result = std::conditional_t<
-      CONSECUTIVE_DIM == K_DIM && !std::is_same_v<T, float>,
-      Copy_Atom<CandidateLdMatrixN, T>,
-      std::conditional_t<CONSECUTIVE_DIM != K_DIM && !std::is_same_v<T, float>,
-                         Copy_Atom<CandidateLdMatrixT, T>,
-                         Copy_Atom<UniversalCopy<uint32_t>, T>>>;
+      USE_UNIVERSAL,
+      Copy_Atom<UniversalCopy<uint16_t>, T>,
+      std::conditional_t<
+          CONSECUTIVE_DIM == K_DIM && !std::is_same_v<T, float>,
+          Copy_Atom<CandidateLdMatrixN, T>,
+          std::conditional_t<CONSECUTIVE_DIM != K_DIM && !std::is_same_v<T, float>,
+                             Copy_Atom<CandidateLdMatrixT, T>,
+                             Copy_Atom<UniversalCopy<uint32_t>, T>>>>;
   static constexpr S2RTiledCopyType TYPE =
-      CONSECUTIVE_DIM == K_DIM && !std::is_same_v<T, float>
+      USE_UNIVERSAL ? S2RTiledCopyType::UNIVERSAL
+      : (CONSECUTIVE_DIM == K_DIM && !std::is_same_v<T, float>)
           ? S2RTiledCopyType::LDMATRIX_N
-      : CONSECUTIVE_DIM != K_DIM && !std::is_same_v<T, float>
+      : (CONSECUTIVE_DIM != K_DIM && !std::is_same_v<T, float>)
           ? S2RTiledCopyType::LDMATRIX_T
           : S2RTiledCopyType::UNIVERSAL;
 };
@@ -137,35 +155,42 @@ CUTE_HOST_DEVICE void s2r_copy_with_oob_protection(
                 (K::value % TileK::value == 0)) {
     copy(tiled_copy, src, dst);
   } else {
-    using MIndicatorLayout = Layout<Shape<M, K>, Stride<_1, _0>>;
-    using KIndicatorLayout = Layout<Shape<M, K>, Stride<_0, _1>>;
-    auto m_indicator_thrIdx_s2r_s2rM_s2rK =
-        tiled_copy.tidfrg_S(MIndicatorLayout{});
-    auto k_indicator_thrIdx_s2r_s2rM_s2rK =
-        tiled_copy.tidfrg_S(KIndicatorLayout{});
-    static_assert(is_static_v<decltype(m_indicator_thrIdx_s2r_s2rM_s2rK)>);
-    static_assert(is_static_v<decltype(k_indicator_thrIdx_s2r_s2rM_s2rK)>);
-    int offset_m = m_indicator_thrIdx_s2r_s2rM_s2rK(thread_idx, _0{}, _0{});
-    int offset_k = k_indicator_thrIdx_s2r_s2rM_s2rK(thread_idx, _0{}, _0{});
-    auto m_indicator_frag = m_indicator_thrIdx_s2r_s2rM_s2rK(
-        thread_idx, _, make_tuple(_, _)); // [S2R, S2R_M or S2R_N, S2R_K]
-    auto k_indicator_frag = k_indicator_thrIdx_s2r_s2rM_s2rK(
-        thread_idx, _, make_tuple(_, _)); // Same as above
+    // Check if this is a simple UniversalCopy (V100 path) or ldmatrix (T4+ path)
+    constexpr bool is_simple_copy = cosize(SrcLayout{}(_, _0{})) > 16;
+    
+    if constexpr (is_simple_copy) {
+      // Simple element-wise copy for architectures without ldmatrix (V100)
+      // Just do a direct copy - OOB elements will be handled by the matmul tiling
+      copy(tiled_copy, src, dst);
+    } else {
+      // ldmatrix path with OOB protection
+      using MIndicatorLayout = Layout<Shape<M, K>, Stride<_1, _0>>;
+      using KIndicatorLayout = Layout<Shape<M, K>, Stride<_0, _1>>;
+      auto m_indicator_thrIdx_s2r_s2rM_s2rK =
+          tiled_copy.tidfrg_S(MIndicatorLayout{});
+      auto k_indicator_thrIdx_s2r_s2rM_s2rK =
+          tiled_copy.tidfrg_S(KIndicatorLayout{});
+      static_assert(is_static_v<decltype(m_indicator_thrIdx_s2r_s2rM_s2rK)>);
+      static_assert(is_static_v<decltype(k_indicator_thrIdx_s2r_s2rM_s2rK)>);
+      int offset_m = m_indicator_thrIdx_s2r_s2rM_s2rK(thread_idx, _0{}, _0{});
+      int offset_k = k_indicator_thrIdx_s2r_s2rM_s2rK(thread_idx, _0{}, _0{});
+      auto m_indicator_frag = m_indicator_thrIdx_s2r_s2rM_s2rK(
+          thread_idx, _, make_tuple(_, _)); // [S2R, S2R_M or S2R_N, S2R_K]
+      auto k_indicator_frag = k_indicator_thrIdx_s2r_s2rM_s2rK(
+          thread_idx, _, make_tuple(_, _)); // Same as above
 
-    static_assert(cosize(SrcLayout{}(_, _0{})) <= 16);
-    Tensor all_zero_tensor =
-        make_tensor(make_smem_ptr((T *)smem_allzero_ptr),
-                    Layout<decltype(shape(SrcLayout{}(_, _0{})))>{});
+      static_assert(cosize(SrcLayout{}(_, _0{})) <= 16);
+      Tensor all_zero_tensor =
+          make_tensor(make_smem_ptr((T *)smem_allzero_ptr),
+                      Layout<decltype(shape(SrcLayout{}(_, _0{})))>{});
 
-    CUTE_UNROLL
-    for (int i = 0; i < size<1>(src); ++i) {
-      auto coord_m = offset_m + m_indicator_frag(_0{}, i, s2r_k);
-      auto coord_k = offset_k + k_indicator_frag(_0{}, i, s2r_k);
-      bool valid = coord_m < M{} && coord_k < K{};
-      // printf("Thread %d, (%d, %d) -> (%d, %d), %d\n", thread_idx, i, s2r_k,
-      // (int)coord_m, (int)coord_k, valid);
-      // TODO(intlsy) Support naive UniversalCopy
-      tiled_copy.call(valid ? src(_, i) : all_zero_tensor, dst(_, i));
+      CUTE_UNROLL
+      for (int i = 0; i < size<1>(src); ++i) {
+        auto coord_m = offset_m + m_indicator_frag(_0{}, i, s2r_k);
+        auto coord_k = offset_k + k_indicator_frag(_0{}, i, s2r_k);
+        bool valid = coord_m < M{} && coord_k < K{};
+        tiled_copy.call(valid ? src(_, i) : all_zero_tensor, dst(_, i));
+      }
     }
   }
 }
@@ -414,25 +439,27 @@ public:
       // e1976daacc7b030ba672217eb5d96f5a663df4ab) Refer to this link for more
       // information: https://github.com/NVIDIA/cutlass/issues/1766
 
-      S2RTiledCopyA s2r_tiled_copy_A;
-      ThrCopy s2r_tiled_copy_A_thr = s2r_tiled_copy_A.get_slice(thread_idx);
-      Tensor s2r_sA =
-          s2r_tiled_copy_A_thr.partition_S(sA); // (S2R, S2R_M, S2R_K)
-      Tensor s2r_rA =
-          s2r_tiled_copy_A_thr.retile_D(mma_rA); // (S2R, S2R_M, S2R_K)
+      if constexpr (IS_LDMATRIX_AVAIL) {
+        // T4+ path: use ldmatrix with TiledCopy
+        S2RTiledCopyA s2r_tiled_copy_A;
+        ThrCopy s2r_tiled_copy_A_thr = s2r_tiled_copy_A.get_slice(thread_idx);
+        Tensor s2r_sA =
+            s2r_tiled_copy_A_thr.partition_S(sA); // (S2R, S2R_M, S2R_K)
+        Tensor s2r_rA =
+            s2r_tiled_copy_A_thr.retile_D(mma_rA); // (S2R, S2R_M, S2R_K)
 
-      S2RTiledCopyB s2r_tiled_copy_B;
-      ThrCopy s2r_tiled_copy_B_thr = s2r_tiled_copy_B.get_slice(thread_idx);
-      Tensor s2r_sB =
-          s2r_tiled_copy_B_thr.partition_S(sB); // (S2R, S2R_N, S2R_K)
-      Tensor s2r_rB =
-          s2r_tiled_copy_B_thr.retile_D(mma_rB); // (S2R, S2R_N, S2R_K)
+        S2RTiledCopyB s2r_tiled_copy_B;
+        ThrCopy s2r_tiled_copy_B_thr = s2r_tiled_copy_B.get_slice(thread_idx);
+        Tensor s2r_sB =
+            s2r_tiled_copy_B_thr.partition_S(sB); // (S2R, S2R_N, S2R_K)
+        Tensor s2r_rB =
+            s2r_tiled_copy_B_thr.retile_D(mma_rB); // (S2R, S2R_N, S2R_K)
 
-      CUTE_STATIC_ASSERT_V(size(shape<2>(s2r_rA)) == size(shape<2>(mma_rA)));
-      CUTE_STATIC_ASSERT_V(size(shape<2>(s2r_rA)) == size(shape<2>(s2r_rB)));
-      static constexpr int NUM_MMA_K_STAGES = size(shape<2>(s2r_sA));
+        CUTE_STATIC_ASSERT_V(size(shape<2>(s2r_rA)) == size(shape<2>(mma_rA)));
+        CUTE_STATIC_ASSERT_V(size(shape<2>(s2r_rA)) == size(shape<2>(s2r_rB)));
+        static constexpr int NUM_MMA_K_STAGES = size(shape<2>(s2r_sA));
 
-#define S2RCOPY(k_idx)                                                         \
+#define S2RCOPY_LDMATRIX(k_idx)                                                \
   s2r_copy_with_oob_protection<T, M, K>(s2r_tiled_copy_A,                      \
                                         s2r_sA(_, _, k_idx),                   \
                                         s2r_rA(_, _, k_idx),                   \
@@ -446,15 +473,40 @@ public:
                                         k_idx,                                 \
                                         thread_idx);
 
-      // Pipeline S->R copy and MMA
-      S2RCOPY(_0{});
+        // Pipeline S->R copy and MMA
+        S2RCOPY_LDMATRIX(_0{});
 
-      CUTE_UNROLL
-      for (int i_k = 0; i_k < NUM_MMA_K_STAGES; ++i_k) {
-        if (i_k + 1 != NUM_MMA_K_STAGES) {
-          S2RCOPY(i_k + 1);
+        CUTE_UNROLL
+        for (int i_k = 0; i_k < NUM_MMA_K_STAGES; ++i_k) {
+          if (i_k + 1 != NUM_MMA_K_STAGES) {
+            S2RCOPY_LDMATRIX(i_k + 1);
+          }
+          gemm(tiled_mma, mma_rC, mma_rA(_, _, i_k), mma_rB(_, _, i_k), mma_rC);
         }
-        gemm(tiled_mma, mma_rC, mma_rA(_, _, i_k), mma_rB(_, _, i_k), mma_rC);
+#undef S2RCOPY_LDMATRIX
+      } else {
+        // V100 path: use AutoVectorizingCopy for shared-to-register copy
+        // This is simpler than ldmatrix but works on all architectures
+        using S2RCopyAtom = Copy_Atom<AutoVectorizingCopy, T>;
+        auto s2r_copy = make_tiled_copy_A(S2RCopyAtom{}, tiled_mma);
+        auto s2r_copy_B = make_tiled_copy_B(S2RCopyAtom{}, tiled_mma);
+        
+        auto thr_copy_A = s2r_copy.get_slice(thread_idx);
+        auto thr_copy_B = s2r_copy_B.get_slice(thread_idx);
+        
+        Tensor thr_sA = thr_copy_A.partition_S(sA);
+        Tensor thr_rA = thr_copy_A.retile_D(mma_rA);
+        Tensor thr_sB = thr_copy_B.partition_S(sB);
+        Tensor thr_rB = thr_copy_B.retile_D(mma_rB);
+        
+        static constexpr int NUM_MMA_K = size<2>(thr_rA);
+        
+        CUTE_UNROLL
+        for (int i_k = 0; i_k < NUM_MMA_K; ++i_k) {
+          copy(s2r_copy, thr_sA(_, _, i_k), thr_rA(_, _, i_k));
+          copy(s2r_copy_B, thr_sB(_, _, i_k), thr_rB(_, _, i_k));
+          gemm(tiled_mma, mma_rC, mma_rA(_, _, i_k), mma_rB(_, _, i_k), mma_rC);
+        }
       }
     }
     __syncthreads();

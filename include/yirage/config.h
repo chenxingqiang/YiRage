@@ -50,7 +50,7 @@ constexpr int MAX_TMA_DESC_PER_TENSOR = 3;
 // Multi-backend configuration
 // Each backend has its own memory limits, defined in backend-specific namespaces
 
-#ifdef YIRAGE_BACKEND_CUDA_ENABLED
+#if defined(YIRAGE_BACKEND_CUDA_ENABLED) || defined(YIRAGE_BACKEND_USE_CUDA)
 namespace cuda {
 size_t const MAX_DMEM_SIZE = (size_t)2 * 1024 * 1024 * 1024;    // 2 GB
 size_t const MAX_SMEM_SIZE = 96 * 1024;                         // 96 KB
@@ -89,15 +89,7 @@ size_t const MAX_SMEM_SIZE = 512 * 1024;                        // 512 KB (AI Co
 }
 #endif
 
-// Default limits (fallback if no backend specified)
-#if !defined(YIRAGE_BACKEND_CUDA_ENABLED) && !defined(YIRAGE_BACKEND_CPU_ENABLED) && \
-    !defined(YIRAGE_BACKEND_MPS_ENABLED) && !defined(YIRAGE_BACKEND_NKI_ENABLED)
-#warning "No backend enabled, using default limits"
-size_t const MAX_DMEM_SIZE = (size_t)16 * 1024 * 1024 * 1024;   // 16 GB
-size_t const MAX_SMEM_SIZE = (size_t)1 * 1024 * 1024;           // 1 MB
-#endif
-
-// Backward compatibility: define global constants based on primary backend
+// Global constants based on primary backend (with fallback)
 #if defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_BACKEND_CUDA_ENABLED)
 size_t const MAX_DMEM_SIZE = cuda::MAX_DMEM_SIZE;
 size_t const MAX_SMEM_SIZE = cuda::MAX_SMEM_SIZE;
@@ -110,6 +102,13 @@ size_t const MAX_SMEM_SIZE = cpu::MAX_SMEM_SIZE;
 #elif defined(YIRAGE_BACKEND_MPS_ENABLED)
 size_t const MAX_DMEM_SIZE = mps::MAX_DMEM_SIZE;
 size_t const MAX_SMEM_SIZE = mps::MAX_SMEM_SIZE;
+#elif defined(YIRAGE_BACKEND_ASCEND_ENABLED)
+size_t const MAX_DMEM_SIZE = ascend::MAX_DMEM_SIZE;
+size_t const MAX_SMEM_SIZE = ascend::MAX_SMEM_SIZE;
+#else
+// Default limits (fallback if no backend specified)
+size_t const MAX_DMEM_SIZE = (size_t)16 * 1024 * 1024 * 1024;   // 16 GB
+size_t const MAX_SMEM_SIZE = (size_t)1 * 1024 * 1024;           // 1 MB
 #endif
 
 // Note that we actually save stensors' fingerprints on GPU device memory

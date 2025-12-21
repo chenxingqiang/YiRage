@@ -462,10 +462,9 @@ Transpiler::Transpiler(kernel::Graph const *_graph,
                        TranspilerConfig const &_config,
                        vector<vector<size_t>> const &_input_strides)
     : config(_config), input_strides(_input_strides) {
-  // Currently we only support GPUs with compute capability >= 8.0 (A100+)
-  // TODO(intlsy): Support older GPUs
-  if (config.target_cc < GPU_CC::A100) {
-    throw std::runtime_error("Unsupported target compute capability");
+  // Support GPUs with compute capability >= 7.0 (V100+)
+  if (config.target_cc < GPU_CC::V100) {
+    throw std::runtime_error("Unsupported target compute capability (requires V100 or newer)");
   }
 
   // using yirage::type namespace to simplify code

@@ -337,7 +337,11 @@ TranspileResult Transpiler::transpile_ugraph() {
   CodeKeeper header;
   header.e("#define NUM_GPUS $", num_gpus);
   header.e("#define USE_NVSHMEM $", use_nvshmem);
-  if (config.target_cc == GPU_CC::H100) {
+  if (config.target_cc == GPU_CC::V100) {
+    header.e("#define YIRAGE_VOLTA");
+  } else if (config.target_cc == GPU_CC::A100) {
+    header.e("#define YIRAGE_AMPERE");
+  } else if (config.target_cc == GPU_CC::H100) {
     header.e("#define YIRAGE_GRACE_HOPPER");
   } else if (config.target_cc == GPU_CC::B200) {
     header.e("#define YIRAGE_BLACKWELL");

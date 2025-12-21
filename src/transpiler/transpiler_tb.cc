@@ -665,7 +665,23 @@ CustomOPTranspileResult
       string mma_atom_str;
       std::tuple<int, int, int> mma_atom_mnk;
       int mma_atom_num_threads;
-      if (GPU_CC::A100 <= config.target_cc && config.target_cc < GPU_CC::H100) {
+      if (GPU_CC::V100 <= config.target_cc && config.target_cc < GPU_CC::A100) {
+        // V100 (SM70) uses HMMA 8x8x4 atoms
+        switch (input0.data_type) {
+          case type::DT_FLOAT16:
+            mma_atom_str = "SM70_8x8x4_F16F16F16F16_TN";
+            mma_atom_mnk = {8, 8, 4};
+            break;
+          case type::DT_FLOAT32:
+            mma_atom_str = "SM70_8x8x4_F32F16F16F32_TN";
+            mma_atom_mnk = {8, 8, 4};
+            break;
+          default:
+            // V100 does not support BF16
+            assert(0 && "V100 does not support this data type (BF16 requires A100+)");
+        }
+        mma_atom_num_threads = 32;
+      } else if (GPU_CC::A100 <= config.target_cc && config.target_cc < GPU_CC::H100) {
         if (k <= 8) {
           // mma_atom_str = input0.data_type == type::DT_FLOAT16
           //                    ? "SM80_16x8x8_F16F16F16F16_TN"
@@ -708,8 +724,8 @@ CustomOPTranspileResult
           mma_atom_num_threads = 32;
         }
       } else {
-        // TODO(intlsy): Support more architectures
-        assert(0 && "Unsupported GPU Architecture");
+        // H100+ handled by transpiler_tb_hopper.cc
+        assert(0 && "Unsupported GPU Architecture for this code path");
       }
       auto [mma_atom_m, mma_atom_n, mma_atom_k] = mma_atom_mnk;
 

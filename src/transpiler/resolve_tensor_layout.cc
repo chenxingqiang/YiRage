@@ -467,9 +467,18 @@ void Transpiler::resolve_tensor_layout() {
                 opt.add(z3::implies(!s_is_innermost[input.guid][num_dims - 2],
                                     s_is_swizzled[input.guid][num_dims - 2]));
               }
+            } else if (this->config.target_cc >= GPU_CC::V100 &&
+                       this->config.target_cc < GPU_CC::T4) {
+              // V100: No ldmatrix support, use normal copying
+              // Need to ensure innermost dim alignment for wide copies (128-bit)
+              for (tb::STensor const &input : {input0, input1}) {
+                // Add swizzle constraints for better memory access patterns
+                opt.add(z3::implies(!s_is_innermost[input.guid][num_dims - 1],
+                                    s_is_swizzled[input.guid][num_dims - 1]));
+              }
             } else {
               // Use normal copying if ldmatrix is not supported by hardware
-              assert(0 && "Not implemented");
+              assert(0 && "GPU architecture not supported");
             }
             // Storing
             if (this->config.target_cc >= GPU_CC::H100) {
