@@ -104,3 +104,32 @@ from .maca_config import (
 # Graph Datasets
 from .graph_dataset import graph_dataset
 from .version import __version__
+
+# Backend Compiler Abstraction
+from .backend_compiler import (
+    CompilerBackend,
+    CompileConfig,
+    CompileResult,
+    CompilerFactory,
+    compile_kernel,
+    get_target_arch_from_device,
+)
+
+# Ascend Transpiler
+from .ascend_transpiler import (
+    AscendTranspileConfig,
+    AscendTranspileResult,
+    CodeGenPath,
+    AscendDeviceType,
+    detect_ascend_environment,
+    transpile_to_ascend,
+)
+
+# Multi-Backend Kernel
+from .multi_backend_kernel import (
+    MultiBackendKernel,
+    KernelBackend,
+    KernelConfig,
+    KernelExecutionContext,
+    create_kernel,
+)

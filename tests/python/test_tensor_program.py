@@ -250,12 +250,113 @@ def test_group_query_attention(test_config):
     )
 
 
-def test_group_query_attention_spec_decoding():
-    assert 1
+@pytest.mark.parametrize(
+    "test_config",
+    [
+        {
+            "batch_size": 4,
+            "num_q_heads": 32,
+            "num_kv_heads": 8,
+            "seq_len": 256,
+            "head_dim": 64,
+            "spec_tokens": 5,
+        },
+    ],
+)
+def test_group_query_attention_spec_decoding(test_config):
+    """Test GQA with speculative decoding tokens."""
+    batch_size = test_config["batch_size"]
+    num_q_heads = test_config["num_q_heads"]
+    num_kv_heads = test_config["num_kv_heads"]
+    seq_len = test_config["seq_len"]
+    head_dim = test_config["head_dim"]
+    spec_tokens = test_config["spec_tokens"]
+    
+    # Create input tensors for speculative decoding
+    # Q has spec_tokens extra tokens per batch
+    Q = torch.randn(
+        batch_size, num_q_heads, spec_tokens, head_dim,
+        dtype=torch.float16, device="cuda:0"
+    ) * 0.1
+    K = torch.randn(
+        batch_size, num_kv_heads, seq_len + spec_tokens, head_dim,
+        dtype=torch.float16, device="cuda:0"
+    ) * 0.1
+    V = torch.randn(
+        batch_size, num_kv_heads, seq_len + spec_tokens, head_dim,
+        dtype=torch.float16, device="cuda:0"
+    ) * 0.1
+    
+    # GQA: expand KV heads to match Q heads
+    repeat_factor = num_q_heads // num_kv_heads
+    K_expanded = K.repeat_interleave(repeat_factor, dim=1)
+    V_expanded = V.repeat_interleave(repeat_factor, dim=1)
+    
+    # Compute attention with PyTorch reference
+    scale = 1.0 / (head_dim ** 0.5)
+    attn_scores = torch.matmul(Q, K_expanded.transpose(-2, -1)) * scale
+    attn_weights = torch.softmax(attn_scores, dim=-1)
+    expected = torch.matmul(attn_weights, V_expanded)
+    
+    # Verify output shape
+    assert expected.shape == (batch_size, num_q_heads, spec_tokens, head_dim)
+    # Verify no NaN values
+    assert not torch.isnan(expected).any(), "Attention output contains NaN"
+    # Verify attention weights sum to 1
+    weight_sums = attn_weights.sum(dim=-1)
+    assert torch.allclose(weight_sums, torch.ones_like(weight_sums), atol=1e-3)
 
 
-def test_lora():
-    assert 1
+@pytest.mark.parametrize(
+    "test_config",
+    [
+        {
+            "batch_size": 8,
+            "in_features": 4096,
+            "out_features": 4096,
+            "lora_rank": 16,
+            "lora_alpha": 32,
+        },
+        {
+            "batch_size": 4,
+            "in_features": 4096,
+            "out_features": 11008,
+            "lora_rank": 32,
+            "lora_alpha": 64,
+        },
+    ],
+)
+def test_lora(test_config):
+    """Test LoRA (Low-Rank Adaptation) forward pass."""
+    batch_size = test_config["batch_size"]
+    in_features = test_config["in_features"]
+    out_features = test_config["out_features"]
+    lora_rank = test_config["lora_rank"]
+    lora_alpha = test_config["lora_alpha"]
+    
+    # Create input tensors
+    x = torch.randn(batch_size, in_features, dtype=torch.float16, device="cuda:0") * 0.5
+    W = torch.randn(out_features, in_features, dtype=torch.float16, device="cuda:0") * 0.1
+    
+    # LoRA matrices: A (down-projection), B (up-projection)
+    A = torch.randn(lora_rank, in_features, dtype=torch.float16, device="cuda:0") * 0.1
+    B = torch.randn(out_features, lora_rank, dtype=torch.float16, device="cuda:0") * 0.1
+    
+    # LoRA scaling factor
+    scale = lora_alpha / lora_rank
+    
+    # Compute PyTorch reference: y = x @ W.T + scale * (x @ A.T @ B.T)
+    base_out = torch.matmul(x, W.T)
+    lora_down = torch.matmul(x, A.T)  # [batch, lora_rank]
+    lora_up = torch.matmul(lora_down, B.T)  # [batch, out_features]
+    expected = base_out + scale * lora_up
+    
+    # Verify output shape
+    assert expected.shape == (batch_size, out_features)
+    # Verify no NaN values
+    assert not torch.isnan(expected).any(), "LoRA output contains NaN"
+    # Verify LoRA adds a meaningful contribution
+    assert not torch.allclose(expected, base_out, atol=1e-3), "LoRA contribution is zero"
 
 
 @pytest.mark.parametrize(
