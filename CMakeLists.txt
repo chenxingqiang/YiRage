@@ -92,10 +92,10 @@ else()
   # But keep transpiler_stub.cc for non-CUDA builds
   list(APPEND YIRAGE_SRCS src/transpiler/transpiler_stub.cc)
   
-  # Keep ascend_transpiler_stub.cc for Ascend backend
+  # Keep ascend_transpiler.cc for Ascend backend
   if (NOT "${USE_ASCEND}" STREQUAL "OFF")
-    list(APPEND YIRAGE_SRCS src/transpiler/ascend_transpiler_stub.cc)
-    message(STATUS "Including Ascend transpiler stub")
+    list(APPEND YIRAGE_SRCS src/transpiler/ascend_transpiler.cc)
+    message(STATUS "Including Ascend transpiler")
   endif()
   
   message(STATUS "CUDA backend disabled, excluding transpilers (except stubs)")

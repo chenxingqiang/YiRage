@@ -130,6 +130,89 @@ int main() {
               << std::endl;
   }
 
+  // Test 8: Test Ascend and MACA backends specifically
+  std::cout << "\n[Test 8] Testing Ascend and MACA backends..." << std::endl;
+  
+  // Test Ascend backend
+  auto *ascend_backend = registry.get_backend("ascend");
+  if (ascend_backend) {
+    std::cout << "  Ascend backend registered" << std::endl;
+    std::cout << "    Available: " << (ascend_backend->is_available() ? "Yes" : "No") << std::endl;
+    if (ascend_backend->is_available()) {
+      std::cout << "    Device Count: " << ascend_backend->get_device_count() << std::endl;
+      std::cout << "    Compute Units (AI Cores): " << ascend_backend->get_num_compute_units() << std::endl;
+    }
+  } else {
+    std::cout << "  Ascend backend not registered (requires CANN)" << std::endl;
+  }
+  
+  // Test MACA backend
+  auto *maca_backend = registry.get_backend("maca");
+  if (maca_backend) {
+    std::cout << "  MACA backend registered" << std::endl;
+    std::cout << "    Available: " << (maca_backend->is_available() ? "Yes" : "No") << std::endl;
+    if (maca_backend->is_available()) {
+      std::cout << "    Device Count: " << maca_backend->get_device_count() << std::endl;
+      std::cout << "    Compute Units (SMs): " << maca_backend->get_num_compute_units() << std::endl;
+      std::cout << "    Warp Size: 64 (vs NVIDIA's 32)" << std::endl;
+    }
+  } else {
+    std::cout << "  MACA backend not registered (requires MetaX MACA SDK)" << std::endl;
+  }
+
+  // Test 9: Backend compilation test (if hardware available)
+  std::cout << "\n[Test 9] Testing backend compilation infrastructure..." << std::endl;
+  for (auto const &type : available) {
+    auto *backend = registry.get_backend(type);
+    if (backend && backend->is_available()) {
+      std::cout << "  " << backend->get_name() << ": ";
+      
+      // Get compile flags (non-empty indicates compilation support)
+      std::string flags = backend->get_compile_flags();
+      if (!flags.empty()) {
+        std::cout << "Compile flags available" << std::endl;
+      } else {
+        std::cout << "No compilation needed (JIT or interpreted)" << std::endl;
+      }
+      
+      // Get include directories
+      auto include_dirs = backend->get_include_dirs();
+      if (!include_dirs.empty()) {
+        std::cout << "    Include dirs: " << include_dirs.size() << " path(s)" << std::endl;
+      }
+      
+      // Get library directories
+      auto lib_dirs = backend->get_library_dirs();
+      if (!lib_dirs.empty()) {
+        std::cout << "    Library dirs: " << lib_dirs.size() << " path(s)" << std::endl;
+      }
+    }
+  }
+
+  // Test 10: Multi-backend priority check
+  std::cout << "\n[Test 10] Testing multi-backend priority..." << std::endl;
+  std::vector<yirage::type::BackendType> priority_order = {
+      yirage::type::BT_CUDA,   // Highest priority
+      yirage::type::BT_MACA,   // MetaX GPU
+      yirage::type::BT_ASCEND, // Huawei NPU
+      yirage::type::BT_MPS,    // Apple Silicon
+      yirage::type::BT_CPU     // Fallback
+  };
+  
+  std::cout << "  Backend priority order:" << std::endl;
+  int priority = 1;
+  for (auto const &type : priority_order) {
+    auto *backend = registry.get_backend(type);
+    if (backend) {
+      std::cout << "    " << priority << ". " << backend->get_display_name();
+      if (backend->is_available()) {
+        std::cout << " [AVAILABLE]";
+      }
+      std::cout << std::endl;
+    }
+    priority++;
+  }
+
   std::cout << "\n================================" << std::endl;
   std::cout << "All tests passed successfully!" << std::endl;
   std::cout << "================================" << std::endl;

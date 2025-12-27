@@ -71,7 +71,7 @@ yirage/
 │   │   ├── ascend_kernel_generator.cc    # 151 lines, Code generation
 │   │   └── ascend_fingerprint_kernels.cc # 214 lines, CPU fallback
 │   └── transpiler/
-│       └── ascend_transpiler_stub.cc     # 174 lines, Transpiler stub
+│       └── ascend_transpiler.cc          # Full Ascend transpiler implementation
 │
 └── python/yirage/
     └── ascend_config.py                  # 140 lines, Python configuration
@@ -268,7 +268,7 @@ Based on Huawei official data and BiSheng optimization:
 | `src/search/.../ascend_strategy.cc` | 399 | Search strategy implementation |
 | `include/yirage/kernel/ascend/*.h` | - | Kernel header files |
 | `src/kernel/ascend/*.cc` | 500+ | Kernel implementation |
-| `src/transpiler/ascend_transpiler_stub.cc` | 174 | Transpiler |
+| `src/transpiler/ascend_transpiler.cc` | 536 | Transpiler |
 | `python/yirage/ascend_config.py` | 140 | Python configuration |
 | `tests/ascend/test_triton_integration.py` | 145 | Test script |
 | `docs/ascend_*.md` | - | Documentation |

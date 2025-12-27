@@ -139,9 +139,122 @@ type::BackendInfo MACABackend::get_info() const {
 }
 
 bool MACABackend::compile(CompileContext const &ctx) {
-  // MACA uses mxcc compiler (CUDA-compatible)
-  // Compilation is typically handled by CMake/mxcc
-  // This is a placeholder for runtime compilation if needed
+  // MACA compilation strategy:
+  // 1. For .cu files: Use mxcc (CUDA-compatible compiler)
+  // 2. For Triton: Use Triton's JIT with MACA backend
+  // 3. Key difference from CUDA: 64-thread warp size
+  
+  if (ctx.source_code.empty()) {
+    std::cerr << "Empty source code provided for MACA compilation" << std::endl;
+    return false;
+  }
+  
+  // Detect if this is Triton code
+  bool use_triton_path = (ctx.source_code.find("import triton") != std::string::npos) ||
+                         (ctx.source_code.find("@triton.jit") != std::string::npos);
+  
+  if (use_triton_path) {
+    // Triton handles JIT compilation for MACA
+    // The Triton runtime will detect MACA and use appropriate backend
+    return true;
+  }
+  
+  // Find MACA compiler (mxcc)
+  std::string mxcc_path;
+  if (!maca_path_.empty()) {
+    mxcc_path = maca_path_ + "/bin/mxcc";
+  } else {
+    // Try standard paths
+    std::vector<std::string> paths = {
+        "/opt/maca/bin/mxcc",
+        "/usr/local/maca/bin/mxcc",
+        "/opt/metax/maca/bin/mxcc"
+    };
+    for (const auto &p : paths) {
+      std::ifstream check(p);
+      if (check.good()) {
+        mxcc_path = p;
+        break;
+      }
+    }
+  }
+  
+  if (mxcc_path.empty()) {
+    std::cerr << "MACA compiler (mxcc) not found" << std::endl;
+    return ctx.debug_mode;  // Allow in debug mode for code generation
+  }
+  
+  // Build compilation command
+  // MACA's mxcc is CUDA-compatible but needs specific flags for 64-thread warps
+  std::ostringstream cmd;
+  cmd << mxcc_path << " -c";
+  
+  // Add source file (write to temp if provided as string)
+  std::string source_path = ctx.source_code;
+  bool created_temp = false;
+  if (ctx.source_code.find('\n') != std::string::npos) {
+    // Source is actual code, write to temp file
+    source_path = "/tmp/yirage_maca_kernel_" + 
+                  std::to_string(std::hash<std::string>{}(ctx.source_code)) + ".cu";
+    std::ofstream out(source_path);
+    if (!out.good()) {
+      std::cerr << "Failed to write temp source file" << std::endl;
+      return false;
+    }
+    out << ctx.source_code;
+    out.close();
+    created_temp = true;
+  }
+  
+  cmd << " " << source_path;
+  cmd << " -o " << ctx.output_path;
+  
+  // Optimization level
+  cmd << " -O" << ctx.optimization_level;
+  
+  // C++ standard
+  cmd << " -std=c++17";
+  
+  // Position independent code (for shared libraries)
+  cmd << " -Xcompiler=-fPIC";
+  
+  // MACA-specific: Define warp size macro
+  cmd << " -D__MACA_WARP_SIZE__=64";
+  
+  // Architecture flags
+  // MetaX C500 = compute capability 10.0 (100)
+  int arch = (device_prop_.major * 10 + device_prop_.minor);
+  if (arch == 0) {
+    arch = 100;  // Default to C500
+  }
+  cmd << " --gpu-architecture=compute_" << arch;
+  
+  // Include directories
+  for (const auto &inc : ctx.include_dirs) {
+    cmd << " -I" << inc;
+  }
+  
+  // Add MACA include paths
+  if (!maca_path_.empty()) {
+    cmd << " -I" << maca_path_ << "/include";
+    cmd << " -I" << maca_path_ << "/include/thrust";
+  }
+  
+  // Execute compilation
+  std::string compile_cmd = cmd.str();
+  int result = std::system(compile_cmd.c_str());
+  
+  // Cleanup temp file if created
+  if (created_temp) {
+    std::remove(source_path.c_str());
+  }
+  
+  if (result != 0) {
+    std::cerr << "MACA compilation failed with exit code: " << result << std::endl;
+    std::cerr << "Command: " << compile_cmd << std::endl;
+    return false;
+  }
+  
   return true;
 }
 

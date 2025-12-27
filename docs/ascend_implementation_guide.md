@@ -131,7 +131,7 @@ struct TritonTranspilerConfig {
 ### Transpiler Stub
 
 ```cpp
-// src/transpiler/ascend_transpiler_stub.cc
+// src/transpiler/ascend_transpiler.cc
 struct AscendTranspilerConfig {
     int device_type;  // 0=910, 1=910B, 2=310P
     bool use_cube_ops;
