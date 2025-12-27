@@ -63,12 +63,46 @@ bool MACASearchStrategy::initialize(SearchConfig const &config) {
   return true;
 }
 
+namespace {
+// Extract problem dimensions from kernel graph
+void extract_maca_problem_dimensions(kernel::Graph const &graph, 
+                                     int &m, int &n, int &k) {
+  m = 1; n = 1; k = 1;
+  
+  for (const auto &op : graph.operators) {
+    if (op->op_type == type::KN_MATMUL_OP) {
+      if (op->input_tensors.size() >= 2) {
+        auto const &A = op->input_tensors[0];
+        auto const &B = op->input_tensors[1];
+        if (A.num_dims >= 2 && B.num_dims >= 2) {
+          m = std::max(m, A.dim[A.num_dims - 2]);
+          k = std::max(k, A.dim[A.num_dims - 1]);
+          n = std::max(n, B.dim[B.num_dims - 1]);
+        }
+      }
+    }
+    for (const auto &t : op->output_tensors) {
+      if (t.num_dims >= 2) {
+        m = std::max(m, t.dim[t.num_dims - 2]);
+        n = std::max(n, t.dim[t.num_dims - 1]);
+      }
+    }
+  }
+  
+  // MACA 64-thread warps prefer larger dimensions
+  if (m < 64) m = 64;
+  if (n < 64) n = 64;
+  if (k < 32) k = 32;
+}
+} // anonymous namespace
+
 std::vector<CandidateConfig>
 MACASearchStrategy::generate_candidates(kernel::Graph const &graph) {
   std::vector<CandidateConfig> candidates;
 
-  // Get problem dimensions (simplified for now)
-  int m = 1024, n = 1024, k = 1024; // TODO: Extract from graph
+  // Extract problem dimensions from graph
+  int m, n, k;
+  extract_maca_problem_dimensions(graph, m, n, k);
 
   // Generate different warp configurations for MACA's 64-thread warps
   auto warp_configs = generate_warp_configs(m * n);

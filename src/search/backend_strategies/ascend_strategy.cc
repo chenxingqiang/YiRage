@@ -53,12 +53,59 @@ bool AscendSearchStrategy::initialize(SearchConfig const &config) {
   return true;
 }
 
+namespace {
+// Extract problem dimensions from kernel graph
+void extract_problem_dimensions(kernel::Graph const &graph, 
+                                int &m, int &n, int &k) {
+  m = 1; n = 1; k = 1;
+  
+  // Find matmul operations and extract dimensions
+  for (const auto &op : graph.operators) {
+    if (op->op_type == type::KN_MATMUL_OP) {
+      if (op->input_tensors.size() >= 2) {
+        auto const &A = op->input_tensors[0];
+        auto const &B = op->input_tensors[1];
+        if (A.num_dims >= 2 && B.num_dims >= 2) {
+          m = std::max(m, A.dim[A.num_dims - 2]);
+          k = std::max(k, A.dim[A.num_dims - 1]);
+          n = std::max(n, B.dim[B.num_dims - 1]);
+        }
+      }
+    }
+    // Also check customized ops for matmul
+    if (op->op_type == type::KN_CUSTOMIZED_OP) {
+      for (const auto &out : op->output_tensors) {
+        if (out.num_dims >= 2) {
+          m = std::max(m, out.dim[out.num_dims - 2]);
+          n = std::max(n, out.dim[out.num_dims - 1]);
+        }
+      }
+    }
+    // Extract from any large tensor
+    for (const auto &t : op->output_tensors) {
+      if (t.num_dims >= 2) {
+        int dim0 = t.dim[t.num_dims - 2];
+        int dim1 = t.dim[t.num_dims - 1];
+        m = std::max(m, dim0);
+        n = std::max(n, dim1);
+      }
+    }
+  }
+  
+  // Ensure minimum reasonable dimensions
+  if (m < 16) m = 16;
+  if (n < 16) n = 16;
+  if (k < 16) k = 16;
+}
+} // anonymous namespace
+
 std::vector<CandidateConfig>
 AscendSearchStrategy::generate_candidates(kernel::Graph const &graph) {
   std::vector<CandidateConfig> candidates;
 
-  // Get problem dimensions
-  int m = 1024, n = 1024, k = 1024; // TODO: Extract from graph
+  // Extract problem dimensions from graph
+  int m, n, k;
+  extract_problem_dimensions(graph, m, n, k);
 
   // Generate block configurations
   size_t problem_size = static_cast<size_t>(m) * n;

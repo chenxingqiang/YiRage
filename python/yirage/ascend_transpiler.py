@@ -19,6 +19,21 @@ from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
+# Try to import C++ transpiler via Cython bindings
+# When available, this provides faster transpilation
+_CPP_TRANSPILER_AVAILABLE = False
+_cpp_ascend_transpile = None
+try:
+    from .core import ascend_transpile as _cpp_ascend_transpile
+    _CPP_TRANSPILER_AVAILABLE = True
+except ImportError:
+    pass
+
+
+def use_cpp_transpiler() -> bool:
+    """Check if C++ transpiler is available and should be used."""
+    return _CPP_TRANSPILER_AVAILABLE and os.environ.get("YIRAGE_USE_PYTHON_TRANSPILER", "0") != "1"
+
 
 class CodeGenPath(Enum):
     """Code generation paths for Ascend NPU."""
@@ -437,6 +452,10 @@ def transpile_to_ascend(
     """
     Transpile YiRage kernel specification to Ascend code.
     
+    This function first attempts to use the C++ transpiler (via Cython bindings)
+    for optimal performance. If C++ is not available, it falls back to the
+    pure-Python implementation.
+    
     Args:
         kernel_spec: Kernel specification from YiRage graph
         config: Optional transpilation configuration
@@ -447,6 +466,27 @@ def transpile_to_ascend(
     if config is None:
         config = get_recommended_config()
     
+    # Try C++ transpiler first (faster, more optimized)
+    if use_cpp_transpiler() and _cpp_ascend_transpile is not None:
+        try:
+            cpp_result = _cpp_ascend_transpile(
+                kernel_spec,
+                device_type=config.device_type.value,
+                codegen_path=config.codegen_path.value,
+                opt_level=config.optimization_level
+            )
+            return AscendTranspileResult(
+                code=cpp_result.code,
+                compile_command=cpp_result.compile_command,
+                path_used=CodeGenPath(cpp_result.path_used),
+                success=cpp_result.success,
+                error_message=cpp_result.error_message if hasattr(cpp_result, 'error_message') else ""
+            )
+        except Exception as e:
+            if config.verbose:
+                print(f"C++ transpiler failed, falling back to Python: {e}", file=sys.stderr)
+    
+    # Python fallback implementation
     env = detect_ascend_environment()
     
     # Generate code based on path
