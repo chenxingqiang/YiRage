@@ -63,6 +63,18 @@ public:
    * @brief Generate L1 buffer allocation
    */
   static std::string generate_l1_buffer_alloc(AscendKernelConfig const &config);
+  
+  /**
+   * @brief Generate RMS Normalization kernel
+   */
+  static std::string generate_rms_norm_kernel(AscendKernelConfig const &config);
+  
+  /**
+   * @brief Generate attention kernel (GQA/MHA)
+   */
+  static std::string generate_attention_kernel(int num_heads, int head_dim,
+                                               int num_kv_heads,
+                                               AscendKernelConfig const &config);
 };
 
 /**
