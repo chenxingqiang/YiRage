@@ -608,6 +608,9 @@ class CompilerFactory:
                 cls._compilers[backend] = AscendCompiler()
             elif backend == CompilerBackend.TRITON:
                 cls._compilers[backend] = TritonCompiler()
+            elif backend == CompilerBackend.BISHENG:
+                # BiSheng is a Triton-compatible compiler for Ascend
+                cls._compilers[backend] = TritonCompiler()
             elif backend in [CompilerBackend.GCC, CompilerBackend.CLANG]:
                 cls._compilers[backend] = CPUCompiler()
             else:
