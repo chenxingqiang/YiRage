@@ -428,14 +428,13 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
     )
   endif()
   
+  # Always use Ascend-specific device_memory_manager (Host-side ACL API, compiled with g++)
+  # This file doesn't require ascendc compiler - it uses host-side ACL
+  list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
+  list(APPEND YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/ascend/device_memory_manager.cc)
+  
   if(ASCENDC_COMPILER)
     message(STATUS "Found Ascend compiler: ${ASCENDC_COMPILER}")
-    
-    # Remove CPU-based device_memory_manager.cc when using Ascend NPU
-    list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
-    
-    # Add Ascend-specific device_memory_manager (Host-side ACL API, compiled with g++)
-    list(APPEND YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/ascend/device_memory_manager.cc)
     
     # Collect Ascend NPU kernel source files (.ascend files)
     # Note: .cc files in ascend/ are Host-side code, compiled with g++
@@ -486,9 +485,9 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
     # Link Ascend runtime libraries
     list(APPEND YIRAGE_LINK_LIBS ascendcl acl_op_compiler)
   else()
-    message(WARNING "Ascend compiler not found - using CPU fallback for fingerprint")
-    # Fall back to CPU fingerprint
-    target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+    message(WARNING "Ascend compiler not found - using CPU fallback for fingerprint kernels")
+    # Note: We still use YIRAGE_FINGERPRINT_USE_ASCEND for the host-side memory manager
+    # The fingerprint kernels will use CPU fallback implementation
   endif()
 endif()
 
