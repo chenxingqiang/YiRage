@@ -11,12 +11,12 @@ endif()
 
 # Determine which languages to enable based on backends
 set(PROJECT_LANGUAGES C CXX)
-if (NOT "${USE_CUDA}" STREQUAL "OFF")
+if ("${USE_CUDA}" STREQUAL "ON")
   list(APPEND PROJECT_LANGUAGES CUDA)
   message(STATUS "CUDA backend enabled")
 endif()
 # Note: MACA does NOT use CMake's CUDA language - it uses mxcc compiler directly
-if (NOT "${USE_MACA}" STREQUAL "OFF")
+if ("${USE_MACA}" STREQUAL "ON")
   message(STATUS "MACA backend enabled (uses mxcc compiler, not CMake CUDA)")
 endif()
 
@@ -73,7 +73,7 @@ list(APPEND YIRAGE_SRCS ${SEARCH_STRATEGY_SRCS})
 list(APPEND YIRAGE_SRCS ${SEARCH_PROFILER_SRCS})
 
 # Handle CUDA-specific sources
-if (NOT "${USE_CUDA}" STREQUAL "OFF")
+if ("${USE_CUDA}" STREQUAL "ON")
   # CUDA enabled: include .cu files and transpiler
   file(GLOB_RECURSE YIRAGE_CUDA_SRCS
     src/*.cu
@@ -122,7 +122,7 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
   message(STATUS "Ascend backend enabled (requires CANN + torch_npu at runtime)")
 endif()
 
-if (NOT "${USE_MACA}" STREQUAL "OFF")
+if ("${USE_MACA}" STREQUAL "ON")
   message(STATUS "MACA backend enabled (requires MetaX MACA SDK)")
   # MACA uses device_memory_manager.maca instead of .cc
   list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
@@ -132,7 +132,7 @@ include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-std=c++17" SUPPORT_CXX17)
 
 #set CUDA version
-if (NOT "${USE_CUDA}" STREQUAL "OFF")
+if ("${USE_CUDA}" STREQUAL "ON")
   include(deps/cutlass/CUDA.cmake)
   string(REPLACE "." ";" CUDA_VERSION_PARTS ${CUDA_VERSION})
   list(GET CUDA_VERSION_PARTS 0 CUDA_VERSION_MAJOR)
@@ -162,7 +162,7 @@ if (NOT "${USE_OPENMP}" STREQUAL "OFF")
 endif()
 
 #set CUDA
-if (NOT "${USE_CUDA}" STREQUAL "OFF")
+if ("${USE_CUDA}" STREQUAL "ON")
   include(cmake/cuda.cmake)
   find_cuda(${USE_CUDA})
   if (CUDA_FOUND)
@@ -272,7 +272,7 @@ set_target_properties(yirage_runtime PROPERTIES CUDA_ARCHITECTURES "75;80;86;89;
 target_compile_features(yirage_runtime PUBLIC cxx_std_17)
 
 # Backend compile definitions - multiple backends can be enabled
-if (NOT "${USE_CUDA}" STREQUAL "OFF")
+if ("${USE_CUDA}" STREQUAL "ON")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)  # Backward compatibility
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CUDA)
@@ -283,11 +283,11 @@ if (NOT "${USE_CUDA}" STREQUAL "OFF")
     target_link_libraries(yirage_runtime PUBLIC OpenMP::OpenMP_CXX)
     message(STATUS "OpenMP enabled for CUDA parallel search")
   endif()
-elseif (NOT "${USE_MACA}" STREQUAL "OFF")
+elseif ("${USE_MACA}" STREQUAL "ON")
   # MACA is CUDA-compatible, use MACA fingerprint (enables parallel search)
   # Don't define YIRAGE_FINGERPRINT_USE_CPU here - it disables OpenMP
   message(STATUS "Using MACA fingerprint (parallel search enabled)")
-elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
+elseif ("${USE_ASCEND}" STREQUAL "ON")
   # Ascend NPU - don't define CPU fingerprint, Ascend has its own
   message(STATUS "Using Ascend fingerprint (parallel search enabled)")
 else()
@@ -492,7 +492,7 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
 endif()
 
 # MACA Backend (MetaX GPU)
-if (NOT "${USE_MACA}" STREQUAL "OFF")
+if ("${USE_MACA}" STREQUAL "ON")
   # Include MACA configuration
   include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
