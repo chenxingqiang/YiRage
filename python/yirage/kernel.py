@@ -591,7 +591,7 @@ class KNGraph:
         franges: list = None,
         verbose: bool = False,
         config: str = None,
-        backend: str = "cuda",
+        backend: str = None,
         warmup_iters: int = 16,
         profile_iters: int = 1000,
         use_graph_dataset: bool = True,
@@ -599,6 +599,27 @@ class KNGraph:
         save_codes: bool = False,
         is_formal_verified: bool = False,
     ):
+        # Auto-detect backend if not specified
+        if backend is None:
+            from .backend_api import get_default_backend
+            backend = get_default_backend()
+            if backend is None:
+                # Fallback detection via PyTorch
+                import torch
+                try:
+                    import torch_npu
+                    if torch.npu.is_available():
+                        backend = "ascend"
+                except ImportError:
+                    pass
+                if backend is None and torch.cuda.is_available():
+                    backend = "cuda"
+                elif backend is None and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    backend = "mps"
+                elif backend is None:
+                    backend = "cpu"
+            print(f"[superoptimize] Auto-detected backend: {backend}")
+        
         if use_graph_dataset:
             cached_graph = graph_dataset.find(
                 self.cygraph,
