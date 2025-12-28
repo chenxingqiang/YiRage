@@ -170,6 +170,12 @@ def config_cython():
                     extra_link_args=[
                         "-fPIC",
                         "-fopenmp",  # OpenMP for parallel search
+                        # Force Z3 to be linked (linker may drop it as "not needed" otherwise)
+                        f"-Wl,--no-as-needed",
+                        f"-L{path.join(z3_path, 'lib')}",
+                        f"-lz3",
+                        f"-Wl,--as-needed",
+                        f"-Wl,-rpath,{path.join(z3_path, 'lib')}",
                         # Force include all symbols from static library (required for static singleton)
                         f"-Wl,--whole-archive",
                         f"-L{path.join(yirage_path, 'build')}",
