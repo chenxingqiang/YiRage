@@ -103,35 +103,56 @@ def detect_ascend_environment() -> Dict[str, Any]:
         env["cann_available"] = True
         env["cann_path"] = cann_path
         
-        # Check for BiSheng compiler
-        bisheng_path = os.path.join(cann_path, "compiler/bin/bisheng")
-        if os.path.exists(bisheng_path):
-            env["bisheng_available"] = True
-            env["bisheng_path"] = bisheng_path
+        # Check for BiSheng compiler (multiple possible locations)
+        bisheng_paths = [
+            os.path.join(cann_path, "ccec_compiler/bin/bisheng"),
+            os.path.join(cann_path, "aarch64-linux/ccec_compiler/bin/bisheng"),
+            os.path.join(cann_path, "x86_64-linux/ccec_compiler/bin/bisheng"),
+            os.path.join(cann_path, "compiler/bin/bisheng"),
+        ]
+        for bisheng_path in bisheng_paths:
+            if os.path.exists(bisheng_path):
+                env["bisheng_available"] = True
+                env["bisheng_path"] = bisheng_path
+                break
         
-        # Check for Ascend C compiler
-        ascendc_path = os.path.join(cann_path, "compiler/bin/ascendc")
-        if os.path.exists(ascendc_path):
-            env["ascendc_available"] = True
-            env["ascendc_path"] = ascendc_path
+        # Check for Ascend C compiler (opc = operator compiler)
+        ascendc_paths = [
+            os.path.join(cann_path, "compiler/bin/opc"),
+            os.path.join(cann_path, "aarch64-linux/bin/opc"),
+            os.path.join(cann_path, "x86_64-linux/bin/opc"),
+            os.path.join(cann_path, "compiler/bin/ascendc"),
+        ]
+        for ascendc_path in ascendc_paths:
+            if os.path.exists(ascendc_path):
+                env["ascendc_available"] = True
+                env["ascendc_path"] = ascendc_path
+                break
     
-    # Check torch_npu
-    try:
-        import torch_npu
-        import torch
-        env["torch_npu_available"] = True
-        if torch.npu.is_available():
-            env["device_count"] = torch.npu.device_count()
-            # Detect device type from SOC name
-            soc_name = torch.npu.get_device_name(0)
-            if "910B" in soc_name:
-                env["device_type"] = AscendDeviceType.ASCEND_910B
-            elif "910" in soc_name:
-                env["device_type"] = AscendDeviceType.ASCEND_910
-            elif "310P" in soc_name:
-                env["device_type"] = AscendDeviceType.ASCEND_310P
-    except ImportError:
-        pass
+    # Check torch_npu (skip if YIRAGE_SKIP_TORCH_NPU is set to avoid initialization issues)
+    if os.environ.get("YIRAGE_SKIP_TORCH_NPU", "0") != "1":
+        try:
+            import torch_npu
+            env["torch_npu_available"] = True
+            if torch_npu.npu.is_available():
+                env["device_count"] = torch_npu.npu.device_count()
+                # Detect device type from SOC name
+                try:
+                    soc_name = torch_npu.npu.get_device_name(0)
+                    if "910B" in soc_name:
+                        env["device_type"] = AscendDeviceType.ASCEND_910B
+                    elif "910" in soc_name:
+                        env["device_type"] = AscendDeviceType.ASCEND_910
+                    elif "310P" in soc_name:
+                        env["device_type"] = AscendDeviceType.ASCEND_310P
+                except Exception:
+                    # Device name query may fail in some environments
+                    pass
+        except ImportError:
+            pass
+        except Exception:
+            # torch_npu may be installed but fail to initialize
+            env["torch_npu_available"] = False
     
     return env
 
