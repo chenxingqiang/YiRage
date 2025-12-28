@@ -9,38 +9,38 @@ This document provides a comprehensive technical guide for implementing and usin
 Based on [Huawei CANN documentation](https://www.hiascend.com/cann) and the [triton-ascend](https://github.com/Ascend/triton-ascend) project, the BiSheng compiler provides native Triton language support, enabling direct code generation path reuse.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'lineColor': '#546e7a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph FRAMEWORKS["🔷 AI Frameworks"]
-        A["<b>PyTorch</b> / <b>TensorFlow</b> / <b>MindSpore</b>"]
+    subgraph FRAMEWORKS["AI Frameworks"]
+        A["PyTorch / TensorFlow / MindSpore"]
     end
 
-    subgraph CANN["🔶 CANN Architecture"]
-        B["<b>Programming Languages</b>"]
-        C["<b>BiSheng Compiler</b><br/><i>Heterogeneous Optimization</i>"]
-        D["<b>Runtime + Driver</b><br/><i>ACL API</i>"]
+    subgraph CANN["CANN Architecture"]
+        B["Programming Languages"]
+        C["BiSheng Compiler<br/>Heterogeneous Optimization"]
+        D["Runtime + Driver<br/>ACL API"]
         B --> C --> D
     end
 
-    subgraph OPTIONS["📋 Programming Options"]
-        E["Ascend C<br/><i>Native API + CATLASS</i>"]
-        F["<b>Triton ⭐</b><br/><i>BiSheng Support</i>"]
-        G["TBE<br/><i>Tensor Boost Engine</i>"]
+    subgraph OPTIONS["Programming Options"]
+        E["Ascend C<br/>Native API + CATLASS"]
+        F["Triton ⭐<br/>BiSheng Support"]
+        G["TBE<br/>Tensor Boost Engine"]
     end
 
-    subgraph HARDWARE["🖥️ Hardware"]
-        H["<b>Ascend AI Processor</b><br/>910 / 910B / 310P"]
+    subgraph HARDWARE["Hardware"]
+        H["Ascend AI Processor<br/>910 / 910B / 310P"]
     end
 
     A --> B
     E & F & G --> B
     D --> H
 
-    style FRAMEWORKS fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    style CANN fill:#fff8e1,stroke:#ffa000,stroke-width:2px
-    style OPTIONS fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style HARDWARE fill:#fce4ec,stroke:#c2185b,stroke-width:2px
-    style F fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
+    style FRAMEWORKS fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style CANN fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style OPTIONS fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style HARDWARE fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
+    style F fill:#a78bfa,stroke:#5b21b6,stroke-width:2px
 ```
 
 ## Key Insights
@@ -83,27 +83,27 @@ According to Huawei documentation: *"BiSheng Compiler supports Triton and other 
 Unlike CUDA (32-thread warps) or MACA (64-thread warps), Ascend uses **AI Core parallelism**:
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'lineColor': '#546e7a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart LR
-    subgraph CUDA["🟢 NVIDIA CUDA Model"]
+    subgraph CUDA["NVIDIA CUDA Model"]
         direction TB
-        A1["<b>Grid</b>"] --> A2["<b>Block</b>"]
-        A2 --> A3["<b>Warp</b><br/><i>32 threads</i>"]
+        A1["Grid"] --> A2["Block"]
+        A2 --> A3["Warp<br/>32 threads"]
         A3 --> A4["Thread"]
     end
 
-    subgraph ASCEND["🔴 Huawei Ascend Model"]
+    subgraph ASCEND["Huawei Ascend Model"]
         direction TB
-        B1["<b>Task</b>"] --> B2["<b>AI Core Block</b>"]
-        B2 --> B3["<b>Cube Unit</b><br/><i>16×16 matrix</i>"]
-        B2 --> B4["<b>Vector Unit</b><br/><i>element-wise</i>"]
+        B1["Task"] --> B2["AI Core Block"]
+        B2 --> B3["Cube Unit<br/>16×16 matrix"]
+        B2 --> B4["Vector Unit<br/>element-wise"]
     end
 
-    style CUDA fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
-    style ASCEND fill:#ffebee,stroke:#c62828,stroke-width:2px
-    style A3 fill:#c8e6c9,stroke:#388e3c,stroke-width:2px
-    style B3 fill:#ffcdd2,stroke:#d32f2f,stroke-width:2px
-    style B4 fill:#ffe0b2,stroke:#ef6c00,stroke-width:2px
+    style CUDA fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style ASCEND fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style A3 fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style B3 fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
+    style B4 fill:#a78bfa,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## Implementation Status

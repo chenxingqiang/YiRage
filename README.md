@@ -30,15 +30,16 @@
 ## 🏗️ Architecture
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "Python API Layer"
+    subgraph API["Python API Layer"]
         A[yirage.new_kernel_graph] --> B[Backend Selection]
         B --> C[get_available_backends]
         B --> D[PersistentKernel]
         D --> E[superoptimize]
     end
 
-    subgraph "Backend Manager (C++)"
+    subgraph MGR["Backend Manager C++"]
         F[BackendRegistry<br/>Singleton, Thread-safe]
         G[BackendFactory]
         H[StrategyFactory]
@@ -46,7 +47,7 @@ graph TB
         F --> H
     end
 
-    subgraph "Backend Implementations"
+    subgraph IMPL["Backend Implementations"]
         I[CUDA<br/>NVIDIA GPU]
         J[CPU<br/>x86/ARM]
         K[MPS<br/>Apple Silicon]
@@ -57,7 +58,7 @@ graph TB
         P[cuDNN/MKL<br/>Accelerators]
     end
 
-    subgraph "Hardware Layer"
+    subgraph HW["Hardware Layer"]
         Q[NVIDIA GPU<br/>Tensor Cores]
         R[Intel/AMD CPU<br/>AVX512/NEON]
         S[Apple M1/M2/M3<br/>Metal]
@@ -75,11 +76,10 @@ graph TB
     M --> U
     O --> V
 
-    style A fill:#e1f5fe
-    style F fill:#fff3e0
-    style I fill:#c8e6c9
-    style L fill:#ffcdd2
-    style M fill:#f3e5f5
+    style API fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style MGR fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style IMPL fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style HW fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### Three-Layer Design
@@ -182,26 +182,27 @@ optimized = graph.superoptimize(backend='maca')
 ### 🔍 Backend-Specific Search Strategies
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart LR
-    subgraph Input
+    subgraph IN["Input"]
         A[Kernel Graph]
     end
 
-    subgraph "Search Engine"
+    subgraph SE["Search Engine"]
         B[Candidate Generator]
         C[Fingerprint Verifier]
         D[Performance Profiler]
         B --> C --> D
     end
 
-    subgraph "Backend Strategies"
+    subgraph BS["Backend Strategies"]
         E[CUDA Strategy<br/>Tensor Core, Warp]
         F[MPS Strategy<br/>SIMD, Threadgroup]
         G[Ascend Strategy<br/>AI Core, Cube]
         H[MACA Strategy<br/>64-thread Warp]
     end
 
-    subgraph Output
+    subgraph OUT["Output"]
         I[Optimized Kernel]
     end
 
@@ -209,9 +210,10 @@ flowchart LR
     D --> E & F & G & H
     E & F & G & H --> I
 
-    style B fill:#e3f2fd
-    style D fill:#fff8e1
-    style I fill:#c8e6c9
+    style IN fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style SE fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style BS fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style OUT fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 - **5 Independent Search Strategies** with hardware-specific optimization

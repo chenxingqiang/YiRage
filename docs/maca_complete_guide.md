@@ -33,19 +33,20 @@ The YiRage MACA backend supports:
 ### 1.3 Architecture Overview
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "YiRage Framework"
+    subgraph YIRAGE["YiRage Framework"]
         A[Python API<br/>yirage.kernel]
         B[superoptimize<br/>backend='maca']
     end
 
-    subgraph "Search Engine"
+    subgraph SEARCH["Search Engine"]
         C[Fusion Graph Discovery]
         D[Fingerprint Verification<br/>MACA GPU]
         E[Parameter Optimization]
     end
 
-    subgraph "MACA Backend"
+    subgraph BACKEND["MACA Backend"]
         F[device_memory_manager.maca<br/>Memory Management]
         G[customized_kernel.maca<br/>Main Fingerprint Kernel]
         H[matmul_kernel.maca<br/>Matrix Multiplication]
@@ -53,7 +54,7 @@ graph TB
         J[... 11 .maca kernel files]
     end
 
-    subgraph "MACA Runtime"
+    subgraph RUNTIME["MACA Runtime"]
         K[mxcc Compiler]
         L[mcruntime Library]
         M[mcPytorch<br/>torch.cuda.* → MACA]
@@ -63,9 +64,10 @@ graph TB
     D --> F & G & H & I & J
     F & G & H & I & J --> K --> L --> M
 
-    style A fill:#e1f5fe
-    style D fill:#fff3e0
-    style K fill:#c8e6c9
+    style YIRAGE fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style SEARCH fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style BACKEND fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style RUNTIME fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ---
@@ -742,8 +744,9 @@ YiRage automatically handles this difference:
 ### 8.2 Memory Hierarchy
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "MACA GPU Memory Hierarchy"
+    subgraph MEM["MACA GPU Memory Hierarchy"]
         A[Global Memory / HBM<br/>64 GB - High Latency]
         B[L2 Cache<br/>~128 MB - Shared]
         C[L1 Cache<br/>64 KB per SM]
@@ -755,11 +758,12 @@ graph TB
     B --> C & D
     C & D --> E
 
-    style A fill:#ffcdd2
-    style B fill:#fff9c4
-    style C fill:#c8e6c9
-    style D fill:#bbdefb
-    style E fill:#e1bee7
+    style MEM fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style A fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style B fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style C fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
+    style D fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
+    style E fill:#a78bfa,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### 8.3 YiRage Memory Configuration

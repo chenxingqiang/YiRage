@@ -5,28 +5,29 @@ This document is based on practical experience running on **MetaX C500 GPU**.
 ## Architecture Overview
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart LR
-    subgraph "YiRage"
+    subgraph YIRAGE["YiRage"]
         A[Python API<br/>yirage.new_kernel_graph]
         B[superoptimize<br/>backend='maca']
     end
 
-    subgraph "MACA Toolchain"
+    subgraph MACA["MACA Toolchain"]
         C[mxcc Compiler]
         D[mcruntime Library]
         E[mcPytorch]
     end
 
-    subgraph "Hardware"
+    subgraph HW["Hardware"]
         F[MetaX C500 GPU<br/>64-thread Warp]
     end
 
     A --> B --> C --> D --> F
     E --> F
 
-    style A fill:#e1f5fe
-    style C fill:#fff3e0
-    style F fill:#e1bee7
+    style YIRAGE fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style MACA fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style HW fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## 1. Requirements

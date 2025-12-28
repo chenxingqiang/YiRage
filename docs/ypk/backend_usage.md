@@ -5,17 +5,18 @@
 YiRage now supports multiple computation backends, allowing you to run your models on different hardware accelerators and CPU platforms. This guide explains how to use the multi-backend system.
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart LR
-    subgraph "User Code"
+    subgraph USER["User Code"]
         A[yr.PersistentKernel<br/>backend='cuda']
     end
 
-    subgraph "Backend Selection"
+    subgraph SELECT["Backend Selection"]
         B{Backend<br/>Available?}
         C{Fallback<br/>Available?}
     end
 
-    subgraph "Backends"
+    subgraph BACKENDS["Backends"]
         D[CUDA<br/>NVIDIA GPU]
         E[CPU<br/>x86/ARM]
         F[MPS<br/>Apple Silicon]
@@ -29,9 +30,10 @@ flowchart LR
     C -->|Yes| E & F & G & H
     C -->|No| I[Error]
 
-    style A fill:#e1f5fe
-    style D fill:#c8e6c9
-    style I fill:#ffcdd2
+    style USER fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style SELECT fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style BACKENDS fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style I fill:#fce4ec,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## Available Backends

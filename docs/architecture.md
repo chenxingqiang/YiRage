@@ -5,25 +5,26 @@ This document provides comprehensive architecture diagrams for the YiRage multi-
 ## System Overview
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "User Interface"
+    subgraph UI["User Interface"]
         A[Python API]
         B[CLI Tools]
     end
 
-    subgraph "Core Engine"
+    subgraph CORE["Core Engine"]
         C[Kernel Graph]
         D[Search Engine]
         E[Transpiler]
     end
 
-    subgraph "Backend Layer"
+    subgraph BACKEND["Backend Layer"]
         F[Backend Registry]
         G[Backend Factory]
         H[Strategy Factory]
     end
 
-    subgraph "Hardware Backends"
+    subgraph HW["Hardware Backends"]
         I[CUDA]
         J[CPU]
         K[MPS]
@@ -42,9 +43,10 @@ graph TB
     F --> G --> I & J & K & L & M & N & O & P & Q
     F --> H
 
-    style A fill:#e1f5fe
-    style D fill:#fff3e0
-    style F fill:#c8e6c9
+    style UI fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style CORE fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style BACKEND fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style HW fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## Backend Architecture
@@ -52,19 +54,20 @@ graph TB
 ### Multi-Backend Support
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph LR
-    subgraph "Python Layer"
+    subgraph PY["Python Layer"]
         A[yirage.get_available_backends]
         B[yirage.PersistentKernel]
         C[graph.superoptimize]
     end
 
-    subgraph "C++ Backend Manager"
+    subgraph CPP["C++ Backend Manager"]
         D[BackendRegistry<br/>Singleton]
         E[BackendInterface<br/>Abstract]
     end
 
-    subgraph "Concrete Backends"
+    subgraph IMPL["Concrete Backends"]
         F[CUDABackend]
         G[CPUBackend]
         H[MPSBackend]
@@ -82,13 +85,15 @@ graph LR
     D --> E
     E --> F & G & H & I & J & K & L & M & N
 
-    style D fill:#fff3e0
-    style E fill:#e8f5e9
+    style PY fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style CPP fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style IMPL fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### Backend Selection Flow
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart TD
     A[Start] --> B{Check Requested Backend}
     B --> C{Backend Available?}
@@ -104,9 +109,11 @@ flowchart TD
     J --> K[Execute Kernel]
     K --> L[End]
 
-    style D fill:#c8e6c9
-    style I fill:#fff9c4
-    style G fill:#ffcdd2
+    style A fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style D fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style I fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style G fill:#fce4ec,stroke:#7c3aed,stroke-width:2px
+    style L fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## Search Engine Architecture
@@ -114,18 +121,19 @@ flowchart TD
 ### Superoptimization Pipeline
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart LR
-    subgraph "Input"
+    subgraph IN["Input"]
         A[Kernel Graph<br/>User-defined operations]
     end
 
-    subgraph "Search Phase"
+    subgraph SEARCH["Search Phase"]
         B[Candidate Generator<br/>Fusion possibilities]
         C[Fingerprint Verifier<br/>Correctness check]
         D[Performance Profiler<br/>Timing measurement]
     end
 
-    subgraph "Backend Strategies"
+    subgraph STRAT["Backend Strategies"]
         E[CUDA Strategy<br/>Tensor Core, Warp]
         F[MPS Strategy<br/>SIMD, Threadgroup]
         G[Ascend Strategy<br/>AI Core, Cube]
@@ -133,7 +141,7 @@ flowchart LR
         I[CPU Strategy<br/>AVX, Cache]
     end
 
-    subgraph "Output"
+    subgraph OUT["Output"]
         J[Optimized Kernel<br/>Best configuration]
     end
 
@@ -141,14 +149,16 @@ flowchart LR
     D --> E & F & G & H & I
     E & F & G & H & I --> J
 
-    style A fill:#e3f2fd
-    style D fill:#fff8e1
-    style J fill:#c8e6c9
+    style IN fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style SEARCH fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style STRAT fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style OUT fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### Fingerprint Verification
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 sequenceDiagram
     participant G as Graph
     participant FP as Fingerprint Engine
@@ -168,14 +178,15 @@ sequenceDiagram
 ### CUDA Backend
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "CUDA Backend"
+    subgraph CUDA["CUDA Backend"]
         A[CUDAOptimizer]
         B[CUDAKernelConfig]
         C[CUDASearchStrategy]
     end
 
-    subgraph "Optimization Dimensions"
+    subgraph OPT["Optimization Dimensions"]
         D[Grid/Block Dims]
         E[Shared Memory]
         F[Tensor Core]
@@ -183,7 +194,7 @@ graph TB
         H[Bank Conflict Avoidance]
     end
 
-    subgraph "Hardware"
+    subgraph HW["Hardware"]
         I[NVIDIA GPU<br/>SM, Tensor Cores]
     end
 
@@ -192,31 +203,33 @@ graph TB
     C --> A
     D & E & F & G & H --> I
 
-    style A fill:#76ff03
-    style I fill:#ffeb3b
+    style CUDA fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style OPT fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style HW fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### Ascend Backend
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "Ascend Backend"
+    subgraph ASCEND["Ascend Backend"]
         A[AscendOptimizer]
         B[AscendKernelConfig]
         C[AscendSearchStrategy]
     end
 
-    subgraph "Code Generation Paths"
+    subgraph PATH["Code Generation Paths"]
         D[Triton Path<br/>Recommended]
         E[Ascend C Path<br/>Optional]
     end
 
-    subgraph "Compiler"
+    subgraph COMP["Compiler"]
         F[BiSheng Compiler]
         G[ascendc Compiler]
     end
 
-    subgraph "Hardware"
+    subgraph HW["Hardware"]
         H[Ascend NPU<br/>AI Core, Cube Unit]
     end
 
@@ -226,27 +239,30 @@ graph TB
     B --> A
     C --> A
 
-    style D fill:#c8e6c9
-    style H fill:#ffcdd2
+    style ASCEND fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style PATH fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style COMP fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style HW fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### MACA Backend
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "MACA Backend"
+    subgraph MACA["MACA Backend"]
         A[MACAOptimizer]
         B[MACAKernelConfig]
         C[MACASearchStrategy]
     end
 
-    subgraph "Key Differences from CUDA"
+    subgraph DIFF["Key Differences from CUDA"]
         D[64-thread Warp<br/>vs CUDA 32]
         E[mxcc Compiler<br/>vs nvcc]
         F[mcruntime<br/>vs cudart]
     end
 
-    subgraph "Hardware"
+    subgraph HW["Hardware"]
         G[MetaX GPU<br/>C500, MACA Cores]
     end
 
@@ -255,27 +271,29 @@ graph TB
     C --> A
     D & E & F --> G
 
-    style A fill:#e1bee7
-    style G fill:#b39ddb
+    style MACA fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style DIFF fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style HW fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### MPS Backend (Apple Silicon)
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "MPS Backend"
+    subgraph MPS["MPS Backend"]
         A[MPSOptimizer]
         B[MPSKernelConfig]
         C[MPSSearchStrategy]
     end
 
-    subgraph "Metal Features"
+    subgraph METAL["Metal Features"]
         D[Threadgroup Memory<br/>32 KB]
         E[SIMD Width<br/>32 threads]
         F[Unified Memory<br/>CPU/GPU shared]
     end
 
-    subgraph "Hardware"
+    subgraph HW["Hardware"]
         G[Apple Silicon<br/>M1/M2/M3/M4]
     end
 
@@ -284,8 +302,9 @@ graph TB
     C --> A
     D & E & F --> G
 
-    style A fill:#80deea
-    style G fill:#4dd0e1
+    style MPS fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style METAL fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style HW fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## Memory Hierarchy
@@ -293,8 +312,9 @@ graph TB
 ### GPU Memory Model
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "Memory Hierarchy"
+    subgraph MEM["Memory Hierarchy"]
         A[Global Memory / HBM<br/>Large, High Latency]
         B[L2 Cache<br/>Shared across SMs]
         C[L1 Cache / Shared Memory<br/>Per SM, Low Latency]
@@ -303,10 +323,11 @@ graph TB
 
     A --> B --> C --> D
 
-    style A fill:#ffcdd2
-    style B fill:#fff9c4
-    style C fill:#c8e6c9
-    style D fill:#b3e5fc
+    style MEM fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style A fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style B fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style C fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
+    style D fill:#a78bfa,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### Backend Memory Configuration
@@ -324,24 +345,25 @@ graph TB
 ### Code Generation Flow
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart LR
-    subgraph "Input"
+    subgraph IN["Input"]
         A[μGraph<br/>Fused Graph]
     end
 
-    subgraph "Transpilers"
+    subgraph TRANS["Transpilers"]
         B[CUDA Transpiler]
         C[Triton Transpiler]
         D[NKI Transpiler]
     end
 
-    subgraph "Output Code"
+    subgraph OUT["Output Code"]
         E[CUDA Kernel<br/>.cu]
         F[Triton Kernel<br/>.py]
         G[NKI Kernel<br/>.py]
     end
 
-    subgraph "Runtime"
+    subgraph RT["Runtime"]
         H[cuBLAS/cuDNN]
         I[Triton JIT]
         J[Neuron SDK]
@@ -351,10 +373,10 @@ flowchart LR
     A --> C --> F --> I
     A --> D --> G --> J
 
-    style A fill:#e1f5fe
-    style E fill:#c8e6c9
-    style F fill:#fff9c4
-    style G fill:#f3e5f5
+    style IN fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style TRANS fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style OUT fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
+    style RT fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## API Layer
@@ -362,6 +384,7 @@ flowchart LR
 ### Python API Structure
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 classDiagram
     class yirage {
         +new_kernel_graph()
@@ -402,6 +425,7 @@ classDiagram
 ## Performance Optimization Flow
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 flowchart TD
     A[User Kernel Graph] --> B[Analyze Operations]
     B --> C[Generate Fusion Candidates]
@@ -414,9 +438,9 @@ flowchart TD
     H --> I[Compile for Target Backend]
     I --> J[Optimized Kernel Ready]
 
-    style A fill:#e3f2fd
-    style D fill:#fff8e1
-    style J fill:#c8e6c9
+    style A fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style D fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style J fill:#c4b5fd,stroke:#7c3aed,stroke-width:2px
 ```
 
 ---

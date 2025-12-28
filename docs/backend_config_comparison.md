@@ -3,24 +3,24 @@
 ## Architecture Overview
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e3f2fd', 'lineColor': '#546e7a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph ENGINE["🔍 YiRage Search Engine"]
-        A["<b>Kernel Optimizer</b><br/><i>Configuration Manager</i>"]
+    subgraph ENGINE["YiRage Search Engine"]
+        A["Kernel Optimizer<br/>Configuration Manager"]
     end
 
-    subgraph METHODS["⚙️ Configuration Retrieval Methods"]
-        B["<b>CUDA</b><br/>Dynamic Runtime Query"]
-        C["<b>MPS</b><br/>Static Config File"]
-        D["<b>CPU</b><br/>Cache-based Static"]
-        E["<b>Ascend</b><br/>Static + npu-smi"]
+    subgraph METHODS["Configuration Retrieval Methods"]
+        B["CUDA<br/>Dynamic Runtime Query"]
+        C["MPS<br/>Static Config File"]
+        D["CPU<br/>Cache-based Static"]
+        E["Ascend<br/>Static + npu-smi"]
     end
 
-    subgraph SOURCES["📊 Hardware Information Sources"]
-        F["cudaDeviceProp<br/><i>NVIDIA API</i>"]
-        G["Apple Docs<br/><i>Metal Feature Set</i>"]
-        H["Architecture Specs<br/><i>Cache Hierarchy</i>"]
-        I["CANN + npu-smi<br/><i>Huawei Specs</i>"]
+    subgraph SOURCES["Hardware Information Sources"]
+        F["cudaDeviceProp<br/>NVIDIA API"]
+        G["Apple Docs<br/>Metal Feature Set"]
+        H["Architecture Specs<br/>Cache Hierarchy"]
+        I["CANN + npu-smi<br/>Huawei Specs"]
     end
 
     A --> B & C & D & E
@@ -29,13 +29,9 @@ graph TB
     D --> H
     E --> I
 
-    style ENGINE fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
-    style METHODS fill:#fff8e1,stroke:#ffa000,stroke-width:2px
-    style SOURCES fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
-    style B fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px
-    style C fill:#ffe0b2,stroke:#ef6c00,stroke-width:2px
-    style D fill:#bbdefb,stroke:#1565c0,stroke-width:2px
-    style E fill:#f8bbd9,stroke:#ad1457,stroke-width:2px
+    style ENGINE fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style METHODS fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style SOURCES fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
 ```
 
 ## Why Do We Need These Configuration Parameters?

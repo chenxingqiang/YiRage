@@ -35,18 +35,19 @@ Referencing `torch.backends`, the following backends are planned:
 ### 3.1 Backend Abstraction Layer Architecture
 
 ```mermaid
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ede9fe', 'primaryTextColor': '#3b0764', 'lineColor': '#7c3aed'}}}%%
 graph TB
-    subgraph "Python API Layer"
+    subgraph API["Python API Layer"]
         A[PersistentKernel<br/>backend='cuda', ...]
     end
 
-    subgraph "Backend Manager C++"
-        B[Backend Registration<br/>注册]
-        C[Backend Selection<br/>选择]
-        D[Capability Query<br/>能力查询]
+    subgraph MGR["Backend Manager C++"]
+        B[Backend Registration]
+        C[Backend Selection]
+        D[Capability Query]
     end
 
-    subgraph "Backend Implementations"
+    subgraph IMPL["Backend Implementations"]
         E[CUDA<br/>Backend]
         F[CPU<br/>Backend]
         G[MPS<br/>Backend]
@@ -58,10 +59,9 @@ graph TB
     A --> B & C & D
     B & C & D --> E & F & G & H & I & J
 
-    style A fill:#e1f5fe
-    style B fill:#fff3e0
-    style C fill:#fff3e0
-    style D fill:#fff3e0
+    style API fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px
+    style MGR fill:#ede9fe,stroke:#7c3aed,stroke-width:2px
+    style IMPL fill:#ddd6fe,stroke:#7c3aed,stroke-width:2px
 ```
 
 ### 3.2 Core Interface Definition
