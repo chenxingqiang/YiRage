@@ -70,6 +70,7 @@ def get_backend_macros(config_file):
         "USE_MPS": None,
         "USE_CUSPARSELT": None,
         "USE_MACA": None,  # MetaX MACA GPU backend
+        "USE_ASCEND": None,  # Huawei Ascend NPU backend
         # CPU Backends
         "USE_CPU": None,
         "USE_MKL": None,
@@ -110,6 +111,8 @@ def get_backend_macros(config_file):
                 macros.append(("YIRAGE_FINGERPRINT_USE_CUDA", None))
             elif flag_name == "USE_MACA":
                 macros.append(("YIRAGE_FINGERPRINT_USE_MACA", None))
+            elif flag_name == "USE_ASCEND":
+                macros.append(("YIRAGE_FINGERPRINT_USE_ASCEND", None))
             elif flag_name == "USE_NKI":
                 macros.append(("YIRAGE_BACKEND_USE_NKI", None))
                 macros.append(("YIRAGE_FINGERPRINT_USE_CPU", None))
@@ -177,16 +180,19 @@ def config_cython():
                         f"-labstract_subexpr",
                         f"-L{path.join(yirage_path, 'build', 'formal_verifier', 'release')}",
                         f"-lformal_verifier",
-                        # CUDA runtime libraries (after yirage_runtime which needs them)
+                        f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'abstract_subexpr', 'release')}",
+                        f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'formal_verifier', 'release')}",
+                    ]
+                    # Add CUDA linking only if CUDA backend is enabled
+                    + ([
                         "-L/usr/local/cuda/lib64",
                         "-L/usr/local/cuda-12.1/lib64",
                         "-lcudart",
                         "-Wl,-rpath,/usr/local/cuda/lib64",
                         "-Wl,-rpath,/usr/local/cuda-12.1/lib64",
-                        f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'abstract_subexpr', 'release')}",
-                        f"-Wl,-rpath,{path.join('$ORIGIN', '..', '..', 'build', 'formal_verifier', 'release')}",
-                        f"-Wl,-rpath,{maca_home}/lib",  # MACA runtime library path
-                    ],
+                    ] if macros and any("CUDA" in str(m) for m in macros) else [])
+                    # Add MACA linking only if MACA backend is enabled
+                    + ([f"-Wl,-rpath,{maca_home}/lib"] if macros and any("MACA" in str(m) for m in macros) else []),
                     language="c++",
                 )
             )
