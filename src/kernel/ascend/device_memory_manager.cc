@@ -85,6 +85,20 @@ DeviceMemoryManager::DeviceMemoryManager(int num_gpus, int device_id) {
   
   dmem_fp_offset = 0;
   smem_fp_offset = 0;
+  
+  // Initialize fp_base_ptr array (used by fingerprint functions)
+  // All pointers point to the same device memory since we use single device
+  for (int i = 0; i < yirage::config::MAX_NUM_DEVICES; ++i) {
+    fp_base_ptr[i] = reinterpret_cast<char *>(dmem_fp_ptr);
+  }
+  stensor_fp_base_ptr = reinterpret_cast<char *>(smem_fp_ptr);
+  
+  // Initialize lookup tables to nullptr (not used in CPU fallback)
+  exp_lookup_table = nullptr;
+  div_p_lookup_table = nullptr;
+  div_q_lookup_table = nullptr;
+  sqrt_p_lookup_table = nullptr;
+  sqrt_q_lookup_table = nullptr;
 }
 
 DeviceMemoryManager::~DeviceMemoryManager() {
