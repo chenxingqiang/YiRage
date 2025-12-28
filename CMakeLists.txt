@@ -433,8 +433,9 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
   list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
   list(APPEND YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/ascend/device_memory_manager.cc)
   
-  if(ASCENDC_COMPILER)
+  if(ASCENDC_COMPILER AND ASCEND_COMPILE_KERNELS)
     message(STATUS "Found Ascend compiler: ${ASCENDC_COMPILER}")
+    message(STATUS "Ascend kernel compilation enabled (ASCEND_COMPILE_KERNELS=ON)")
     
     # Collect Ascend NPU kernel source files (.ascend files)
     # Note: .cc files in ascend/ are Host-side code, compiled with g++
@@ -451,6 +452,7 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
         OUTPUT ${ASCEND_OBJ}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/ascend_kernels
         COMMAND ${ASCENDC_COMPILER}
+          --cce-aicore-lang
           -c ${ASCEND_SRC}
           -o ${ASCEND_OBJ}
           -I${PROJECT_SOURCE_DIR}/include
@@ -485,9 +487,15 @@ if (NOT "${USE_ASCEND}" STREQUAL "OFF")
     # Link Ascend runtime libraries
     list(APPEND YIRAGE_LINK_LIBS ascendcl acl_op_compiler)
   else()
-    message(WARNING "Ascend compiler not found - using CPU fallback for fingerprint kernels")
+    if(ASCENDC_COMPILER)
+      message(STATUS "Found Ascend compiler: ${ASCENDC_COMPILER}")
+      message(STATUS "Ascend kernel compilation disabled (set ASCEND_COMPILE_KERNELS=ON to enable)")
+    else()
+      message(STATUS "Ascend compiler not found")
+    endif()
+    message(STATUS "Using triton-ascend for runtime kernel generation")
     # Note: We still use YIRAGE_FINGERPRINT_USE_ASCEND for the host-side memory manager
-    # The fingerprint kernels will use CPU fallback implementation
+    # Kernels are generated at runtime via triton-ascend
   endif()
 endif()
 
