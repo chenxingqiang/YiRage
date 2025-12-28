@@ -604,8 +604,7 @@ class KNGraph:
             from .backend_api import get_default_backend
             backend = get_default_backend()
             if backend is None:
-                # Fallback detection via PyTorch
-                import torch
+                # Fallback detection via PyTorch (torch already imported at top of file)
                 try:
                     import torch_npu
                     if torch.npu.is_available():
