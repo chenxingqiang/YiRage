@@ -122,7 +122,7 @@ DeviceMemoryManager *DeviceMemoryManager::get_instance() {
 }
 
 void DeviceMemoryManager::set_gpu_device_id(int device_id) {
-  this->gpu_id = device_id;
+  gpu_id = device_id;
 #ifdef __ASCEND__
   aclrtSetDevice(device_id);
 #endif

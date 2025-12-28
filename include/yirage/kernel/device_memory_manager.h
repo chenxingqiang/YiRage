@@ -49,7 +49,7 @@ public:
   // Note: MACA stream and blas handles can be added when needed
 #elif defined(YIRAGE_FINGERPRINT_USE_ASCEND)
   DeviceMemoryManager(int num_gpus, int device_id);
-  static void set_gpu_device_id(int gpu_id);
+  void set_gpu_device_id(int device_id);  // Non-static for Ascend (called via get_instance())
   int gpu_id;
   void *stream;  // aclrtStream
 #else
