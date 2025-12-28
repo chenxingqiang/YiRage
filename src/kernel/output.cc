@@ -75,7 +75,7 @@ KNOutputOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 bool KNOutputOp::fingerprint(void) {
   // This operator does not have a fingerprint
   return true;

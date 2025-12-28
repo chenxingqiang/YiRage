@@ -94,7 +94,7 @@ KNInputOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 bool KNInputOp::fingerprint(void) {
   DeviceMemoryManager *dmm = DeviceMemoryManager::get_instance();
   type::FPType value = 0;

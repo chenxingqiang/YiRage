@@ -125,7 +125,7 @@ KNRMSNormOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 bool KNRMSNormOp::fingerprint(void) {
   int num_samples = output_tensors[0].num_elements() / normalized_size;
   kernel::DeviceMemoryManager *dmm =

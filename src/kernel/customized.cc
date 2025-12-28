@@ -268,7 +268,7 @@ size_t KNCustomizedOp::get_owner_independent_hash() const {
   return true;
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 
 bool KNCustomizedOp::fingerprint(void) {
   using threadblock::STensor;

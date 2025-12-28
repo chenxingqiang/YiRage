@@ -95,9 +95,9 @@ void from_json(json const &j, KNChunkOp &op) {
   j.at("chunk_dim").get_to(op.chunk_dim);
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 bool KNChunkOp::fingerprint(void) {
-  // CPU fingerprint simplified
+  // CPU/Ascend fingerprint simplified
   return true;
 }
 #endif

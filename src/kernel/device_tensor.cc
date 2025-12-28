@@ -48,7 +48,7 @@ size_t DTensor::get_owner_independent_hash() const {
   return ret;
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 cpu::CTensor DTensor::copy_fingerprint_to_ctensor() const {
   cpu::CTensor ctensor;
   ctensor.data_type = data_type;

@@ -88,9 +88,9 @@ KNReductionOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 bool KNReductionOp::fingerprint(void) {
-  // CPU fingerprint simplified
+  // CPU/Ascend fingerprint simplified
   return true;
 }
 #endif

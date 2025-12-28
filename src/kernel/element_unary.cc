@@ -182,10 +182,9 @@ KNElementUnaryOp::operator json() const {
               {"output_tensors", output_tensors}};
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 bool KNElementUnaryOp::fingerprint(void) {
-  // CPU fingerprint - simplified implementation
-  // For production use, implement proper CPU-based fingerprint
+  // CPU/Ascend fingerprint - simplified implementation
   return true;
 }
 #endif

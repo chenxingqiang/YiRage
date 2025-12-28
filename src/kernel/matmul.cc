@@ -113,7 +113,7 @@ void from_json(json const &j, KNMatmulOp &op) {
   j.at("output_tensors").get_to(op.output_tensors);
 }
 
-#ifdef YIRAGE_FINGERPRINT_USE_CPU
+#if defined(YIRAGE_FINGERPRINT_USE_CPU) || defined(YIRAGE_FINGERPRINT_USE_ASCEND)
 bool KNMatmulOp::fingerprint(void) {
   DeviceMemoryManager *dmm = DeviceMemoryManager::get_instance();
 
@@ -137,7 +137,7 @@ bool KNMatmulOp::fingerprint(void) {
 
   return true;
 }
-#endif // YIRAGE_FINGERPRINT_USE_CUDA
+#endif // YIRAGE_FINGERPRINT_USE_CPU || YIRAGE_FINGERPRINT_USE_ASCEND
 
 } // namespace kernel
 } // namespace yirage
