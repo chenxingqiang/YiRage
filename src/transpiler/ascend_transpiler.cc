@@ -78,7 +78,7 @@ std::string get_dtype_str(type::DataType dtype) {
     case type::DT_FLOAT16: return "float16";
     case type::DT_BFLOAT16: return "bfloat16";
     case type::DT_FLOAT32: return "float32";
-    case type::DT_FLOAT64: return "float64";
+    case type::DT_DOUBLE: return "float64";
     case type::DT_INT8: return "int8";
     case type::DT_INT16: return "int16";
     case type::DT_INT32: return "int32";
@@ -93,7 +93,7 @@ std::string get_triton_dtype(type::DataType dtype) {
     case type::DT_FLOAT16: return "tl.float16";
     case type::DT_BFLOAT16: return "tl.bfloat16";
     case type::DT_FLOAT32: return "tl.float32";
-    case type::DT_FLOAT64: return "tl.float64";
+    case type::DT_DOUBLE: return "tl.float64";
     case type::DT_INT8: return "tl.int8";
     case type::DT_INT16: return "tl.int16";
     case type::DT_INT32: return "tl.int32";
