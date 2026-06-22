@@ -1,0 +1,93 @@
+import torch
+import yirage as yr
+import argparse
+_DEVICE = ("cuda" if __import__("torch").cuda.is_available() 
+           else "mps" if __import__("torch").backends.mps.is_available() 
+           else "cpu")
+def __sync():
+    d = _DEVICE
+    t = __import__("torch")
+    if d == "cuda": t.cuda.synchronize()
+    elif d == "mps": t.mps.synchronize()
+def __bench_ms(fn, warmup=16, reps=1000):
+    import time
+    for _ in range(warmup): fn()
+    __sync()
+    if _DEVICE == "cuda":
+        t = __import__("torch")
+        s, e = t.cuda.Event(enable_timing=True), t.cuda.Event(enable_timing=True)
+        s.record()
+        for _ in range(reps): fn()
+        e.record()
+        __sync()
+        return s.elapsed_time(e) / reps
+    else:
+        t0 = time.perf_counter()
+        for _ in range(reps): fn()
+        __sync()
+        return (time.perf_counter() - t0) / reps * 1000
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--profiling", action="store_true", help="Enable yirage profiling mode")
+    args = parser.parse_args()
+
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(512, 256), dtype=yr.float16)
+    W = graph.new_input(dims=(256, 1024), dtype=yr.float16)
+    tb_graph = yr.new_threadblock_graph(
+        grid_dim=(4, 4, 1), block_dim=(256, 1, 1), forloop_range=8, reduction_dimx=64
+    )
+    tX = tb_graph.new_input(dtensor=X, input_map=(0, -1, -1), forloop_dim=1)
+    tW = tb_graph.new_input(dtensor=W, input_map=(-1, 1, -1), forloop_dim=0)
+    tM = tb_graph.matmul(tX, tW)
+    tO = tb_graph.forloop_accum(tM)
+    tb_graph.new_output(stensor=tO, output_map=(0, 1, -1))
+    O = graph.customized([X, W], tb_graph)
+    graph.mark_output(O[0])
+
+    input_tensors = [
+        torch.ones(512, 256, dtype=torch.float16, device=_DEVICE),
+        torch.ones(256, 1024, dtype=torch.float16, device=_DEVICE),
+    ]
+
+    outputs = graph(
+        inputs=input_tensors,
+        num_warp_groups=2,
+        pipeline_stages=4,
+        profiling=args.profiling,
+        file_id=3,
+        target_cc=100,
+    )
+
+    print("Verifying output correctness...")
+
+    X_tensor = input_tensors[0]  # (512, 256)
+    W_tensor = input_tensors[1]  # (256, 1024)
+
+    reference_output = torch.matmul(X_tensor, W_tensor)  # (512, 1024)
+
+    yirage_output = outputs[0]
+
+    print(f"Input X shape: {X_tensor.shape}")
+    print(f"Input W shape: {W_tensor.shape}")
+    print(f"Reference output shape: {reference_output.shape}")
+    print(f"YiRage output shape: {yirage_output.shape}")
+
+    if reference_output.shape == yirage_output.shape:
+        abs_diff = torch.abs(reference_output - yirage_output)
+        max_abs_error = torch.max(abs_diff).item()
+        print(f"Max absolute error: {max_abs_error:.6e}")
+
+        eps = 1e-8
+        rel_diff = abs_diff / (torch.abs(reference_output) + eps)
+        passed = max_abs_error < 1e-4
+        print(f"Verification status: {'Passed' if passed else 'Failed'}")
+        if not passed:
+            print("Error exceeds expected range.")
+        else:
+            print("Output verification passed.")
+    else:
+        print(f"Output shape mismatch!")
+        print(f"Expected: {reference_output.shape}")
+        print(f"Actual: {yirage_output.shape}")

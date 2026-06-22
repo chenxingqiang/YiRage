@@ -1,0 +1,110 @@
+import yirage as yr
+import argparse
+import os
+import torch
+import flashinfer
+_DEVICE = ("cuda" if __import__("torch").cuda.is_available() 
+           else "mps" if __import__("torch").backends.mps.is_available() 
+           else "cpu")
+def __sync():
+    d = _DEVICE
+    t = __import__("torch")
+    if d == "cuda": t.cuda.synchronize()
+    elif d == "mps": t.mps.synchronize()
+def __bench_ms(fn, warmup=16, reps=1000):
+    import time
+    for _ in range(warmup): fn()
+    __sync()
+    if _DEVICE == "cuda":
+        t = __import__("torch")
+        s, e = t.cuda.Event(enable_timing=True), t.cuda.Event(enable_timing=True)
+        s.record()
+        for _ in range(reps): fn()
+        e.record()
+        __sync()
+        return s.elapsed_time(e) / reps
+    else:
+        t0 = time.perf_counter()
+        for _ in range(reps): fn()
+        __sync()
+        return (time.perf_counter() - t0) / reps * 1000
+
+n_local_heads = 32
+n_local_kv_heads = 8
+head_dim = 128
+intermediate_size = 14336
+num_tokens = 8
+num_kv_tokens = 4096
+
+silu = torch.nn.SiLU()
+
+
+def get_rms_linear_kernel(num_tokens, output_dim):
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(num_tokens, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, output_dim), dtype=yr.float16)
+    D = graph.rms_norm(X, normalized_shape=(4096,))
+    O = graph.matmul(D, W)
+    graph.mark_output(O)
+    return graph.superoptimize(config="mlp")
+
+
+def yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels):
+    func = kernels[0]
+    outputs = func(inputs=[X, Wqkv])
+    Xqkv = outputs[0]
+    Xq = Xqkv[:, : (n_local_heads * head_dim)]
+    output_shape = Xq.shape
+    Xkv = Xqkv[:, (n_local_heads * head_dim) :]
+    Xk, Xv = Xkv.chunk(2, 1)
+    Xq = Xq.view(Xq.shape[0], n_local_heads, head_dim)
+    Xk = Xk.view(Xk.shape[0], n_local_kv_heads, head_dim)
+    Xv = Xv.view(Xv.shape[0], n_local_kv_heads, head_dim)
+    output = flashinfer.single_prefill_with_kv_cache(Xq, Kcache, Vcache, causal=True)
+    X = torch.matmul(output.reshape(output_shape), Wo)
+    func = kernels[1]
+    outputs = func(inputs=[X, W13])
+    X13 = outputs[0]
+    X1, X3 = X13.chunk(2, -1)
+    output = torch.matmul(X1, W2)
+    return output
+
+
+if __name__ == "__main__":
+    X = torch.randn(num_tokens, 4096, dtype=torch.float16, device=_DEVICE)
+    Wqkv = torch.randn(
+        4096,
+        n_local_heads * head_dim + 2 * n_local_kv_heads * head_dim,
+        dtype=torch.float16,
+        device=_DEVICE,
+    )
+    Wo = torch.randn(n_local_heads * head_dim, 4096, dtype=torch.float16, device=_DEVICE)
+    W13 = torch.randn(4096, intermediate_size * 2, dtype=torch.float16, device=_DEVICE)
+    W2 = torch.rand(14336, 4096, dtype=torch.float16, device=_DEVICE)
+    Kcache = torch.rand(
+        num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device=_DEVICE
+    )
+    Vcache = torch.rand(
+        num_kv_tokens, n_local_kv_heads, head_dim, dtype=torch.float16, device=_DEVICE
+    )
+
+    k1 = get_rms_linear_kernel(num_tokens, Wqkv.shape[-1])
+    k2 = get_rms_linear_kernel(num_tokens, W13.shape[-1])
+    kernels = [k1, k2]
+
+    for _ in range(16):
+        yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+    _sync()
+
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    repetitions = 1000
+    starter.record()
+    for rep in range(repetitions):
+        yirage_llama(X, Wqkv, Wo, W13, W2, Kcache, Vcache, kernels)
+
+    ender.record()
+    _sync()
+    curr_time = starter.elapsed_time(ender)
+
+    mean_syn = curr_time / 1000
+    print(mean_syn)

@@ -1,0 +1,39 @@
+{
+  "name": "simple_mlp",
+  "inputs": [
+    {"id": 0, "dims": [2048, 4096], "dtype": "fp16"},
+    {"id": 1, "dims": [4096, 11008], "dtype": "fp16"},
+    {"id": 2, "dims": [4096, 11008], "dtype": "fp16"},
+    {"id": 3, "dims": [11008, 4096], "dtype": "fp16"}
+  ],
+  "outputs": [
+    {"id": 100, "dims": [2048, 4096], "dtype": "fp16"}
+  ],
+  "operators": [
+    {
+      "type": "kn_matmul_op",
+      "inputs": [0, 1],
+      "outputs": [{"id": 10, "dims": [2048, 11008], "dtype": "fp16"}]
+    },
+    {
+      "type": "kn_matmul_op",
+      "inputs": [0, 2],
+      "outputs": [{"id": 11, "dims": [2048, 11008], "dtype": "fp16"}]
+    },
+    {
+      "type": "kn_silu_op",
+      "inputs": [10],
+      "outputs": [{"id": 12, "dims": [2048, 11008], "dtype": "fp16"}]
+    },
+    {
+      "type": "kn_mul_op",
+      "inputs": [12, 11],
+      "outputs": [{"id": 13, "dims": [2048, 11008], "dtype": "fp16"}]
+    },
+    {
+      "type": "kn_matmul_op",
+      "inputs": [13, 3],
+      "outputs": [{"id": 100, "dims": [2048, 4096], "dtype": "fp16"}]
+    }
+  ]
+}

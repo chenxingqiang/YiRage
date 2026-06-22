@@ -1,0 +1,167 @@
+name: CPU Loop Close PR
+
+on:
+  pull_request:
+    paths:
+      - "scripts/cpu_loop_close.py"
+      - "scripts/cpu_cert_utils.py"
+      - "scripts/cpu_mlir_bench_utils.py"
+      - "scripts/cpu_bench_shapes.py"
+      - "scripts/validate_loop_close_archive.py"
+      - "scripts/validate_loop_close_archive_metadata.py"
+      - "scripts/emit_loop_close_timeout_alert.py"
+      - "scripts/render_loop_close_timing_doc.py"
+      - "scripts/build_mlir_ci_bundle.py"
+      - "scripts/regression_validate_loop_close_archive.py"
+      - "scripts/regression_validate_mlir_ci_bundle.py"
+      - "scripts/render_loop_close_metadata_doc.py"
+      - "scripts/render_loop_close_ci_artifact_doc.py"
+      - "scripts/validate_mlir_ci_bundle.py"
+      - "tests/integration/test_cpu_loop_close.py"
+      - "tests/python/test_cpu_mlir_ci_bundle.py"
+      - "tests/python/test_hardware_optimization_timing_contract.py"
+      - "tests/python/test_loop_close_metadata_doc_contract.py"
+      - "docs/HARDWARE_OPTIMIZATION.md"
+      - ".github/workflows/cpu-loop-close-nightly.yml"
+      - ".github/workflows/cpu-mlir-jit-contract.yml"
+      - "Makefile"
+      - ".github/workflows/cpu-loop-close-pr.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "scripts/cpu_loop_close.py"
+      - "scripts/cpu_cert_utils.py"
+      - "scripts/cpu_mlir_bench_utils.py"
+      - "scripts/cpu_bench_shapes.py"
+      - "scripts/validate_loop_close_archive.py"
+      - "scripts/validate_loop_close_archive_metadata.py"
+      - "scripts/emit_loop_close_timeout_alert.py"
+      - "scripts/render_loop_close_timing_doc.py"
+      - "scripts/build_mlir_ci_bundle.py"
+      - "scripts/regression_validate_loop_close_archive.py"
+      - "scripts/regression_validate_mlir_ci_bundle.py"
+      - "scripts/render_loop_close_metadata_doc.py"
+      - "scripts/render_loop_close_ci_artifact_doc.py"
+      - "scripts/validate_mlir_ci_bundle.py"
+      - "tests/integration/test_cpu_loop_close.py"
+      - "tests/python/test_cpu_mlir_ci_bundle.py"
+      - "tests/python/test_hardware_optimization_timing_contract.py"
+      - "tests/python/test_loop_close_metadata_doc_contract.py"
+      - "docs/HARDWARE_OPTIMIZATION.md"
+      - ".github/workflows/cpu-loop-close-nightly.yml"
+      - ".github/workflows/cpu-mlir-jit-contract.yml"
+      - "Makefile"
+      - ".github/workflows/cpu-loop-close-pr.yml"
+
+concurrency:
+  group: cpu-loop-close-pr-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  loop-close-quick-validate:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-dev python3-pip \
+            libboost-all-dev libz3-dev libz3-4 \
+            libopenblas-dev \
+            build-essential curl
+
+      - name: Install Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build Rust search helpers
+        run: |
+          (cd src/search/abstract_expr/abstract_subexpr && \
+            cargo build --release --target-dir ../../../../build/abstract_subexpr)
+          (cd src/search/verification/formal_verifier_equiv && \
+            cargo build --release --target-dir ../../../../build/formal_verifier)
+
+      - name: Install Python dependencies (CPU)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install z3-solver numpy graphviz tqdm accelforge "ray>=2.55"
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Build YiRage (CPU)
+        env:
+          YIRAGE_BACKEND: cpu
+          USE_MLIR: "0"
+        run: |
+          python3 -m pip install -e ".[dev]" --no-build-isolation
+
+      - name: Loop-close docs sync gate (PR)
+        run: make smoke-check-loop-close-docs
+
+      - name: Loop-close quick archive + validate (PR gate)
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: ${{ github.workspace }}
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/abstract_subexpr/release:${{ github.workspace }}/build/formal_verifier/release
+        run: |
+          mkdir -p artifacts
+          ARCHIVE="artifacts/cpu-loop-close-quick-${{ github.run_id }}.json"
+          META="artifacts/cpu-loop-close-quick-${{ github.run_id }}.meta.json"
+          PYTHONPATH=. python3 scripts/cpu_loop_close.py --json --quick \
+            --output "$ARCHIVE"
+          PYTHONPATH=. python3 scripts/validate_loop_close_archive.py \
+            "$ARCHIVE" --metadata-output "$META"
+
+      - name: Pre-alert metadata validate (PR)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          make validate-loop-close-metadata-pre-alert \
+            ARCHIVE="artifacts/cpu-loop-close-quick-${{ github.run_id }}.json" \
+            META="artifacts/cpu-loop-close-quick-${{ github.run_id }}.meta.json" \
+            DEST="artifacts/downloaded-regression"
+
+      - name: Emit soft timeout alert placeholder (if warnings)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          META="artifacts/cpu-loop-close-quick-${{ github.run_id }}.meta.json"
+          PYTHONPATH=. python3 scripts/emit_loop_close_timeout_alert.py \
+            "$META" \
+            --output "artifacts/loop-close-timeout-alert-pr-${{ github.run_id }}.json" \
+            --github-summary \
+            --annotate-metadata
+
+      - name: Post-alert metadata validate (PR)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          make validate-loop-close-metadata-post-alert \
+            ARCHIVE="artifacts/cpu-loop-close-quick-${{ github.run_id }}.json" \
+            META="artifacts/cpu-loop-close-quick-${{ github.run_id }}.meta.json" \
+            DEST="artifacts/downloaded-regression-post-alert"
+
+      - name: Upload loop-close quick archive artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cpu-loop-close-quick-pr-${{ github.run_id }}
+          path: |
+            artifacts/cpu-loop-close-quick-*.json
+            artifacts/cpu-loop-close-quick-*.meta.json
+            artifacts/loop-close-timeout-alert-pr-*.json
+            artifacts/downloaded-regression/
+            artifacts/downloaded-regression-post-alert/
+          retention-days: 7
+
+      - name: MLIR CI bundle regression tests
+        run: |
+          make test-cpu-mlir-ci-bundle

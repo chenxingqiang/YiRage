@@ -1,0 +1,143 @@
+name: "Build Test"
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: build-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 600
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Free space on runner
+        run: .github/workflows/helpers/free_space_on_runner.sh
+
+      - name: Install CUDA
+        uses: Jimver/cuda-toolkit@v0.2.16
+        id: cuda-toolkit
+        with:
+          cuda: "12.1.1"
+          use-github-cache: "false"
+
+      - name: Install Dependencies
+        run: .github/workflows/helpers/install_dependencies.sh
+
+      # ========================================================================
+      # LLVM/MLIR Setup (Cached)
+      # ========================================================================
+      - name: Cache LLVM/MLIR
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: /opt/llvm
+          key: llvm-17-ubuntu-22.04-${{ hashFiles('.github/workflows/build-llvm.yml') }}
+          restore-keys: |
+            llvm-17-ubuntu-22.04-
+
+      - name: Install LLVM/MLIR (from cache or APT)
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          # Try to download prebuilt or install from APT
+          echo "Installing LLVM 17 from APT repository..."
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main" | \
+            sudo tee /etc/apt/sources.list.d/llvm-17.list
+          sudo apt-get update
+          sudo apt-get install -y \
+            llvm-17 llvm-17-dev llvm-17-tools \
+            libmlir-17-dev mlir-17-tools \
+            clang-17 libclang-17-dev || true
+          
+          # Create cache directory structure
+          sudo mkdir -p /opt/llvm
+          if [ -d "/usr/lib/llvm-17" ]; then
+            sudo cp -r /usr/lib/llvm-17/* /opt/llvm/
+          fi
+
+      - name: Set LLVM/MLIR Environment
+        run: |
+          # Set environment variables for MLIR
+          if [ -d "/opt/llvm/lib/cmake/mlir" ]; then
+            echo "MLIR_DIR=/opt/llvm/lib/cmake/mlir" >> $GITHUB_ENV
+            echo "LLVM_DIR=/opt/llvm/lib/cmake/llvm" >> $GITHUB_ENV
+          elif [ -d "/usr/lib/llvm-17/lib/cmake/mlir" ]; then
+            echo "MLIR_DIR=/usr/lib/llvm-17/lib/cmake/mlir" >> $GITHUB_ENV
+            echo "LLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm" >> $GITHUB_ENV
+          fi
+          echo "PATH=/usr/lib/llvm-17/bin:$PATH" >> $GITHUB_ENV
+
+      - name: Check Z3 Library Path
+        run: |
+          find /usr -name "libz3.so*" || true
+          ldd $(find /usr/lib -name "*z3*.so*" | head -1) || true
+          
+      - name: Build YiRage from Source
+        env:
+          CUDA_TOOLKIT_PATH: ${{ steps.cuda-toolkit.outputs.CUDA_PATH }}
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: .github/workflows/helpers/build_yirage_from_source.sh
+      
+      - name: Test YiRage Import
+        run: |
+          # Set LD_LIBRARY_PATH for Z3
+          export LD_LIBRARY_PATH="/usr/lib:/usr/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH}"
+          python -c "import yirage; print('YiRage import successful!')"
+
+  # ==========================================================================
+  # MLIR Build Test (Optional - when USE_MLIR is enabled)
+  # ==========================================================================
+  test-mlir:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    if: github.event_name == 'workflow_dispatch'  # Only run on manual trigger
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Free space on runner
+        run: .github/workflows/helpers/free_space_on_runner.sh
+
+      - name: Install LLVM 17
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main" | \
+            sudo tee /etc/apt/sources.list.d/llvm-17.list
+          sudo apt-get update
+          sudo apt-get install -y \
+            llvm-17 llvm-17-dev llvm-17-tools \
+            libmlir-17-dev mlir-17-tools \
+            clang-17 libclang-17-dev \
+            cmake ninja-build
+
+      - name: Build YiRage MLIR Dialect
+        run: |
+          export MLIR_DIR=/usr/lib/llvm-17/lib/cmake/mlir
+          export LLVM_DIR=/usr/lib/llvm-17/lib/cmake/llvm
+          
+          mkdir -p mlir/build && cd mlir/build
+          cmake .. -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DMLIR_DIR=$MLIR_DIR \
+            -DLLVM_DIR=$LLVM_DIR
+          ninja
+          
+      - name: Test yirage-opt
+        run: |
+          cd mlir/build
+          ./yirage-opt --help || echo "yirage-opt not built yet"

@@ -1,0 +1,119 @@
+/* Copyright 2025 YiRage Team
+ * Intel XPU Softmax Kernels
+ */
+
+#pragma once
+
+#include <sycl/sycl.hpp>
+#include <cmath>
+
+namespace yirage {
+namespace kernel {
+namespace xpu {
+
+using namespace sycl;
+
+// =============================================================================
+// Row-wise Softmax
+// =============================================================================
+
+template<int BLOCK_SIZE = 256>
+class SoftmaxKernel {
+public:
+    void operator()(
+        nd_item<1> item,
+        const float* input,
+        float* output,
+        int rows, int cols,
+        local_accessor<float, 1> slm
+    ) const {
+        auto sg = item.get_sub_group();
+        int row = item.get_group(0);
+        int lid = item.get_local_id(0);
+        
+        if (row >= rows) return;
+        
+        const float* row_in = input + row * cols;
+        float* row_out = output + row * cols;
+        
+        // Find max (reduction)
+        float thread_max = -INFINITY;
+        for (int i = lid; i < cols; i += BLOCK_SIZE) {
+            thread_max = sycl::max(thread_max, row_in[i]);
+        }
+        
+        // Sub-group reduction for max
+        float max_val = sycl::reduce_over_group(sg, thread_max, sycl::maximum<float>());
+        
+        // Compute exp and sum
+        float thread_sum = 0.0f;
+        for (int i = lid; i < cols; i += BLOCK_SIZE) {
+            float exp_val = sycl::exp(row_in[i] - max_val);
+            slm[i] = exp_val;
+            thread_sum += exp_val;
+        }
+        
+        // Sub-group reduction for sum
+        float sum_val = sycl::reduce_over_group(sg, thread_sum, sycl::plus<float>());
+        
+        item.barrier(access::fence_space::local_space);
+        
+        // Normalize
+        for (int i = lid; i < cols; i += BLOCK_SIZE) {
+            row_out[i] = slm[i] / sum_val;
+        }
+    }
+};
+
+void softmax_f32(
+    queue& q,
+    const float* input,
+    float* output,
+    int rows, int cols
+) {
+    constexpr int BLOCK_SIZE = 256;
+    
+    q.submit([&](handler& h) {
+        local_accessor<float, 1> slm(cols, h);
+        
+        h.parallel_for<class softmax_kernel>(
+            nd_range<1>{rows * BLOCK_SIZE, BLOCK_SIZE},
+            [=](nd_item<1> item) [[intel::reqd_sub_group_size(16)]] {
+                SoftmaxKernel<BLOCK_SIZE>{}(item, input, output, rows, cols, slm);
+            }
+        );
+    });
+}
+
+// =============================================================================
+// Online Softmax for Flash Attention
+// =============================================================================
+
+struct OnlineSoftmaxState {
+    float max_val;
+    float sum_exp;
+};
+
+OnlineSoftmaxState online_softmax_update(
+    OnlineSoftmaxState prev,
+    const float* new_values,
+    int n
+) {
+    float new_max = prev.max_val;
+    for (int i = 0; i < n; i++) {
+        new_max = sycl::max(new_max, new_values[i]);
+    }
+    
+    float scale = sycl::exp(prev.max_val - new_max);
+    float new_sum = prev.sum_exp * scale;
+    
+    for (int i = 0; i < n; i++) {
+        new_sum += sycl::exp(new_values[i] - new_max);
+    }
+    
+    return {new_max, new_sum};
+}
+
+}  // namespace xpu
+}  // namespace kernel
+}  // namespace yirage

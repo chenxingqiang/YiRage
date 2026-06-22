@@ -1,0 +1,334 @@
+name: "Build LLVM"
+
+# This workflow builds LLVM/MLIR and creates prebuilt packages for releases.
+# The prebuilt packages are uploaded to GitHub Releases for faster CI builds.
+
+on:
+  # Manual trigger for building new LLVM versions
+  workflow_dispatch:
+    inputs:
+      llvm_version:
+        description: 'LLVM version to build'
+        required: true
+        default: '17'
+        type: choice
+        options:
+          - '17'
+          - '18'
+          - '19'
+      platforms:
+        description: 'Platforms to build for'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - 'all'
+          - 'linux-x86_64'
+          - 'linux-aarch64'
+          - 'macos-x86_64'
+          - 'macos-arm64'
+  
+  # Build on new releases
+  release:
+    types: [created]
+  
+  # Build weekly for cache
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight
+
+env:
+  LLVM_VERSION: ${{ github.event.inputs.llvm_version || '17' }}
+
+jobs:
+  # ==========================================================================
+  # Linux x86_64 Build
+  # ==========================================================================
+  build-linux-x86_64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    if: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux-x86_64' || github.event_name != 'workflow_dispatch' }}
+    
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          df -h
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build python3 python3-pip \
+            libxml2-dev libedit-dev swig
+      
+      - name: Cache LLVM build
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: llvm-install
+          key: llvm-${{ env.LLVM_VERSION }}-linux-x86_64-${{ hashFiles('.github/workflows/build-llvm.yml') }}
+      
+      - name: Clone LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch llvmorg-${{ env.LLVM_VERSION }}.0.0 \
+            https://github.com/llvm/llvm-project.git
+      
+      - name: Build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p llvm-project/build
+          cd llvm-project/build
+          
+          cmake -G Ninja ../llvm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/llvm-install \
+            -DLLVM_ENABLE_PROJECTS="mlir;clang" \
+            -DLLVM_TARGETS_TO_BUILD="host;NVPTX;AMDGPU" \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_ENABLE_RTTI=ON \
+            -DLLVM_ENABLE_EH=ON \
+            -DLLVM_BUILD_EXAMPLES=OFF \
+            -DLLVM_BUILD_TESTS=OFF \
+            -DLLVM_INCLUDE_EXAMPLES=OFF \
+            -DLLVM_INCLUDE_TESTS=OFF \
+            -DLLVM_INCLUDE_BENCHMARKS=OFF \
+            -DMLIR_ENABLE_BINDINGS_PYTHON=OFF \
+            -DLLVM_ENABLE_ZLIB=OFF \
+            -DLLVM_ENABLE_ZSTD=OFF \
+            -DLLVM_ENABLE_TERMINFO=OFF
+          
+          ninja -j$(nproc)
+          ninja install
+      
+      - name: Create tarball
+        run: |
+          cd llvm-install
+          tar -czvf ../llvm-${{ env.LLVM_VERSION }}-linux-x86_64.tar.gz .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-${{ env.LLVM_VERSION }}-linux-x86_64
+          path: llvm-${{ env.LLVM_VERSION }}-linux-x86_64.tar.gz
+          retention-days: 30
+
+  # ==========================================================================
+  # Linux aarch64 Build
+  # ==========================================================================
+  build-linux-aarch64:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 240
+    if: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'linux-aarch64' || github.event_name != 'workflow_dispatch' }}
+    
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          df -h
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      
+      - name: Cache LLVM build
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: llvm-install
+          key: llvm-${{ env.LLVM_VERSION }}-linux-aarch64-${{ hashFiles('.github/workflows/build-llvm.yml') }}
+      
+      - name: Build LLVM (cross-compile)
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        uses: docker://arm64v8/ubuntu:22.04
+        with:
+          args: |
+            bash -c "
+              apt-get update && apt-get install -y git cmake ninja-build python3 g++
+              git clone --depth 1 --branch llvmorg-${{ env.LLVM_VERSION }}.0.0 https://github.com/llvm/llvm-project.git
+              mkdir -p llvm-project/build
+              cd llvm-project/build
+              cmake -G Ninja ../llvm \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_INSTALL_PREFIX=/github/workspace/llvm-install \
+                -DLLVM_ENABLE_PROJECTS='mlir' \
+                -DLLVM_TARGETS_TO_BUILD='AArch64;NVPTX' \
+                -DLLVM_ENABLE_ASSERTIONS=ON \
+                -DLLVM_ENABLE_RTTI=ON \
+                -DLLVM_BUILD_EXAMPLES=OFF \
+                -DLLVM_BUILD_TESTS=OFF \
+                -DLLVM_INCLUDE_TESTS=OFF
+              ninja -j$(nproc)
+              ninja install
+            "
+      
+      - name: Create tarball
+        run: |
+          cd llvm-install
+          tar -czvf ../llvm-${{ env.LLVM_VERSION }}-linux-aarch64.tar.gz .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-${{ env.LLVM_VERSION }}-linux-aarch64
+          path: llvm-${{ env.LLVM_VERSION }}-linux-aarch64.tar.gz
+          retention-days: 30
+
+  # ==========================================================================
+  # macOS x86_64 Build
+  # ==========================================================================
+  build-macos-x86_64:
+    runs-on: macos-13
+    timeout-minutes: 180
+    if: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'macos-x86_64' || github.event_name != 'workflow_dispatch' }}
+    
+    steps:
+      - name: Install dependencies
+        run: |
+          brew install cmake ninja python
+      
+      - name: Cache LLVM build
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: llvm-install
+          key: llvm-${{ env.LLVM_VERSION }}-macos-x86_64-${{ hashFiles('.github/workflows/build-llvm.yml') }}
+      
+      - name: Clone and build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch llvmorg-${{ env.LLVM_VERSION }}.0.0 \
+            https://github.com/llvm/llvm-project.git
+          
+          mkdir -p llvm-project/build
+          cd llvm-project/build
+          
+          cmake -G Ninja ../llvm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/llvm-install \
+            -DLLVM_ENABLE_PROJECTS="mlir" \
+            -DLLVM_TARGETS_TO_BUILD="host;NVPTX" \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_ENABLE_RTTI=ON \
+            -DLLVM_BUILD_EXAMPLES=OFF \
+            -DLLVM_BUILD_TESTS=OFF \
+            -DLLVM_INCLUDE_TESTS=OFF
+          
+          ninja -j$(sysctl -n hw.ncpu)
+          ninja install
+      
+      - name: Create tarball
+        run: |
+          cd llvm-install
+          tar -czvf ../llvm-${{ env.LLVM_VERSION }}-macos-x86_64.tar.gz .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-${{ env.LLVM_VERSION }}-macos-x86_64
+          path: llvm-${{ env.LLVM_VERSION }}-macos-x86_64.tar.gz
+          retention-days: 30
+
+  # ==========================================================================
+  # macOS arm64 Build
+  # ==========================================================================
+  build-macos-arm64:
+    runs-on: macos-14
+    timeout-minutes: 180
+    if: ${{ github.event.inputs.platforms == 'all' || github.event.inputs.platforms == 'macos-arm64' || github.event_name != 'workflow_dispatch' }}
+    
+    steps:
+      - name: Install dependencies
+        run: |
+          brew install cmake ninja python
+      
+      - name: Cache LLVM build
+        id: cache-llvm
+        uses: actions/cache@v4
+        with:
+          path: llvm-install
+          key: llvm-${{ env.LLVM_VERSION }}-macos-arm64-${{ hashFiles('.github/workflows/build-llvm.yml') }}
+      
+      - name: Clone and build LLVM
+        if: steps.cache-llvm.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch llvmorg-${{ env.LLVM_VERSION }}.0.0 \
+            https://github.com/llvm/llvm-project.git
+          
+          mkdir -p llvm-project/build
+          cd llvm-project/build
+          
+          cmake -G Ninja ../llvm \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/llvm-install \
+            -DLLVM_ENABLE_PROJECTS="mlir" \
+            -DLLVM_TARGETS_TO_BUILD="AArch64;NVPTX" \
+            -DLLVM_ENABLE_ASSERTIONS=ON \
+            -DLLVM_ENABLE_RTTI=ON \
+            -DLLVM_BUILD_EXAMPLES=OFF \
+            -DLLVM_BUILD_TESTS=OFF \
+            -DLLVM_INCLUDE_TESTS=OFF
+          
+          ninja -j$(sysctl -n hw.ncpu)
+          ninja install
+      
+      - name: Create tarball
+        run: |
+          cd llvm-install
+          tar -czvf ../llvm-${{ env.LLVM_VERSION }}-macos-arm64.tar.gz .
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llvm-${{ env.LLVM_VERSION }}-macos-arm64
+          path: llvm-${{ env.LLVM_VERSION }}-macos-arm64.tar.gz
+          retention-days: 30
+
+  # ==========================================================================
+  # Create Release
+  # ==========================================================================
+  create-release:
+    needs: [build-linux-x86_64, build-macos-x86_64, build-macos-arm64]
+    runs-on: ubuntu-22.04
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: llvm-prebuilt-v${{ env.LLVM_VERSION }}
+          name: LLVM Prebuilt v${{ env.LLVM_VERSION }}
+          body: |
+            Prebuilt LLVM/MLIR ${{ env.LLVM_VERSION }} binaries for YiRage.
+            
+            ## Included Components
+            - LLVM Core
+            - MLIR (Machine Learning Intermediate Representation)
+            - Clang (Linux x86_64 only)
+            
+            ## Targets
+            - Host (native)
+            - NVPTX (NVIDIA PTX)
+            - AMDGPU (AMD GCN) - Linux only
+            
+            ## Usage
+            Download the appropriate tarball for your platform and extract:
+            ```bash
+            tar -xzf llvm-${{ env.LLVM_VERSION }}-<platform>.tar.gz -C /opt/llvm
+            export MLIR_DIR=/opt/llvm/lib/cmake/mlir
+            ```
+          files: |
+            artifacts/**/*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

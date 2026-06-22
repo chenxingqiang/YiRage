@@ -1,0 +1,74 @@
+# =============================================================================
+# Full Development Environment Dependencies
+# =============================================================================
+# This file lists dependencies for a complete local dev/CI environment.
+# It is NOT the package's published dependency list; that lives in
+# [project.dependencies] inside pyproject.toml (minimal set).
+# Install with: pip install -r requirements.txt
+# =============================================================================
+
+# Build toolchain
+cmake>=3.24
+cython>=0.28
+
+# Hardware modeling (keep in sync with pyproject.toml [project.dependencies])
+accelforge>=1.0.355
+
+# Formal verification (keep in sync with pyproject.toml [project.dependencies])
+z3-solver>=4.12.0
+
+torch>=2.4
+accelerate==1.8.0
+numpy
+graphviz
+tqdm
+transformers==4.53.0
+protobuf==3.20.0
+tg4perfetto==0.0.4
+
+# Distributed computing (Ray) — part of core dependencies in pyproject.toml
+ray>=2.55.0
+
+# =============================================================================
+# Backend-Specific Dependencies (install as needed)
+# =============================================================================
+
+# TPU Backend (Google TPU via JAX)
+# pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# jax>=0.4.20
+# jaxlib>=0.4.20
+# flax>=0.8.0
+
+# XPU Backend (Intel GPU via PyTorch)
+# pip install intel-extension-for-pytorch
+# intel-extension-for-pytorch>=2.1.0
+
+# ROCm Backend (AMD GPU)
+# pip install torch-rocm (or build from source with ROCm)
+
+# MACA Backend (MetaX GPU)
+# Requires MetaX MACA SDK from vendor
+
+# Ascend Backend (Huawei NPU)
+# pip install torch_npu
+# torch_npu>=2.1.0
+
+# TVM Backend
+# pip install apache-tvm
+# apache-tvm>=0.15.0
+
+# MLIR/StableHLO
+# pip install mlir-python-bindings (if available)
+# Or build MLIR from LLVM source
+
+# Distributed Computing (Ray) — now part of core dependencies (see above)
+# ray>=2.9.0
+
+# =============================================================================
+# Development Dependencies
+# =============================================================================
+# pytest>=7.0.0
+# pytest-cov>=4.0.0
+# black>=23.0.0
+# isort>=5.12.0
+# mypy>=1.0.0

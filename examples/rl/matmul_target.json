@@ -1,0 +1,33 @@
+{
+  "name": "matmul_target",
+  "description": "Simple matrix multiplication target graph",
+  "inputs": [
+    {
+      "id": 0,
+      "name": "A",
+      "dims": [128, 256],
+      "dtype": "float16"
+    },
+    {
+      "id": 1,
+      "name": "B",
+      "dims": [256, 128],
+      "dtype": "float16"
+    }
+  ],
+  "outputs": [
+    {
+      "id": 2,
+      "name": "C",
+      "dims": [128, 128],
+      "dtype": "float16"
+    }
+  ],
+  "operators": [
+    {
+      "type": "matmul",
+      "inputs": [0, 1],
+      "outputs": [2]
+    }
+  ]
+}

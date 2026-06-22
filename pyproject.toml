@@ -1,0 +1,299 @@
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel",
+    "cmake>=3.24",
+    "cython>=0.29",
+    "z3-solver>=4.12.0",
+]
+build-backend = "setuptools.build_meta"
+
+# =============================================================================
+# YiRage - Multi-Backend LLM Inference Engine
+# =============================================================================
+#
+# Installation:
+#   Native runtime (libyirage_runtime / yirage.core) is always required; there is no Python-only mode.
+#   pip install yirage                    # Default; wheel ships native code when available
+#   pip install yirage[cuda]              # Optional Python extras (e.g. CUDA-oriented stack)
+#   pip install yirage[rocm]              # Optional ROCm-oriented extras
+#   pip install yirage[all]               # All optional Python dependencies
+#
+# From source with backend:
+#   YIRAGE_BACKEND=cuda pip install .     # NVIDIA GPU
+#   YIRAGE_BACKEND=mps pip install .      # Apple Silicon
+#   YIRAGE_BACKEND=ascend pip install .   # Huawei NPU
+#
+# =============================================================================
+
+[project]
+name = "yirage"
+dynamic = ["version"]
+description = "YiRage - Multi-Backend LLM Inference Optimization Engine (requires built libyirage_runtime / yirage.core at install time)"
+readme = "README.pypi.md"
+license = {text = "Apache-2.0"}
+authors = [
+    {name = "Chen Xingqiang", email = "joy6677@outlook.com"}
+]
+maintainers = [
+    {name = "Chen Xingqiang", email = "joy6677@outlook.com"}
+]
+keywords = [
+    "llm", "inference", "optimization", "deep-learning",
+    "cuda", "mps", "rocm", "ascend", "multi-backend",
+    "tensor", "kernel", "gpu", "npu"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: C++",
+    "Programming Language :: Cython",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Compilers",
+    "Environment :: GPU",
+    "Environment :: GPU :: NVIDIA CUDA",
+]
+requires-python = ">=3.8"
+
+# =============================================================================
+# Core Dependencies
+# =============================================================================
+dependencies = [
+    "accelforge>=1.0.355",
+    "numpy>=1.21.0",
+    "z3-solver>=4.12.0",
+    "graphviz>=0.20.0",
+    "tqdm>=4.65.0",
+    "ray>=2.55.0",
+]
+
+# =============================================================================
+# Optional Dependencies
+# =============================================================================
+[project.optional-dependencies]
+
+# CUDA backend (NVIDIA GPU)
+cuda = [
+    "torch>=2.0.0",
+    "triton>=2.1.0",
+]
+
+# ROCm backend (AMD GPU)
+# Note: Install ROCm PyTorch separately:
+#   pip install torch --index-url https://download.pytorch.org/whl/rocm6.0
+rocm = [
+    "torch>=2.0.0",
+]
+
+# MPS backend (Apple Silicon)
+mps = [
+    "torch>=2.0.0",
+]
+
+# Ascend backend (Huawei NPU)
+# If torch-npu install fails, use Huawei repo:
+#   pip install torch-npu -i https://ascend-repo.obs.cn-east-2.myhuaweicloud.com/CANN/ascend-repo/simple/
+ascend = [
+    "torch>=2.0.0",
+    "torch-npu>=2.0.0",
+]
+
+# TPU backend (Google Cloud)
+# Note: Install JAX for TPU separately:
+#   pip install jax[tpu] -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+tpu = [
+    "torch>=2.0.0",
+    "jax>=0.4.20",
+]
+
+# XPU backend (Intel GPU)
+# Note: Install Intel Extension separately:
+#   pip install intel-extension-for-pytorch
+xpu = [
+    "torch>=2.0.0",
+]
+
+# MACA backend (MetaX GPU)
+maca = [
+    "torch>=2.0.0",
+]
+
+# FPGA backend (Xilinx/Intel)
+fpga = [
+    "torch>=2.0.0",
+]
+
+# CPU backend with optimizations
+cpu = [
+    "torch>=2.0.0",
+]
+
+# Distributed computing (now part of core dependencies; kept as alias for back-compat)
+distributed = [
+    "ray>=2.55.0",
+]
+
+# AccelForge hardware modeling
+accelforge = [
+    "accelforge>=1.0.355",
+]
+
+# LLM inference
+llm = [
+    "transformers>=4.40.0",
+    "accelerate>=1.0.0",
+    "safetensors>=0.4.0",
+]
+
+# Profiling and visualization
+profiling = [
+    "tensorboard>=2.14.0",
+]
+
+# Development tools
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+    "pre-commit>=3.0.0",
+    "twine>=4.0.0",
+    "build>=1.0.0",
+]
+
+# All standard dependencies (excludes vendor-specific backends that need manual install)
+all = [
+    "yirage[cuda,cpu,distributed,llm,profiling,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/chenxingqiang/YiRage"
+Documentation = "https://yirage.readthedocs.io"
+Repository = "https://github.com/chenxingqiang/YiRage.git"
+Issues = "https://github.com/chenxingqiang/YiRage/issues"
+Changelog = "https://github.com/chenxingqiang/YiRage/blob/main/CHANGELOG.md"
+
+# Note: no `[project.scripts]` are declared. A previous draft pointed at
+# `yirage.cli:main`, but no such module exists in `python/yirage/`, which would
+# install a broken `yirage` console command. Re-introduce this section only
+# alongside an actual `python/yirage/cli.py` (or equivalent) defining `main()`.
+
+# =============================================================================
+# Setuptools Configuration
+# =============================================================================
+[tool.setuptools]
+packages = ["yirage"]
+package-dir = {"" = "python"}
+
+[tool.setuptools.dynamic]
+version = {attr = "yirage.version.__version__"}
+
+[tool.setuptools.package-data]
+yirage = [
+    "*.so",
+    "*.dylib",
+    "*.pyd",
+    "include/**/*.h",
+    "include/**/*.cuh",
+]
+
+# =============================================================================
+# Code Quality Tools
+# =============================================================================
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.venv
+  | build
+  | dist
+  | deps
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+skip_gitignore = true
+skip = ["deps", "build", ".venv"]
+known_first_party = ["yirage"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = ["deps/", "build/", "tests/"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py38"
+exclude = [".venv", "build", "dist", "deps"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "UP"]
+ignore = ["E501", "E203", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"tests/*" = ["B011"]
+
+# =============================================================================
+# Testing Configuration
+# =============================================================================
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests/python", "tests/integration"]
+python_files = ["test_*.py"]
+markers = [
+    "unit: Unit tests",
+    "integration: Integration tests",
+    "slow: Slow tests",
+    "cuda: NVIDIA GPU tests",
+    "mps: Apple Silicon tests",
+    "rocm: AMD GPU tests",
+    "ascend: Huawei NPU tests",
+    "maca: MetaX GPU tests",
+    "xpu: Intel GPU tests",
+    "tpu: Google TPU tests",
+    "fpga: FPGA tests",
+    "cpu: CPU-only tests",
+    "distributed: Distributed/multi-device tests",
+    "ray: Ray distributed tests",
+    "torch: PyTorch integration tests",
+    "coverage: Module coverage tests",
+    "benchmark: Performance benchmark tests",
+]
+
+[tool.coverage.run]
+source = ["python/yirage"]
+branch = true
+omit = ["*/tests/*", "*/deps/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+show_missing = true

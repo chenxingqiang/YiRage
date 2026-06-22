@@ -1,0 +1,350 @@
+/* Copyright 2025 YiRage Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * MACA RMS Normalization Kernel
+ * Optimized for MetaX C500 with 64-thread warps
+ */
+
+#include "threadblock/maca/rms_norm.h"
+#include "utils/maca_helper.h"
+
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+
+namespace yirage {
+namespace threadblock {
+namespace maca {
+
+constexpr int MACA_WARP_SIZE = 64;  // MetaX uses 64-thread warps!
+constexpr int BLOCK_SIZE = 256;
+
+// =============================================================================
+// Warp-level Reduction (64 threads!)
+// =============================================================================
+
+__device__ __forceinline__ float warp_reduce_sum_64(float val) {
+    // MACA has 64-thread warps, so we need 6 shuffle steps (not 5)
+    #pragma unroll
+    for (int offset = 32; offset > 0; offset /= 2) {
+        val += __shfl_xor_sync(0xFFFFFFFFFFFFFFFFULL, val, offset);
+    }
+    return val;
+}
+
+__device__ __forceinline__ float block_reduce_sum(float val, float* shared) {
+    int lane = threadIdx.x % MACA_WARP_SIZE;
+    int wid = threadIdx.x / MACA_WARP_SIZE;
+    
+    val = warp_reduce_sum_64(val);
+    
+    if (lane == 0) {
+        shared[wid] = val;
+    }
+    __syncthreads();
+    
+    // First warp reduces all partial sums
+    int num_warps = blockDim.x / MACA_WARP_SIZE;
+    val = (threadIdx.x < num_warps) ? shared[threadIdx.x] : 0.0f;
+    
+    if (wid == 0) {
+        val = warp_reduce_sum_64(val);
+    }
+    
+    return val;
+}
+
+// =============================================================================
+// RMS Norm Kernel: y = x * (1 / sqrt(mean(x^2) + eps)) * gamma
+// =============================================================================
+
+template<int HIDDEN_DIM>
+__global__ void maca_rms_norm_kernel(
+    const float* __restrict__ input,
+    const float* __restrict__ gamma,
+    float* __restrict__ output,
+    int batch_size,
+    float eps
+) {
+    __shared__ float shared[BLOCK_SIZE / MACA_WARP_SIZE];
+    
+    int batch_idx = blockIdx.x;
+    const float* x = input + batch_idx * HIDDEN_DIM;
+    float* y = output + batch_idx * HIDDEN_DIM;
+    
+    // Compute sum of squares
+    float sum_sq = 0.0f;
+    for (int i = threadIdx.x; i < HIDDEN_DIM; i += blockDim.x) {
+        float val = x[i];
+        sum_sq += val * val;
+    }
+    
+    // Reduce across block
+    sum_sq = block_reduce_sum(sum_sq, shared);
+    
+    // Compute RMS
+    __shared__ float rms_inv;
+    if (threadIdx.x == 0) {
+        float mean_sq = sum_sq / HIDDEN_DIM;
+        rms_inv = rsqrtf(mean_sq + eps);
+    }
+    __syncthreads();
+    
+    // Apply normalization with gamma
+    for (int i = threadIdx.x; i < HIDDEN_DIM; i += blockDim.x) {
+        y[i] = x[i] * rms_inv * gamma[i];
+    }
+}
+
+// =============================================================================
+// Vectorized RMS Norm (float4 for better memory coalescing)
+// =============================================================================
+
+template<int HIDDEN_DIM>
+__global__ void maca_rms_norm_vectorized_kernel(
+    const float4* __restrict__ input,
+    const float4* __restrict__ gamma,
+    float4* __restrict__ output,
+    int batch_size,
+    float eps
+) {
+    __shared__ float shared[BLOCK_SIZE / MACA_WARP_SIZE];
+    
+    constexpr int VEC_DIM = HIDDEN_DIM / 4;
+    
+    int batch_idx = blockIdx.x;
+    const float4* x = input + batch_idx * VEC_DIM;
+    float4* y = output + batch_idx * VEC_DIM;
+    
+    // Compute sum of squares (vectorized)
+    float sum_sq = 0.0f;
+    for (int i = threadIdx.x; i < VEC_DIM; i += blockDim.x) {
+        float4 val = x[i];
+        sum_sq += val.x * val.x + val.y * val.y + val.z * val.z + val.w * val.w;
+    }
+    
+    // Reduce across block
+    sum_sq = block_reduce_sum(sum_sq, shared);
+    
+    // Compute RMS
+    __shared__ float rms_inv;
+    if (threadIdx.x == 0) {
+        float mean_sq = sum_sq / HIDDEN_DIM;
+        rms_inv = rsqrtf(mean_sq + eps);
+    }
+    __syncthreads();
+    
+    // Apply normalization with gamma (vectorized)
+    for (int i = threadIdx.x; i < VEC_DIM; i += blockDim.x) {
+        float4 val = x[i];
+        float4 g = gamma[i];
+        float4 result;
+        result.x = val.x * rms_inv * g.x;
+        result.y = val.y * rms_inv * g.y;
+        result.z = val.z * rms_inv * g.z;
+        result.w = val.w * rms_inv * g.w;
+        y[i] = result;
+    }
+}
+
+// =============================================================================
+// FP16 RMS Norm (for inference)
+// =============================================================================
+
+__global__ void maca_rms_norm_f16_kernel(
+    const half* __restrict__ input,
+    const half* __restrict__ gamma,
+    half* __restrict__ output,
+    int hidden_dim,
+    int batch_size,
+    float eps
+) {
+    __shared__ float shared[BLOCK_SIZE / MACA_WARP_SIZE];
+    
+    int batch_idx = blockIdx.x;
+    const half* x = input + batch_idx * hidden_dim;
+    half* y = output + batch_idx * hidden_dim;
+    
+    // Compute sum of squares in FP32 for numerical stability
+    float sum_sq = 0.0f;
+    for (int i = threadIdx.x; i < hidden_dim; i += blockDim.x) {
+        float val = __half2float(x[i]);
+        sum_sq += val * val;
+    }
+    
+    // Reduce across block
+    sum_sq = block_reduce_sum(sum_sq, shared);
+    
+    // Compute RMS
+    __shared__ float rms_inv;
+    if (threadIdx.x == 0) {
+        float mean_sq = sum_sq / hidden_dim;
+        rms_inv = rsqrtf(mean_sq + eps);
+    }
+    __syncthreads();
+    
+    // Apply normalization with gamma
+    for (int i = threadIdx.x; i < hidden_dim; i += blockDim.x) {
+        float val = __half2float(x[i]);
+        float g = __half2float(gamma[i]);
+        y[i] = __float2half(val * rms_inv * g);
+    }
+}
+
+// =============================================================================
+// Public API
+// =============================================================================
+
+void maca_rms_norm_f32(
+    const float* input,
+    const float* gamma,
+    float* output,
+    int hidden_dim,
+    int batch_size,
+    float eps,
+    void* stream
+) {
+    int block_size = min(BLOCK_SIZE, hidden_dim);
+    block_size = max(block_size, MACA_WARP_SIZE);  // At least one warp
+    
+    cudaStream_t cuda_stream = static_cast<cudaStream_t>(stream);
+    
+    // Use vectorized kernel if hidden_dim is divisible by 4
+    if (hidden_dim % 4 == 0 && hidden_dim >= 256) {
+        switch (hidden_dim) {
+            case 4096:
+                maca_rms_norm_vectorized_kernel<4096><<<batch_size, block_size, 0, cuda_stream>>>(
+                    reinterpret_cast<const float4*>(input),
+                    reinterpret_cast<const float4*>(gamma),
+                    reinterpret_cast<float4*>(output),
+                    batch_size, eps
+                );
+                break;
+            case 8192:
+                maca_rms_norm_vectorized_kernel<8192><<<batch_size, block_size, 0, cuda_stream>>>(
+                    reinterpret_cast<const float4*>(input),
+                    reinterpret_cast<const float4*>(gamma),
+                    reinterpret_cast<float4*>(output),
+                    batch_size, eps
+                );
+                break;
+            default:
+                // Generic path
+                maca_rms_norm_kernel<4096><<<batch_size, block_size, 0, cuda_stream>>>(
+                    input, gamma, output, batch_size, eps
+                );
+        }
+    } else {
+        switch (hidden_dim) {
+            case 4096:
+                maca_rms_norm_kernel<4096><<<batch_size, block_size, 0, cuda_stream>>>(
+                    input, gamma, output, batch_size, eps
+                );
+                break;
+            case 8192:
+                maca_rms_norm_kernel<8192><<<batch_size, block_size, 0, cuda_stream>>>(
+                    input, gamma, output, batch_size, eps
+                );
+                break;
+            default:
+                // Dynamic kernel would be needed here
+                break;
+        }
+    }
+}
+
+void maca_rms_norm_f16(
+    const half* input,
+    const half* gamma,
+    half* output,
+    int hidden_dim,
+    int batch_size,
+    float eps,
+    void* stream
+) {
+    int block_size = min(BLOCK_SIZE, hidden_dim);
+    block_size = max(block_size, MACA_WARP_SIZE);
+    
+    maca_rms_norm_f16_kernel<<<batch_size, block_size, 0, static_cast<cudaStream_t>(stream)>>>(
+        input, gamma, output, hidden_dim, batch_size, eps
+    );
+}
+
+// =============================================================================
+// Fused RMS Norm + Residual Add (common in Transformer)
+// =============================================================================
+
+__global__ void maca_fused_rms_norm_residual_kernel(
+    const float* __restrict__ input,
+    const float* __restrict__ residual,
+    const float* __restrict__ gamma,
+    float* __restrict__ output,
+    float* __restrict__ normed_residual,
+    int hidden_dim,
+    float eps
+) {
+    __shared__ float shared[BLOCK_SIZE / MACA_WARP_SIZE];
+    
+    int batch_idx = blockIdx.x;
+    const float* x = input + batch_idx * hidden_dim;
+    const float* r = residual + batch_idx * hidden_dim;
+    float* y = output + batch_idx * hidden_dim;
+    float* nr = normed_residual + batch_idx * hidden_dim;
+    
+    // Add residual and compute sum of squares
+    float sum_sq = 0.0f;
+    for (int i = threadIdx.x; i < hidden_dim; i += blockDim.x) {
+        float val = x[i] + r[i];
+        nr[i] = val;  // Store for residual connection
+        sum_sq += val * val;
+    }
+    
+    // Reduce
+    sum_sq = block_reduce_sum(sum_sq, shared);
+    
+    __shared__ float rms_inv;
+    if (threadIdx.x == 0) {
+        float mean_sq = sum_sq / hidden_dim;
+        rms_inv = rsqrtf(mean_sq + eps);
+    }
+    __syncthreads();
+    
+    // Apply normalization
+    for (int i = threadIdx.x; i < hidden_dim; i += blockDim.x) {
+        y[i] = nr[i] * rms_inv * gamma[i];
+    }
+}
+
+void maca_fused_rms_norm_residual_f32(
+    const float* input,
+    const float* residual,
+    const float* gamma,
+    float* output,
+    float* normed_residual,
+    int hidden_dim,
+    int batch_size,
+    float eps,
+    void* stream
+) {
+    int block_size = min(BLOCK_SIZE, hidden_dim);
+    block_size = max(block_size, MACA_WARP_SIZE);
+    
+    maca_fused_rms_norm_residual_kernel<<<batch_size, block_size, 0, static_cast<cudaStream_t>(stream)>>>(
+        input, residual, gamma, output, normed_residual, hidden_dim, eps
+    );
+}
+
+}  // namespace maca
+}  // namespace threadblock
+}  // namespace yirage
+
+#endif  // YIRAGE_BACKEND_MACA_ENABLED

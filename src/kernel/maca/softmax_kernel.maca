@@ -1,0 +1,288 @@
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * MACA Softmax Kernel
+ * 
+ * Optimized for MetaX MACA GPUs with 64-thread warps.
+ * Uses mctlass patterns for efficient warp-level reductions.
+ */
+
+#include "kernel/maca/maca_kernel_config.h"
+#include "kernel/maca/maca_warp_utils.h"
+
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+
+namespace yirage {
+namespace kernel {
+namespace maca {
+
+// =============================================================================
+// Warp-level primitives for 64-thread MACA warps
+// =============================================================================
+
+__device__ __forceinline__ float warp_reduce_max_64(float val) {
+    #pragma unroll
+    for (int offset = 32; offset > 0; offset /= 2) {
+        val = max(val, __shfl_xor_sync(0xFFFFFFFFFFFFFFFFULL, val, offset));
+    }
+    return val;
+}
+
+__device__ __forceinline__ float warp_reduce_sum_64(float val) {
+    #pragma unroll
+    for (int offset = 32; offset > 0; offset /= 2) {
+        val += __shfl_xor_sync(0xFFFFFFFFFFFFFFFFULL, val, offset);
+    }
+    return val;
+}
+
+// =============================================================================
+// Row-wise Softmax (FP32)
+// =============================================================================
+
+/**
+ * @brief Softmax kernel for row-wise computation
+ * 
+ * Each warp (64 threads) processes one or more rows.
+ * For small row sizes, one warp handles one row.
+ * For large row sizes, multiple iterations per row.
+ * 
+ * @param input Input tensor [num_rows x row_size]
+ * @param output Output tensor [num_rows x row_size]
+ * @param num_rows Number of rows
+ * @param row_size Size of each row
+ */
+__global__ void softmax_f32_maca(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    int num_rows,
+    int row_size
+) {
+    const int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 64;
+    const int lane_id = threadIdx.x % 64;
+    
+    if (warp_id >= num_rows) return;
+    
+    const float* in_row = input + warp_id * row_size;
+    float* out_row = output + warp_id * row_size;
+    
+    // Phase 1: Find max value in row
+    float max_val = -INFINITY;
+    for (int i = lane_id; i < row_size; i += 64) {
+        max_val = max(max_val, in_row[i]);
+    }
+    max_val = warp_reduce_max_64(max_val);
+    
+    // Phase 2: Compute exp and sum
+    float sum = 0.0f;
+    for (int i = lane_id; i < row_size; i += 64) {
+        float exp_val = expf(in_row[i] - max_val);
+        out_row[i] = exp_val;
+        sum += exp_val;
+    }
+    sum = warp_reduce_sum_64(sum);
+    
+    // Phase 3: Normalize
+    float inv_sum = 1.0f / sum;
+    for (int i = lane_id; i < row_size; i += 64) {
+        out_row[i] *= inv_sum;
+    }
+}
+
+// =============================================================================
+// Row-wise Softmax (FP16)
+// =============================================================================
+
+__global__ void softmax_f16_maca(
+    const half* __restrict__ input,
+    half* __restrict__ output,
+    int num_rows,
+    int row_size
+) {
+    const int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 64;
+    const int lane_id = threadIdx.x % 64;
+    
+    if (warp_id >= num_rows) return;
+    
+    const half* in_row = input + warp_id * row_size;
+    half* out_row = output + warp_id * row_size;
+    
+    // Compute in FP32 for numerical stability
+    float max_val = -INFINITY;
+    for (int i = lane_id; i < row_size; i += 64) {
+        max_val = max(max_val, __half2float(in_row[i]));
+    }
+    max_val = warp_reduce_max_64(max_val);
+    
+    float sum = 0.0f;
+    for (int i = lane_id; i < row_size; i += 64) {
+        float exp_val = expf(__half2float(in_row[i]) - max_val);
+        out_row[i] = __float2half(exp_val);
+        sum += exp_val;
+    }
+    sum = warp_reduce_sum_64(sum);
+    
+    float inv_sum = 1.0f / sum;
+    for (int i = lane_id; i < row_size; i += 64) {
+        out_row[i] = __float2half(__half2float(out_row[i]) * inv_sum);
+    }
+}
+
+// =============================================================================
+// Online Softmax (Numerically Stable, Single-pass)
+// =============================================================================
+
+__global__ void online_softmax_f32_maca(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    int num_rows,
+    int row_size
+) {
+    const int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 64;
+    const int lane_id = threadIdx.x % 64;
+    
+    if (warp_id >= num_rows) return;
+    
+    const float* in_row = input + warp_id * row_size;
+    float* out_row = output + warp_id * row_size;
+    
+    // Online softmax: track max and sum in single pass
+    float local_max = -INFINITY;
+    float local_sum = 0.0f;
+    
+    for (int i = lane_id; i < row_size; i += 64) {
+        float val = in_row[i];
+        float new_max = max(local_max, val);
+        local_sum = local_sum * expf(local_max - new_max) + expf(val - new_max);
+        local_max = new_max;
+    }
+    
+    // Warp reduce
+    float warp_max = warp_reduce_max_64(local_max);
+    local_sum *= expf(local_max - warp_max);
+    float warp_sum = warp_reduce_sum_64(local_sum);
+    
+    // Output
+    float inv_sum = 1.0f / warp_sum;
+    for (int i = lane_id; i < row_size; i += 64) {
+        out_row[i] = expf(in_row[i] - warp_max) * inv_sum;
+    }
+}
+
+// =============================================================================
+// Causal Softmax (for Attention with Mask)
+// =============================================================================
+
+__global__ void causal_softmax_f32_maca(
+    const float* __restrict__ input,
+    float* __restrict__ output,
+    int batch_size,
+    int num_heads,
+    int seq_len
+) {
+    const int warp_id = (blockIdx.x * blockDim.x + threadIdx.x) / 64;
+    const int lane_id = threadIdx.x % 64;
+    
+    const int total_rows = batch_size * num_heads * seq_len;
+    if (warp_id >= total_rows) return;
+    
+    // Compute position in sequence
+    const int query_pos = warp_id % seq_len;
+    const int valid_len = query_pos + 1;  // Causal: can only attend to positions <= query_pos
+    
+    const float* in_row = input + warp_id * seq_len;
+    float* out_row = output + warp_id * seq_len;
+    
+    // Find max in valid range
+    float max_val = -INFINITY;
+    for (int i = lane_id; i < valid_len; i += 64) {
+        max_val = max(max_val, in_row[i]);
+    }
+    max_val = warp_reduce_max_64(max_val);
+    
+    // Compute exp and sum
+    float sum = 0.0f;
+    for (int i = lane_id; i < valid_len; i += 64) {
+        float exp_val = expf(in_row[i] - max_val);
+        out_row[i] = exp_val;
+        sum += exp_val;
+    }
+    sum = warp_reduce_sum_64(sum);
+    
+    // Normalize valid positions, zero masked positions
+    float inv_sum = 1.0f / sum;
+    for (int i = lane_id; i < seq_len; i += 64) {
+        if (i < valid_len) {
+            out_row[i] *= inv_sum;
+        } else {
+            out_row[i] = 0.0f;
+        }
+    }
+}
+
+// =============================================================================
+// Launch Wrappers
+// =============================================================================
+
+void launch_softmax_f32_maca(
+    const float* input,
+    float* output,
+    int num_rows,
+    int row_size,
+    mcStream_t stream
+) {
+    int warps_needed = num_rows;
+    int threads_per_block = 256;  // 4 warps per block
+    int num_blocks = (warps_needed * 64 + threads_per_block - 1) / threads_per_block;
+    
+    softmax_f32_maca<<<num_blocks, threads_per_block, 0, stream>>>(
+        input, output, num_rows, row_size);
+}
+
+void launch_softmax_f16_maca(
+    const half* input,
+    half* output,
+    int num_rows,
+    int row_size,
+    mcStream_t stream
+) {
+    int warps_needed = num_rows;
+    int threads_per_block = 256;
+    int num_blocks = (warps_needed * 64 + threads_per_block - 1) / threads_per_block;
+    
+    softmax_f16_maca<<<num_blocks, threads_per_block, 0, stream>>>(
+        input, output, num_rows, row_size);
+}
+
+void launch_causal_softmax_f32_maca(
+    const float* input,
+    float* output,
+    int batch_size,
+    int num_heads,
+    int seq_len,
+    mcStream_t stream
+) {
+    int total_rows = batch_size * num_heads * seq_len;
+    int threads_per_block = 256;
+    int num_blocks = (total_rows * 64 + threads_per_block - 1) / threads_per_block;
+    
+    causal_softmax_f32_maca<<<num_blocks, threads_per_block, 0, stream>>>(
+        input, output, batch_size, num_heads, seq_len);
+}
+
+}  // namespace maca
+}  // namespace kernel
+}  // namespace yirage
+
+#endif  // YIRAGE_BACKEND_MACA_ENABLED

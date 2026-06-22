@@ -1,0 +1,157 @@
+/* Copyright 2025 YiRage Team
+ * Intel XPU Embedding Kernels
+ */
+
+#pragma once
+
+#include <sycl/sycl.hpp>
+#include <cmath>
+
+namespace yirage {
+namespace kernel {
+namespace xpu {
+
+using namespace sycl;
+
+// =============================================================================
+// Embedding Lookup
+// =============================================================================
+
+void embedding_lookup(
+    queue& q,
+    const float* embedding_table,  // [vocab_size, hidden_dim]
+    const int* indices,            // [batch, seq_len]
+    float* output,                 // [batch, seq_len, hidden_dim]
+    int batch, int seq_len, int vocab_size, int hidden_dim
+) {
+    q.submit([&](handler& h) {
+        h.parallel_for<class embedding_lookup_kernel>(
+            range<3>{batch, seq_len, hidden_dim},
+            [=](id<3> idx) {
+                int b = idx[0];
+                int s = idx[1];
+                int d = idx[2];
+                
+                int token_id = indices[b * seq_len + s];
+                output[(b * seq_len + s) * hidden_dim + d] = 
+                    embedding_table[token_id * hidden_dim + d];
+            }
+        );
+    });
+}
+
+// =============================================================================
+// Rotary Position Embedding (RoPE)
+// =============================================================================
+
+void apply_rope(
+    queue& q,
+    float* x,                      // [batch, heads, seq, head_dim]
+    const float* cos_cache,        // [seq, head_dim/2]
+    const float* sin_cache,        // [seq, head_dim/2]
+    int batch, int heads, int seq, int head_dim
+) {
+    int half_dim = head_dim / 2;
+    
+    q.submit([&](handler& h) {
+        h.parallel_for<class rope_kernel>(
+            range<4>{batch, heads, seq, half_dim},
+            [=](id<4> idx) {
+                int b = idx[0];
+                int he = idx[1];
+                int s = idx[2];
+                int d = idx[3];
+                
+                int base_idx = ((b * heads + he) * seq + s) * head_dim;
+                
+                float x1 = x[base_idx + d];
+                float x2 = x[base_idx + half_dim + d];
+                float cos_val = cos_cache[s * half_dim + d];
+                float sin_val = sin_cache[s * half_dim + d];
+                
+                x[base_idx + d] = x1 * cos_val - x2 * sin_val;
+                x[base_idx + half_dim + d] = x1 * sin_val + x2 * cos_val;
+            }
+        );
+    });
+}
+
+// =============================================================================
+// LM Head (Output Projection)
+// =============================================================================
+
+void lm_head(
+    queue& q,
+    const float* hidden_states,    // [batch, seq, hidden]
+    const float* weight,           // [vocab_size, hidden]
+    float* output,                 // [batch, seq, vocab_size]
+    int batch, int seq, int hidden, int vocab_size
+) {
+    // Use SYCL GEMM for efficient matrix multiply
+    q.submit([&](handler& h) {
+        h.parallel_for<class lm_head_kernel>(
+            range<3>{batch, seq, vocab_size},
+            [=](id<3> idx) {
+                int b = idx[0];
+                int s = idx[1];
+                int v = idx[2];
+                
+                float sum = 0.0f;
+                for (int d = 0; d < hidden; d++) {
+                    sum += hidden_states[(b * seq + s) * hidden + d] *
+                           weight[v * hidden + d];
+                }
+                output[(b * seq + s) * vocab_size + v] = sum;
+            }
+        );
+    });
+}
+
+// =============================================================================
+// Top-K Selection
+// =============================================================================
+
+void topk(
+    queue& q,
+    const float* input,            // [batch, vocab_size]
+    float* values,                 // [batch, k]
+    int* indices,                  // [batch, k]
+    int batch, int vocab_size, int k
+) {
+    // Parallel top-k using partial sorting
+    q.submit([&](handler& h) {
+        h.parallel_for<class topk_kernel>(
+            range<1>{batch},
+            [=](id<1> b_idx) {
+                int b = b_idx[0];
+                const float* row = input + b * vocab_size;
+                float* out_vals = values + b * k;
+                int* out_idx = indices + b * k;
+                
+                // Initialize with first k elements
+                for (int i = 0; i < k; i++) {
+                    out_vals[i] = row[i];
+                    out_idx[i] = i;
+                }
+                
+                // Find min in current top-k
+                for (int j = k; j < vocab_size; j++) {
+                    int min_idx = 0;
+                    for (int i = 1; i < k; i++) {
+                        if (out_vals[i] < out_vals[min_idx]) {
+                            min_idx = i;
+                        }
+                    }
+                    if (row[j] > out_vals[min_idx]) {
+                        out_vals[min_idx] = row[j];
+                        out_idx[min_idx] = j;
+                    }
+                }
+            }
+        );
+    });
+}
+
+}  // namespace xpu
+}  // namespace kernel
+}  // namespace yirage

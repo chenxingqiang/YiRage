@@ -1,0 +1,342 @@
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * Ascend Softmax Kernels
+ * 
+ * TBE/AscendC softmax implementations for Huawei Ascend NPU.
+ * Optimized for AI Core architecture with Vector Unit.
+ */
+
+#include "kernel/ascend/ascend_kernel_config.h"
+
+#ifdef __ASCEND__
+#include "acl/acl.h"
+#include "aclnn/aclnn_softmax.h"
+#endif
+
+namespace yirage {
+namespace kernel {
+namespace ascend {
+
+// =============================================================================
+// TBE-style Softmax Implementation
+// =============================================================================
+
+#ifdef YIRAGE_BACKEND_ASCEND_ENABLED
+
+/**
+ * @brief Row-wise Softmax using Ascend Vector Unit
+ * 
+ * For Ascend NPU, we use the optimized CANN library when available,
+ * with fallback to CPU implementation for verification.
+ */
+
+// CPU reference implementation for verification
+void softmax_cpu_reference(
+    const float* input,
+    float* output,
+    int num_rows,
+    int row_size
+) {
+    for (int r = 0; r < num_rows; r++) {
+        const float* in_row = input + r * row_size;
+        float* out_row = output + r * row_size;
+        
+        // Find max
+        float max_val = in_row[0];
+        for (int i = 1; i < row_size; i++) {
+            if (in_row[i] > max_val) max_val = in_row[i];
+        }
+        
+        // Compute exp and sum
+        float sum = 0.0f;
+        for (int i = 0; i < row_size; i++) {
+            out_row[i] = expf(in_row[i] - max_val);
+            sum += out_row[i];
+        }
+        
+        // Normalize
+        float inv_sum = 1.0f / sum;
+        for (int i = 0; i < row_size; i++) {
+            out_row[i] *= inv_sum;
+        }
+    }
+}
+
+// =============================================================================
+// AscendC Kernel (Pseudo-code for TBE compilation)
+// =============================================================================
+
+/**
+ * AscendC Softmax kernel pseudo-code:
+ * 
+ * ```python
+ * @register_op_compute("softmax_ascend")
+ * def softmax_compute(input_tensor, output_tensor, axis):
+ *     # Get shape info
+ *     shape = input_tensor.shape
+ *     axis_size = shape[axis]
+ *     
+ *     # Allocate L1 buffer
+ *     with tik.scope_ubuf() as ubuf:
+ *         # Load data to UB
+ *         input_ub = tik.Tensor(input_tensor.dtype, [axis_size], scope=UB)
+ *         tik.data_move(input_ub, input_tensor)
+ *         
+ *         # Find max using vector reduce
+ *         max_val = tik.Tensor(input_tensor.dtype, [1], scope=UB)
+ *         tik.vec_reduce_max(max_val, input_ub, axis_size)
+ *         
+ *         # Subtract max and exp
+ *         temp_ub = tik.Tensor(input_tensor.dtype, [axis_size], scope=UB)
+ *         tik.vec_sub(temp_ub, input_ub, max_val)
+ *         tik.vec_exp(temp_ub, temp_ub)
+ *         
+ *         # Sum for normalization
+ *         sum_val = tik.Tensor(input_tensor.dtype, [1], scope=UB)
+ *         tik.vec_reduce_add(sum_val, temp_ub, axis_size)
+ *         
+ *         # Normalize (reciprocal and multiply)
+ *         tik.vec_rec(sum_val, sum_val)
+ *         tik.vec_mul(temp_ub, temp_ub, sum_val)
+ *         
+ *         # Store result
+ *         tik.data_move(output_tensor, temp_ub)
+ * ```
+ */
+
+// TBE kernel source code (for runtime compilation)
+const char* SOFTMAX_TBE_SOURCE = R"(
+import te
+from te import tik
+from te.platform import get_soc_spec
+
+def softmax_tbe(input_shape, dtype="float16"):
+    """TBE Softmax implementation for Ascend"""
+    
+    tik_instance = tik.Tik()
+    
+    # Get hardware specs
+    ub_size = get_soc_spec("UB_SIZE")
+    core_num = get_soc_spec("CORE_NUM")
+    
+    batch_size = input_shape[0]
+    hidden_size = input_shape[1]
+    
+    # Allocate tensors
+    input_gm = tik_instance.Tensor(dtype, input_shape, name="input_gm", scope=tik.scope_gm)
+    output_gm = tik_instance.Tensor(dtype, input_shape, name="output_gm", scope=tik.scope_gm)
+    
+    # Process each row on different AI Cores
+    with tik_instance.for_range(0, batch_size, block_num=core_num) as batch_idx:
+        # Allocate UB buffers
+        input_ub = tik_instance.Tensor(dtype, [hidden_size], name="input_ub", scope=tik.scope_ubuf)
+        output_ub = tik_instance.Tensor(dtype, [hidden_size], name="output_ub", scope=tik.scope_ubuf)
+        max_ub = tik_instance.Tensor("float32", [1], name="max_ub", scope=tik.scope_ubuf)
+        sum_ub = tik_instance.Tensor("float32", [1], name="sum_ub", scope=tik.scope_ubuf)
+        
+        # Load input
+        tik_instance.data_move(input_ub, input_gm[batch_idx, :], 0, 1, hidden_size // 16, 0, 0)
+        
+        # Find max (vector reduce)
+        tik_instance.vec_reduce_max(max_ub, input_ub, hidden_size // 64, 8)
+        
+        # Subtract max (broadcast)
+        tik_instance.vec_dup(output_ub, max_ub[0], hidden_size // 64, 8)
+        tik_instance.vec_sub(output_ub, input_ub, output_ub, hidden_size // 64, 8, 8, 8)
+        
+        # Exp
+        tik_instance.vec_exp(output_ub, output_ub, hidden_size // 64, 8, 8)
+        
+        # Sum (vector reduce)
+        tik_instance.vec_reduce_add(sum_ub, output_ub, hidden_size // 64, 8)
+        
+        # Normalize (reciprocal and multiply)
+        tik_instance.vec_rec(sum_ub, sum_ub, 1, 8, 8)
+        tik_instance.vec_muls(output_ub, output_ub, sum_ub[0], hidden_size // 64, 8, 8)
+        
+        # Store output
+        tik_instance.data_move(output_gm[batch_idx, :], output_ub, 0, 1, hidden_size // 16, 0, 0)
+    
+    return tik_instance
+
+)";
+
+// =============================================================================
+// CANN-based Implementation
+// =============================================================================
+
+#ifdef __ASCEND__
+
+/**
+ * @brief Launch softmax using CANN aclnn API
+ */
+aclError launch_softmax_f16_ascend(
+    const void* input,
+    void* output,
+    int64_t* input_dims,
+    int num_dims,
+    int axis,
+    aclrtStream stream
+) {
+    // Create tensor descriptors
+    aclTensorDesc* input_desc = aclCreateTensorDesc(
+        ACL_FLOAT16, num_dims, input_dims, ACL_FORMAT_ND);
+    aclTensorDesc* output_desc = aclCreateTensorDesc(
+        ACL_FLOAT16, num_dims, input_dims, ACL_FORMAT_ND);
+    
+    // Create data buffers
+    int64_t total_size = 1;
+    for (int i = 0; i < num_dims; i++) {
+        total_size *= input_dims[i];
+    }
+    size_t buffer_size = total_size * sizeof(uint16_t);
+    
+    aclDataBuffer* input_buffer = aclCreateDataBuffer((void*)input, buffer_size);
+    aclDataBuffer* output_buffer = aclCreateDataBuffer(output, buffer_size);
+    
+    // Get workspace size
+    size_t workspace_size = 0;
+    aclOpExecutor* executor = nullptr;
+    
+    aclnnSoftmaxGetWorkspaceSize(
+        input_desc, axis, output_desc,
+        &workspace_size, &executor);
+    
+    // Allocate workspace
+    void* workspace = nullptr;
+    if (workspace_size > 0) {
+        aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_NORMAL_ONLY);
+    }
+    
+    // Execute
+    aclError ret = aclnnSoftmax(
+        workspace, workspace_size, executor, stream);
+    
+    // Cleanup
+    if (workspace) {
+        aclrtFree(workspace);
+    }
+    aclDestroyDataBuffer(input_buffer);
+    aclDestroyDataBuffer(output_buffer);
+    aclDestroyTensorDesc(input_desc);
+    aclDestroyTensorDesc(output_desc);
+    
+    return ret;
+}
+
+/**
+ * @brief Launch softmax for FP32
+ */
+aclError launch_softmax_f32_ascend(
+    const void* input,
+    void* output,
+    int64_t* input_dims,
+    int num_dims,
+    int axis,
+    aclrtStream stream
+) {
+    aclTensorDesc* input_desc = aclCreateTensorDesc(
+        ACL_FLOAT, num_dims, input_dims, ACL_FORMAT_ND);
+    aclTensorDesc* output_desc = aclCreateTensorDesc(
+        ACL_FLOAT, num_dims, input_dims, ACL_FORMAT_ND);
+    
+    int64_t total_size = 1;
+    for (int i = 0; i < num_dims; i++) {
+        total_size *= input_dims[i];
+    }
+    size_t buffer_size = total_size * sizeof(float);
+    
+    aclDataBuffer* input_buffer = aclCreateDataBuffer((void*)input, buffer_size);
+    aclDataBuffer* output_buffer = aclCreateDataBuffer(output, buffer_size);
+    
+    size_t workspace_size = 0;
+    aclOpExecutor* executor = nullptr;
+    
+    aclnnSoftmaxGetWorkspaceSize(
+        input_desc, axis, output_desc,
+        &workspace_size, &executor);
+    
+    void* workspace = nullptr;
+    if (workspace_size > 0) {
+        aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_NORMAL_ONLY);
+    }
+    
+    aclError ret = aclnnSoftmax(
+        workspace, workspace_size, executor, stream);
+    
+    if (workspace) {
+        aclrtFree(workspace);
+    }
+    aclDestroyDataBuffer(input_buffer);
+    aclDestroyDataBuffer(output_buffer);
+    aclDestroyTensorDesc(input_desc);
+    aclDestroyTensorDesc(output_desc);
+    
+    return ret;
+}
+
+#endif  // __ASCEND__
+
+// =============================================================================
+// Causal Softmax (for Attention)
+// =============================================================================
+
+void causal_softmax_cpu(
+    const float* input,
+    float* output,
+    int batch_size,
+    int num_heads,
+    int seq_len
+) {
+    for (int b = 0; b < batch_size; b++) {
+        for (int h = 0; h < num_heads; h++) {
+            for (int q = 0; q < seq_len; q++) {
+                int row_offset = (b * num_heads * seq_len + h * seq_len + q) * seq_len;
+                const float* in_row = input + row_offset;
+                float* out_row = output + row_offset;
+                
+                int valid_len = q + 1;  // Causal: only attend to positions <= q
+                
+                // Find max in valid range
+                float max_val = in_row[0];
+                for (int k = 1; k < valid_len; k++) {
+                    if (in_row[k] > max_val) max_val = in_row[k];
+                }
+                
+                // Compute exp and sum in valid range
+                float sum = 0.0f;
+                for (int k = 0; k < valid_len; k++) {
+                    out_row[k] = expf(in_row[k] - max_val);
+                    sum += out_row[k];
+                }
+                
+                // Normalize valid, zero masked
+                float inv_sum = 1.0f / sum;
+                for (int k = 0; k < valid_len; k++) {
+                    out_row[k] *= inv_sum;
+                }
+                for (int k = valid_len; k < seq_len; k++) {
+                    out_row[k] = 0.0f;
+                }
+            }
+        }
+    }
+}
+
+#endif  // YIRAGE_BACKEND_ASCEND_ENABLED
+
+}  // namespace ascend
+}  // namespace kernel
+}  // namespace yirage

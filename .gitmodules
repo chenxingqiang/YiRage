@@ -1,0 +1,14 @@
+[submodule "deps/cutlass"]
+	path = deps/cutlass
+	url = https://github.com/NVIDIA/cutlass.git
+[submodule "deps/z3"]
+	path = deps/z3
+	url = https://github.com/Z3Prover/z3.git
+[submodule "deps/json"]
+	path = deps/json
+	url = https://github.com/nlohmann/json.git
+[submodule "deps/llvm-project"]
+	path = deps/llvm-project
+	url = https://github.com/llvm/llvm-project.git
+	branch = release/17.x
+	shallow = true

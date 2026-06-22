@@ -1,0 +1,88 @@
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * This file is part of YiRage (Yi Revolutionary AGile Engine)
+ * 
+ * Ascend Device Tensor Kernel
+ * 
+ * Fingerprint verification for device tensor operations.
+ * Note: Fingerprint runs on CPU for correctness verification during search.
+ */
+
+#include "kernel/device_memory_manager.h"
+#include "kernel/device_tensor.h"
+#include "utils/fingerprint_functions.h"
+#include <cassert>
+#include <cstring>
+
+namespace yirage {
+namespace kernel {
+
+using namespace yirage::type;
+using namespace yirage::config;
+
+#ifdef YIRAGE_FINGERPRINT_USE_ASCEND
+
+void DTensor::copy_fingerprint_from(DTensor const &src) {
+  assert(num_elements() == src.num_elements());
+  
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
+  
+  if (dmm->fp_base_ptr[0] == nullptr) {
+    return;
+  }
+  
+  int num_elems = num_elements();
+  
+  yirage::type::FPType *src_ptr =
+      reinterpret_cast<yirage::type::FPType *>(
+          dmm->fp_base_ptr[0] + src.fp_offset);
+  yirage::type::FPType *dst_ptr =
+      reinterpret_cast<yirage::type::FPType *>(
+          dmm->fp_base_ptr[0] + fp_offset);
+  
+  // CPU fingerprint copy (fingerprint memory is on CPU for Ascend)
+  for (int i = 0; i < num_elems; i++) {
+    dst_ptr[i] = src_ptr[i];
+  }
+}
+
+FPType DTensor::get_fingerprint() const {
+  yirage::kernel::DeviceMemoryManager *dmm =
+      yirage::kernel::DeviceMemoryManager::get_instance();
+  
+  if (dmm->fp_base_ptr[0] == nullptr) {
+    return 0;
+  }
+  
+  FPType result = 0;
+  int num_elems = num_elements();
+  
+  yirage::type::FPType *fp_ptr =
+      reinterpret_cast<yirage::type::FPType *>(
+          dmm->fp_base_ptr[0] + fp_offset);
+  
+  // CPU fingerprint computation (fingerprint memory is on CPU for Ascend)
+  for (int i = 0; i < num_elems; i++) {
+    result = utils::compute_add_fingerprint(result, fp_ptr[i]);
+  }
+  
+  return result;
+}
+
+#endif // YIRAGE_FINGERPRINT_USE_ASCEND
+
+} // namespace kernel
+} // namespace yirage

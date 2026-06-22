@@ -1,0 +1,333 @@
+/* Copyright 2025 YiRage Team
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * MACA Element-wise Unary Operation Kernels
+ * Optimized for MetaX C500 with 64-thread warps
+ */
+
+#include "threadblock/maca/element_unary.h"
+#include "utils/maca_helper.h"
+
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+
+namespace yirage {
+namespace threadblock {
+namespace maca {
+
+constexpr int MACA_WARP_SIZE = 64;
+constexpr int BLOCK_SIZE = 256;  // 4 warps
+
+// =============================================================================
+// Unary Operation Kernels
+// =============================================================================
+
+template<typename T>
+__device__ __forceinline__ T relu_op(T x) {
+    return x > T(0) ? x : T(0);
+}
+
+template<typename T>
+__device__ __forceinline__ T silu_op(T x) {
+    // SiLU(x) = x * sigmoid(x) = x / (1 + exp(-x))
+    T exp_neg_x = exp(-x);
+    return x / (T(1) + exp_neg_x);
+}
+
+template<typename T>
+__device__ __forceinline__ T gelu_op(T x) {
+    // GELU(x) = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+    const T c1 = T(0.7978845608028654);  // sqrt(2/pi)
+    const T c2 = T(0.044715);
+    T x3 = x * x * x;
+    T tanh_arg = c1 * (x + c2 * x3);
+    return T(0.5) * x * (T(1) + tanh(tanh_arg));
+}
+
+template<typename T>
+__device__ __forceinline__ T tanh_op(T x) {
+    return tanh(x);
+}
+
+template<typename T>
+__device__ __forceinline__ T sigmoid_op(T x) {
+    return T(1) / (T(1) + exp(-x));
+}
+
+template<typename T>
+__device__ __forceinline__ T exp_op(T x) {
+    return exp(x);
+}
+
+template<typename T>
+__device__ __forceinline__ T sqrt_op(T x) {
+    return sqrt(x);
+}
+
+template<typename T>
+__device__ __forceinline__ T square_op(T x) {
+    return x * x;
+}
+
+template<typename T>
+__device__ __forceinline__ T rsqrt_op(T x) {
+    return rsqrt(x);
+}
+
+// =============================================================================
+// Generic Unary Kernel
+// =============================================================================
+
+template<typename T, int OP_TYPE>
+__global__ void maca_unary_kernel(
+    const T* __restrict__ input,
+    T* __restrict__ output,
+    int n
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    
+    // Grid-stride loop for large arrays
+    for (int i = idx; i < n; i += stride) {
+        T x = input[i];
+        T y;
+        
+        if constexpr (OP_TYPE == 0) {
+            y = relu_op(x);
+        } else if constexpr (OP_TYPE == 1) {
+            y = silu_op(x);
+        } else if constexpr (OP_TYPE == 2) {
+            y = gelu_op(x);
+        } else if constexpr (OP_TYPE == 3) {
+            y = tanh_op(x);
+        } else if constexpr (OP_TYPE == 4) {
+            y = sigmoid_op(x);
+        } else if constexpr (OP_TYPE == 5) {
+            y = exp_op(x);
+        } else if constexpr (OP_TYPE == 6) {
+            y = sqrt_op(x);
+        } else if constexpr (OP_TYPE == 7) {
+            y = square_op(x);
+        } else if constexpr (OP_TYPE == 8) {
+            y = rsqrt_op(x);
+        } else {
+            y = x;  // identity
+        }
+        
+        output[i] = y;
+    }
+}
+
+// =============================================================================
+// Vectorized Unary Kernel (float4 for better memory coalescing)
+// =============================================================================
+
+template<int OP_TYPE>
+__global__ void maca_unary_vectorized_kernel(
+    const float4* __restrict__ input,
+    float4* __restrict__ output,
+    int n4
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < n4) {
+        float4 in = input[idx];
+        float4 out;
+        
+        if constexpr (OP_TYPE == 0) {  // ReLU
+            out.x = relu_op(in.x);
+            out.y = relu_op(in.y);
+            out.z = relu_op(in.z);
+            out.w = relu_op(in.w);
+        } else if constexpr (OP_TYPE == 1) {  // SiLU
+            out.x = silu_op(in.x);
+            out.y = silu_op(in.y);
+            out.z = silu_op(in.z);
+            out.w = silu_op(in.w);
+        } else if constexpr (OP_TYPE == 2) {  // GELU
+            out.x = gelu_op(in.x);
+            out.y = gelu_op(in.y);
+            out.z = gelu_op(in.z);
+            out.w = gelu_op(in.w);
+        } else {
+            out = in;
+        }
+        
+        output[idx] = out;
+    }
+}
+
+// =============================================================================
+// Public API Functions
+// =============================================================================
+
+enum MacaUnaryOp {
+    MACA_RELU = 0,
+    MACA_SILU = 1,
+    MACA_GELU = 2,
+    MACA_TANH = 3,
+    MACA_SIGMOID = 4,
+    MACA_EXP = 5,
+    MACA_SQRT = 6,
+    MACA_SQUARE = 7,
+    MACA_RSQRT = 8,
+};
+
+void maca_unary_f32(
+    const float* input,
+    float* output,
+    int n,
+    MacaUnaryOp op,
+    void* stream
+) {
+    int block_size = BLOCK_SIZE;
+    int num_blocks = (n + block_size - 1) / block_size;
+    
+    // Limit grid size
+    num_blocks = min(num_blocks, 65535);
+    
+    cudaStream_t cuda_stream = static_cast<cudaStream_t>(stream);
+    
+    switch (op) {
+        case MACA_RELU:
+            maca_unary_kernel<float, 0><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_SILU:
+            maca_unary_kernel<float, 1><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_GELU:
+            maca_unary_kernel<float, 2><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_TANH:
+            maca_unary_kernel<float, 3><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_SIGMOID:
+            maca_unary_kernel<float, 4><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_EXP:
+            maca_unary_kernel<float, 5><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_SQRT:
+            maca_unary_kernel<float, 6><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_SQUARE:
+            maca_unary_kernel<float, 7><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+        case MACA_RSQRT:
+            maca_unary_kernel<float, 8><<<num_blocks, block_size, 0, cuda_stream>>>(
+                input, output, n);
+            break;
+    }
+}
+
+void maca_unary_f32_vectorized(
+    const float* input,
+    float* output,
+    int n,
+    MacaUnaryOp op,
+    void* stream
+) {
+    // Use vectorized kernel for aligned data
+    int n4 = n / 4;
+    int remainder = n % 4;
+    
+    int block_size = BLOCK_SIZE;
+    int num_blocks = (n4 + block_size - 1) / block_size;
+    
+    cudaStream_t cuda_stream = static_cast<cudaStream_t>(stream);
+    
+    if (n4 > 0) {
+        switch (op) {
+            case MACA_RELU:
+                maca_unary_vectorized_kernel<0><<<num_blocks, block_size, 0, cuda_stream>>>(
+                    reinterpret_cast<const float4*>(input),
+                    reinterpret_cast<float4*>(output),
+                    n4);
+                break;
+            case MACA_SILU:
+                maca_unary_vectorized_kernel<1><<<num_blocks, block_size, 0, cuda_stream>>>(
+                    reinterpret_cast<const float4*>(input),
+                    reinterpret_cast<float4*>(output),
+                    n4);
+                break;
+            case MACA_GELU:
+                maca_unary_vectorized_kernel<2><<<num_blocks, block_size, 0, cuda_stream>>>(
+                    reinterpret_cast<const float4*>(input),
+                    reinterpret_cast<float4*>(output),
+                    n4);
+                break;
+            default:
+                // Fall back to non-vectorized
+                maca_unary_f32(input, output, n, op, stream);
+                return;
+        }
+    }
+    
+    // Handle remainder
+    if (remainder > 0) {
+        int offset = n4 * 4;
+        int rem_blocks = 1;
+        maca_unary_kernel<float, 0><<<rem_blocks, remainder, 0, cuda_stream>>>(
+            input + offset, output + offset, remainder);
+    }
+}
+
+// =============================================================================
+// Fused Activation + Multiply (for SwiGLU)
+// =============================================================================
+
+__global__ void maca_swiglu_kernel(
+    const float* __restrict__ gate,
+    const float* __restrict__ up,
+    float* __restrict__ output,
+    int n
+) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    
+    for (int i = idx; i < n; i += stride) {
+        float g = gate[i];
+        float u = up[i];
+        // SwiGLU: silu(gate) * up
+        float silu_g = silu_op(g);
+        output[i] = silu_g * u;
+    }
+}
+
+void maca_swiglu_f32(
+    const float* gate,
+    const float* up,
+    float* output,
+    int n,
+    void* stream
+) {
+    int block_size = BLOCK_SIZE;
+    int num_blocks = min((n + block_size - 1) / block_size, 65535);
+    
+    maca_swiglu_kernel<<<num_blocks, block_size, 0, static_cast<cudaStream_t>(stream)>>>(
+        gate, up, output, n);
+}
+
+}  // namespace maca
+}  // namespace threadblock
+}  // namespace yirage
+
+#endif  // YIRAGE_BACKEND_MACA_ENABLED

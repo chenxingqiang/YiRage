@@ -1,0 +1,133 @@
+/* Copyright 2025 YiRage Team
+ * Intel XPU Attention Kernels using SYCL
+ */
+
+#pragma once
+
+#include <sycl/sycl.hpp>
+#include <cmath>
+
+namespace yirage {
+namespace kernel {
+namespace xpu {
+
+using namespace sycl;
+
+// =============================================================================
+// Scaled Dot-Product Attention
+// =============================================================================
+
+template<int HEAD_DIM = 64>
+class ScaledDotProductAttention {
+public:
+    void operator()(
+        nd_item<3> item,
+        const float* Q,     // [batch, heads, seq_q, head_dim]
+        const float* K,     // [batch, heads, seq_k, head_dim]
+        const float* V,     // [batch, heads, seq_k, head_dim]
+        float* O,           // [batch, heads, seq_q, head_dim]
+        int batch, int heads, int seq_q, int seq_k,
+        float scale,
+        local_accessor<float, 1> slm_qk,
+        local_accessor<float, 1> slm_softmax
+    ) const {
+        int b = item.get_group(0);
+        int h = item.get_group(1);
+        int q_idx = item.get_group(2) * item.get_local_range(0) + item.get_local_id(0);
+        
+        if (q_idx >= seq_q) return;
+        
+        // Compute QK^T for this query
+        float max_score = -INFINITY;
+        for (int k_idx = 0; k_idx < seq_k; k_idx++) {
+            float score = 0.0f;
+            for (int d = 0; d < HEAD_DIM; d++) {
+                int q_offset = ((b * heads + h) * seq_q + q_idx) * HEAD_DIM + d;
+                int k_offset = ((b * heads + h) * seq_k + k_idx) * HEAD_DIM + d;
+                score += Q[q_offset] * K[k_offset];
+            }
+            score *= scale;
+            slm_qk[k_idx] = score;
+            max_score = sycl::max(max_score, score);
+        }
+        
+        item.barrier(access::fence_space::local_space);
+        
+        // Softmax
+        float sum_exp = 0.0f;
+        for (int k_idx = 0; k_idx < seq_k; k_idx++) {
+            float exp_score = sycl::exp(slm_qk[k_idx] - max_score);
+            slm_softmax[k_idx] = exp_score;
+            sum_exp += exp_score;
+        }
+        
+        item.barrier(access::fence_space::local_space);
+        
+        // Weighted sum of V
+        for (int d = 0; d < HEAD_DIM; d++) {
+            float out = 0.0f;
+            for (int k_idx = 0; k_idx < seq_k; k_idx++) {
+                int v_offset = ((b * heads + h) * seq_k + k_idx) * HEAD_DIM + d;
+                out += (slm_softmax[k_idx] / sum_exp) * V[v_offset];
+            }
+            int o_offset = ((b * heads + h) * seq_q + q_idx) * HEAD_DIM + d;
+            O[o_offset] = out;
+        }
+    }
+};
+
+// =============================================================================
+// Launch wrapper
+// =============================================================================
+
+void attention_f32(
+    queue& q,
+    const float* Q, const float* K, const float* V, float* O,
+    int batch, int heads, int seq_q, int seq_k, int head_dim
+) {
+    float scale = 1.0f / std::sqrt(static_cast<float>(head_dim));
+    
+    constexpr int BLOCK_SIZE = 64;
+    range<3> global{batch, heads, ((seq_q + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE};
+    range<3> local{1, 1, BLOCK_SIZE};
+    
+    q.submit([&](handler& h) {
+        local_accessor<float, 1> slm_qk(seq_k, h);
+        local_accessor<float, 1> slm_softmax(seq_k, h);
+        
+        h.parallel_for<class attention_kernel>(
+            nd_range<3>{global, local},
+            [=](nd_item<3> item) {
+                ScaledDotProductAttention<64>{}(
+                    item, Q, K, V, O,
+                    batch, heads, seq_q, seq_k, scale,
+                    slm_qk, slm_softmax
+                );
+            }
+        );
+    });
+}
+
+// =============================================================================
+// Flash Attention (Memory Efficient)
+// =============================================================================
+
+void flash_attention_bf16(
+    queue& q,
+    const sycl::ext::oneapi::bfloat16* Q,
+    const sycl::ext::oneapi::bfloat16* K,
+    const sycl::ext::oneapi::bfloat16* V,
+    sycl::ext::oneapi::bfloat16* O,
+    int batch, int heads, int seq_q, int seq_k, int head_dim
+) {
+    // Flash attention with tiled computation
+    constexpr int TILE_Q = 64;
+    constexpr int TILE_K = 64;
+    
+    // Implementation using online softmax
+    // ...
+}
+
+}  // namespace xpu
+}  // namespace kernel
+}  // namespace yirage

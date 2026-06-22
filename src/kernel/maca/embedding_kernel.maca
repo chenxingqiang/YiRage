@@ -1,0 +1,359 @@
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * MACA Embedding Kernels
+ * 
+ * Token embedding, position embedding, and LM head for MetaX MACA GPUs.
+ */
+
+#include "kernel/maca/maca_kernel_config.h"
+
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+
+namespace yirage {
+namespace kernel {
+namespace maca {
+
+// =============================================================================
+// Embedding Lookup
+// =============================================================================
+
+__global__ void embedding_lookup_f16_maca(
+    const int* __restrict__ token_ids,
+    const half* __restrict__ embedding_table,
+    half* __restrict__ output,
+    int num_tokens,
+    int embedding_dim,
+    int vocab_size
+) {
+    const int token_idx = blockIdx.x;
+    const int dim_idx = threadIdx.x;
+    
+    if (token_idx >= num_tokens) return;
+    
+    int token_id = token_ids[token_idx];
+    if (token_id < 0 || token_id >= vocab_size) return;
+    
+    // Vectorized copy using half2
+    const half2* src = reinterpret_cast<const half2*>(
+        embedding_table + token_id * embedding_dim);
+    half2* dst = reinterpret_cast<half2*>(output + token_idx * embedding_dim);
+    
+    for (int i = dim_idx; i < embedding_dim / 2; i += blockDim.x) {
+        dst[i] = src[i];
+    }
+    
+    // Handle odd dimension
+    if (embedding_dim % 2 == 1 && dim_idx == 0) {
+        output[token_idx * embedding_dim + embedding_dim - 1] = 
+            embedding_table[token_id * embedding_dim + embedding_dim - 1];
+    }
+}
+
+__global__ void embedding_lookup_f32_maca(
+    const int* __restrict__ token_ids,
+    const float* __restrict__ embedding_table,
+    float* __restrict__ output,
+    int num_tokens,
+    int embedding_dim,
+    int vocab_size
+) {
+    const int token_idx = blockIdx.x;
+    const int dim_idx = threadIdx.x;
+    
+    if (token_idx >= num_tokens) return;
+    
+    int token_id = token_ids[token_idx];
+    if (token_id < 0 || token_id >= vocab_size) return;
+    
+    // Vectorized copy using float4
+    const float4* src = reinterpret_cast<const float4*>(
+        embedding_table + token_id * embedding_dim);
+    float4* dst = reinterpret_cast<float4*>(output + token_idx * embedding_dim);
+    
+    for (int i = dim_idx; i < embedding_dim / 4; i += blockDim.x) {
+        dst[i] = src[i];
+    }
+    
+    // Handle remainder
+    int base = (embedding_dim / 4) * 4;
+    for (int i = base + dim_idx; i < embedding_dim; i += blockDim.x) {
+        output[token_idx * embedding_dim + i] = 
+            embedding_table[token_id * embedding_dim + i];
+    }
+}
+
+// =============================================================================
+// Position Embedding (Learned)
+// =============================================================================
+
+__global__ void add_position_embedding_f16_maca(
+    half* __restrict__ embeddings,
+    const half* __restrict__ position_table,
+    const int* __restrict__ positions,
+    int num_tokens,
+    int embedding_dim,
+    int max_positions
+) {
+    const int token_idx = blockIdx.x;
+    const int dim_idx = threadIdx.x;
+    
+    if (token_idx >= num_tokens) return;
+    
+    int pos = positions[token_idx];
+    if (pos < 0 || pos >= max_positions) return;
+    
+    // Vectorized add using half2
+    half2* emb = reinterpret_cast<half2*>(embeddings + token_idx * embedding_dim);
+    const half2* pos_emb = reinterpret_cast<const half2*>(
+        position_table + pos * embedding_dim);
+    
+    for (int i = dim_idx; i < embedding_dim / 2; i += blockDim.x) {
+        half2 e = emb[i];
+        half2 p = pos_emb[i];
+        emb[i] = __hadd2(e, p);
+    }
+}
+
+// =============================================================================
+// Sinusoidal Position Embedding
+// =============================================================================
+
+__global__ void sinusoidal_position_embedding_f16_maca(
+    half* __restrict__ output,
+    int max_positions,
+    int embedding_dim
+) {
+    const int pos = blockIdx.x;
+    const int dim_idx = threadIdx.x;
+    
+    if (pos >= max_positions) return;
+    
+    const int half_dim = embedding_dim / 2;
+    
+    for (int i = dim_idx; i < half_dim; i += blockDim.x) {
+        float freq = 1.0f / powf(10000.0f, (float)(i) / half_dim);
+        float angle = pos * freq;
+        
+        output[pos * embedding_dim + i * 2] = __float2half(sinf(angle));
+        output[pos * embedding_dim + i * 2 + 1] = __float2half(cosf(angle));
+    }
+}
+
+// =============================================================================
+// LM Head (Output Projection)
+// =============================================================================
+
+/**
+ * @brief Language model head: hidden @ weight.T
+ * 
+ * Each block computes one output token's logits.
+ */
+__global__ void lm_head_f16_maca(
+    const half* __restrict__ hidden,
+    const half* __restrict__ weight,
+    half* __restrict__ logits,
+    int batch_size,
+    int hidden_dim,
+    int vocab_size
+) {
+    const int batch_idx = blockIdx.y;
+    const int vocab_idx = blockIdx.x;
+    const int tid = threadIdx.x;
+    const int lane_id = tid % 64;
+    
+    if (vocab_idx >= vocab_size) return;
+    
+    const half* h = hidden + batch_idx * hidden_dim;
+    const half* w = weight + vocab_idx * hidden_dim;
+    
+    // Compute dot product with warp reduction
+    float sum = 0.0f;
+    for (int i = tid; i < hidden_dim; i += blockDim.x) {
+        sum += __half2float(h[i]) * __half2float(w[i]);
+    }
+    
+    // Block reduction
+    __shared__ float shared[256];
+    shared[tid] = sum;
+    __syncthreads();
+    
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            shared[tid] += shared[tid + stride];
+        }
+        __syncthreads();
+    }
+    
+    if (tid == 0) {
+        logits[batch_idx * vocab_size + vocab_idx] = __float2half(shared[0]);
+    }
+}
+
+// =============================================================================
+// Top-K Sampling
+// =============================================================================
+
+__global__ void topk_f32_maca(
+    const float* __restrict__ logits,
+    float* __restrict__ topk_values,
+    int* __restrict__ topk_indices,
+    int batch_size,
+    int vocab_size,
+    int k
+) {
+    const int batch_idx = blockIdx.x;
+    const int tid = threadIdx.x;
+    
+    extern __shared__ char smem[];
+    float* s_values = (float*)smem;
+    int* s_indices = (int*)(s_values + k);
+    
+    // Initialize top-k with -inf
+    for (int i = tid; i < k; i += blockDim.x) {
+        s_values[i] = -INFINITY;
+        s_indices[i] = -1;
+    }
+    __syncthreads();
+    
+    // Scan through vocab and maintain top-k
+    const float* batch_logits = logits + batch_idx * vocab_size;
+    
+    for (int v = tid; v < vocab_size; v += blockDim.x) {
+        float val = batch_logits[v];
+        
+        // Check if this value should be in top-k
+        // Simple insertion sort for small k
+        for (int i = 0; i < k; i++) {
+            if (val > s_values[i]) {
+                // Shift down
+                for (int j = k - 1; j > i; j--) {
+                    s_values[j] = s_values[j - 1];
+                    s_indices[j] = s_indices[j - 1];
+                }
+                s_values[i] = val;
+                s_indices[i] = v;
+                break;
+            }
+        }
+    }
+    __syncthreads();
+    
+    // Write output
+    for (int i = tid; i < k; i += blockDim.x) {
+        topk_values[batch_idx * k + i] = s_values[i];
+        topk_indices[batch_idx * k + i] = s_indices[i];
+    }
+}
+
+// =============================================================================
+// Argmax (Greedy Decoding)
+// =============================================================================
+
+__global__ void argmax_f32_maca(
+    const float* __restrict__ logits,
+    int* __restrict__ output,
+    int batch_size,
+    int vocab_size
+) {
+    const int batch_idx = blockIdx.x;
+    const int tid = threadIdx.x;
+    
+    __shared__ float s_max_val[256];
+    __shared__ int s_max_idx[256];
+    
+    // Find local max
+    float max_val = -INFINITY;
+    int max_idx = 0;
+    
+    const float* batch_logits = logits + batch_idx * vocab_size;
+    
+    for (int v = tid; v < vocab_size; v += blockDim.x) {
+        float val = batch_logits[v];
+        if (val > max_val) {
+            max_val = val;
+            max_idx = v;
+        }
+    }
+    
+    s_max_val[tid] = max_val;
+    s_max_idx[tid] = max_idx;
+    __syncthreads();
+    
+    // Block reduction
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            if (s_max_val[tid + stride] > s_max_val[tid]) {
+                s_max_val[tid] = s_max_val[tid + stride];
+                s_max_idx[tid] = s_max_idx[tid + stride];
+            }
+        }
+        __syncthreads();
+    }
+    
+    if (tid == 0) {
+        output[batch_idx] = s_max_idx[0];
+    }
+}
+
+// =============================================================================
+// Launch Wrappers
+// =============================================================================
+
+void launch_embedding_lookup_f16_maca(
+    const int* token_ids,
+    const half* embedding_table,
+    half* output,
+    int num_tokens,
+    int embedding_dim,
+    int vocab_size,
+    mcStream_t stream
+) {
+    int threads = min(256, embedding_dim);
+    embedding_lookup_f16_maca<<<num_tokens, threads, 0, stream>>>(
+        token_ids, embedding_table, output, num_tokens, embedding_dim, vocab_size);
+}
+
+void launch_lm_head_f16_maca(
+    const half* hidden,
+    const half* weight,
+    half* logits,
+    int batch_size,
+    int hidden_dim,
+    int vocab_size,
+    mcStream_t stream
+) {
+    dim3 grid(vocab_size, batch_size);
+    int threads = 256;
+    lm_head_f16_maca<<<grid, threads, 0, stream>>>(
+        hidden, weight, logits, batch_size, hidden_dim, vocab_size);
+}
+
+void launch_argmax_f32_maca(
+    const float* logits,
+    int* output,
+    int batch_size,
+    int vocab_size,
+    mcStream_t stream
+) {
+    int threads = 256;
+    argmax_f32_maca<<<batch_size, threads, 0, stream>>>(
+        logits, output, batch_size, vocab_size);
+}
+
+}  // namespace maca
+}  // namespace kernel
+}  // namespace yirage
+
+#endif  // YIRAGE_BACKEND_MACA_ENABLED

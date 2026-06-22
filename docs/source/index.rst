@@ -1,0 +1,33 @@
+.. YiRage documentation master file. 
+   You can adapt this file completely to your liking, but it should at least
+   contain the root `toctree` directive.
+
+Welcome to YiRage's documentation!
+====================================
+
+YiRage is a tensor algebra superoptimizer that automatically discovers highly-optimized tensor programs for DNNs. YiRage automatically identifies and verifies sophisticated optimizations, many of which require joint optimization at the kernel, thread block, and thread levels of the GPU compute hierarchy. For an input DNN, YiRage searches the space of potential tensor programs that are functionally equivalent to the given DNN to discover highly-optimized candidates. This approach allows YiRage to find new custom kernels that outperform existing expert-designed ones.
+
+Getting Started
+---------------
+
+- Follow the :doc:`installation <installation>` to install YiRage
+- Take a look at the :doc:`tutorials <tutorials/index>` to learn how to use YiRage to superoptimize your DNNs
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Getting Started
+   :hidden:
+   
+   installation
+   mugraph
+   cuda-transpiler
+   triton-transpiler
+   tutorials/index
+   linear_kernel
+
+.. Indices and tables
+.. ==================
+..
+.. * :ref:`genindex`
+.. * :ref:`modindex`
+.. * :ref:`search`

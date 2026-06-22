@@ -1,0 +1,75 @@
+import yirage as yr
+import numpy as np
+import torch
+_DEVICE = ("cuda" if __import__("torch").cuda.is_available()
+           else "mps" if __import__("torch").backends.mps.is_available()
+           else "cpu")
+def __sync():
+    d = _DEVICE
+    t = __import__("torch")
+    if d == "cuda": t.cuda.synchronize()
+    elif d == "mps": t.mps.synchronize()
+def __bench_ms(fn, warmup=16, reps=1000):
+    import time
+    for _ in range(warmup): fn()
+    __sync()
+    if _DEVICE == "cuda":
+        t = __import__("torch")
+        s, e = t.cuda.Event(enable_timing=True), t.cuda.Event(enable_timing=True)
+        s.record()
+        for _ in range(reps): fn()
+        e.record()
+        __sync()
+        return s.elapsed_time(e) / reps
+    else:
+        t0 = time.perf_counter()
+        for _ in range(reps): fn()
+        __sync()
+        return (time.perf_counter() - t0) / reps * 1000
+
+if _DEVICE != "cuda":
+    import sys
+    sys.stderr.write(f"This demo requires CUDA (triton backend). Detected {_DEVICE}. Exiting.\n")
+    sys.exit(0)
+
+if __name__ == "__main__":
+    graph = yr.new_kernel_graph()
+    X = graph.new_input(dims=(16, 4096), dtype=yr.float16)
+    W = graph.new_input(dims=(4096, 6144), dtype=yr.float16)
+    D = graph.rms_norm(X, normalized_shape=(4096,))
+    O = graph.matmul(D, W)
+    graph.mark_output(O)
+    optimized_graph = graph.superoptimize(
+        config="mlp", backend="triton", warmup_iters=2, profile_iters=6
+    )
+
+    with open("triton_rms_generated.py", "w") as f:
+        f.write(yr.generate_triton_program(optimized_graph.cygraph, target_cc=10)["code"])
+
+    print("Start running optimized graph...")
+    input_tensors = [
+        torch.randn(2, 4096, dtype=torch.float16, device=torch.device("cuda")),
+        torch.randn(4096, 6144, dtype=torch.float16, device=torch.device("cuda")),
+    ]
+
+    outputs = optimized_graph(inputs=input_tensors)
+    output = outputs[0]
+    print(output.shape)
+    print(output.stride(0), output.stride(1))
+
+    for _ in range(2):
+        print("Warmup run...")
+        optimized_graph(inputs=input_tensors)
+
+    _sync()
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    starter.record()
+    for _ in range(6):
+        print("Profile run...")
+        optimized_graph(inputs=input_tensors)
+    ender.record()
+    _sync()
+    curr_time = starter.elapsed_time(ender)
+    mean_syn = curr_time / 6
+
+    print("Best muGraph run time (ms): ", mean_syn)

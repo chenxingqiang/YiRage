@@ -1,0 +1,101 @@
+import os
+import shutil
+from typing import Optional
+
+try:
+    import torch
+except ImportError:
+    torch = None
+
+
+def get_nvcc_compiler() -> Optional[str]:
+    """
+    Find the NVCC compiler path.
+
+    Returns:
+        Path to nvcc if found, None otherwise
+    """
+    # Check CUDA_HOME environment variable
+    cuda_home = os.environ.get("CUDA_HOME") or os.environ.get("CUDA_PATH")
+    if cuda_home:
+        nvcc_path = os.path.join(cuda_home, "bin", "nvcc")
+        if os.path.isfile(nvcc_path):
+            return nvcc_path
+
+    # Check common installation paths
+    common_paths = [
+        "/usr/local/cuda/bin/nvcc",
+        "/opt/cuda/bin/nvcc",
+        "/usr/bin/nvcc",
+    ]
+    for path in common_paths:
+        if os.path.isfile(path):
+            return path
+
+    # Try to find in PATH
+    nvcc_in_path = shutil.which("nvcc")
+    if nvcc_in_path:
+        return nvcc_in_path
+
+    return None
+
+
+# This function returns the shared memory limit (in bytes)
+# for the given GPU hardware architecture
+def get_shared_memory_capacity(target_cc):
+    if target_cc == 70:
+        # V100 GPUs (Volta)
+        return 96 * 1024
+    elif target_cc == 75:
+        # T4 GPUs (Turing)
+        return 64 * 1024
+    elif target_cc == 80:
+        # A100 GPUs
+        return 163 * 1024
+    elif target_cc == 86:
+        # A5000 GPUs
+        return 99 * 1024
+    elif target_cc == 89:
+        # A6000 GPUs
+        return 99 * 1024
+    elif target_cc == 90:
+        # H100 GPUs
+        return 223 * 1024
+    elif target_cc == 100:
+        # B200 GPUs
+        return 227 * 1024
+    else:
+        assert False, "Unsupported compute capacity: {}".format(target_cc)
+
+
+def get_scheduler(sm_cnt, worker):
+    scheduler = 4 * (sm_cnt - worker)
+    assert scheduler > 0, "worker count is not compatible with sm count on"
+    "the GPU"
+    return 4 * (sm_cnt - worker)
+
+
+# This method auto probe GPUs and return the worker and scheduler count for
+# them.
+def get_configurations_from_gpu(rank):
+    """Get worker and scheduler count for a GPU device."""
+    if torch is None:
+        raise RuntimeError("PyTorch is required for get_configurations_from_gpu")
+    # Reference: https://github.com/yirage-project/yirage/issues/354
+    props = torch.cuda.get_device_properties(rank)
+    sm_cnt = props.multi_processor_count
+    print("sm_cnt: ", sm_cnt)
+    worker = 0
+    if sm_cnt >= 160:
+        worker = 144
+    elif sm_cnt >= 132:
+        worker = 128
+    elif sm_cnt >= 108:
+        worker = 96
+    elif sm_cnt >= 68:
+        worker = 64
+    elif sm_cnt >= 40:
+        worker = 30
+    else:
+        worker = 20
+    return worker, get_scheduler(sm_cnt, worker)

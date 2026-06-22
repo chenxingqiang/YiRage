@@ -1,0 +1,181 @@
+name: CPU MLIR CI Nightly
+
+on:
+  schedule:
+    - cron: "30 6 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "python/yirage/kernel/cpu_mlir_jit.py"
+      - "scripts/bench_fused_vs_mkl_baseline.py"
+      - "scripts/cpu_mlir_bench_utils.py"
+      - "scripts/cpu_bench_shapes.py"
+      - "scripts/cpu_cert_utils.py"
+      - "scripts/validate_loop_close_archive.py"
+      - "scripts/validate_mlir_ci_bundle.py"
+      - "scripts/build_mlir_ci_bundle.py"
+      - "scripts/regression_validate_mlir_ci_bundle.py"
+      - "mlir/**"
+      - "setup.py"
+      - "pyproject.toml"
+      - "scripts/render_loop_close_timing_doc.py"
+      - "scripts/render_loop_close_metadata_doc.py"
+      - "scripts/render_loop_close_ci_artifact_doc.py"
+      - "tests/python/test_cpu_mlir_ci_bundle.py"
+      - "tests/python/test_loop_close_metadata_doc_contract.py"
+      - "docs/HARDWARE_OPTIMIZATION.md"
+      - "Makefile"
+      - ".github/workflows/cpu-mlir-ci-nightly.yml"
+      - ".github/workflows/cpu-mlir-jit-contract.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "python/yirage/kernel/cpu_mlir_jit.py"
+      - "scripts/bench_fused_vs_mkl_baseline.py"
+      - "scripts/cpu_mlir_bench_utils.py"
+      - "scripts/cpu_bench_shapes.py"
+      - "scripts/cpu_cert_utils.py"
+      - "scripts/validate_loop_close_archive.py"
+      - "scripts/validate_mlir_ci_bundle.py"
+      - "scripts/build_mlir_ci_bundle.py"
+      - "scripts/regression_validate_mlir_ci_bundle.py"
+      - "mlir/**"
+      - "setup.py"
+      - "pyproject.toml"
+      - "scripts/render_loop_close_timing_doc.py"
+      - "scripts/render_loop_close_metadata_doc.py"
+      - "scripts/render_loop_close_ci_artifact_doc.py"
+      - "tests/python/test_cpu_mlir_ci_bundle.py"
+      - "tests/python/test_loop_close_metadata_doc_contract.py"
+      - "docs/HARDWARE_OPTIMIZATION.md"
+      - "Makefile"
+      - ".github/workflows/cpu-mlir-ci-nightly.yml"
+      - ".github/workflows/cpu-mlir-jit-contract.yml"
+
+concurrency:
+  group: cpu-mlir-ci-nightly
+  cancel-in-progress: false
+
+jobs:
+  mlir-ci-bundle-nightly:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Loop-close docs sync gate
+        run: make smoke-check-loop-close-docs
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-dev python3-pip \
+            libboost-all-dev libz3-dev libz3-4 \
+            libopenblas-dev \
+            build-essential curl
+
+      - name: Install LLVM 17 / MLIR
+        run: |
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+          echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-17 main" | \
+            sudo tee /etc/apt/sources.list.d/llvm-17.list
+          sudo apt-get update
+          sudo apt-get install -y \
+            llvm-17 llvm-17-dev llvm-17-tools \
+            libmlir-17-dev mlir-17-tools \
+            clang-17 libclang-17-dev \
+            ninja-build libzstd-dev
+
+      - name: Install Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build Rust search helpers
+        run: |
+          (cd src/search/abstract_expr/abstract_subexpr && \
+            cargo build --release --target-dir ../../../../build/abstract_subexpr)
+          (cd src/search/verification/formal_verifier_equiv && \
+            cargo build --release --target-dir ../../../../build/formal_verifier)
+
+      - name: Install Python dependencies (CPU)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install z3-solver numpy graphviz tqdm accelforge "ray>=2.55" pybind11
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Build YiRage with USE_MLIR=1
+        env:
+          USE_MLIR: "1"
+          YIRAGE_BACKEND: cpu
+          YIRAGE_LLVM_SOURCE: system
+          MLIR_DIR: /usr/lib/llvm-17/lib/cmake/mlir
+          LLVM_DIR: /usr/lib/llvm-17/lib/cmake/llvm
+        run: |
+          python3 -m pip install -e ".[dev]" --no-build-isolation
+
+      - name: MLIR CI artifact bundle (nightly)
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: ${{ github.workspace }}
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/abstract_subexpr/release:${{ github.workspace }}/build/formal_verifier/release:/usr/lib/llvm-17/lib
+          YIRAGE_CPU_MLIR_JIT: "1"
+          YIRAGE_CPU_MLIR_JIT_EXPERIMENTAL: "1"
+          YIRAGE_CPU_MLIR_JIT_DIALECT: "1"
+          BUNDLE: artifacts/mlir-ci-${{ github.run_id }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          make build-mlir-ci-bundle \
+            BUNDLE="$BUNDLE" \
+            WORKFLOW=cpu-mlir-ci-nightly \
+            RUN_ID="${{ github.run_id }}" \
+            SHA="${{ github.sha }}" \
+            WITH_DIALECT_SMOKE=1
+
+      - name: Validate MLIR CI artifact bundle
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          PYTHONPATH=. python3 scripts/validate_mlir_ci_bundle.py \
+            "artifacts/mlir-ci-${{ github.run_id }}"
+
+      - name: MLIR CI bundle manifest-only smoke (same bundle dir)
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: ${{ github.workspace }}
+          BUNDLE: artifacts/mlir-ci-${{ github.run_id }}
+        run: |
+          make smoke-build-mlir-ci-bundle-manifest \
+            BUNDLE="$BUNDLE" \
+            WORKFLOW=cpu-mlir-ci-nightly
+
+      - name: Simulate downloaded MLIR bundle regression validate (nightly)
+        env:
+          PYTHONPATH: ${{ github.workspace }}
+        run: |
+          make validate-mlir-ci-metadata-download \
+            SRC="artifacts/mlir-ci-${{ github.run_id }}" \
+            DEST="artifacts/downloaded-regression-mlir"
+
+      - name: Upload MLIR CI nightly artifact bundle
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mlir-ci-nightly-${{ github.run_id }}
+          path: artifacts/mlir-ci-${{ github.run_id }}/
+          retention-days: 14
+
+      - name: Upload MLIR downloaded regression artifact (nightly)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mlir-downloaded-regression-nightly-${{ github.run_id }}
+          path: artifacts/downloaded-regression-mlir/
+          retention-days: 14

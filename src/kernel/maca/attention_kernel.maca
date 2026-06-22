@@ -1,0 +1,441 @@
+/* Copyright 2025 Chen Xingqiang (YiRage Project)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * MACA Attention Kernels
+ * 
+ * Flash Attention and related kernels for MetaX MACA GPUs.
+ * Optimized for 64-thread warps and MFMA operations.
+ */
+
+#include "kernel/maca/maca_kernel_config.h"
+#include "kernel/maca/maca_warp_utils.h"
+
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+
+namespace yirage {
+namespace kernel {
+namespace maca {
+
+// =============================================================================
+// Constants
+// =============================================================================
+
+constexpr int BLOCK_M = 128;
+constexpr int BLOCK_N = 64;
+constexpr int WARP_SIZE = 64;
+
+// =============================================================================
+// Warp Utilities
+// =============================================================================
+
+__device__ __forceinline__ float warp_max_64(float val) {
+    #pragma unroll
+    for (int offset = 32; offset > 0; offset /= 2) {
+        val = max(val, __shfl_xor_sync(0xFFFFFFFFFFFFFFFFULL, val, offset));
+    }
+    return val;
+}
+
+__device__ __forceinline__ float warp_sum_64(float val) {
+    #pragma unroll
+    for (int offset = 32; offset > 0; offset /= 2) {
+        val += __shfl_xor_sync(0xFFFFFFFFFFFFFFFFULL, val, offset);
+    }
+    return val;
+}
+
+// =============================================================================
+// Dot-Product Attention (Simple Version)
+// =============================================================================
+
+/**
+ * @brief Simple dot-product attention: Softmax(Q @ K.T / sqrt(d)) @ V
+ * 
+ * @param Q Query tensor [batch, num_heads, seq_len, head_dim]
+ * @param K Key tensor [batch, num_kv_heads, seq_len, head_dim]
+ * @param V Value tensor [batch, num_kv_heads, seq_len, head_dim]
+ * @param output Output tensor [batch, num_heads, seq_len, head_dim]
+ */
+__global__ void dot_product_attention_f16_maca(
+    const half* __restrict__ Q,
+    const half* __restrict__ K,
+    const half* __restrict__ V,
+    half* __restrict__ output,
+    float scale,
+    int batch_size,
+    int num_heads,
+    int num_kv_heads,
+    int seq_len,
+    int head_dim
+) {
+    // Each block handles one (batch, head, query_pos)
+    const int batch_idx = blockIdx.z;
+    const int head_idx = blockIdx.y;
+    const int query_pos = blockIdx.x;
+    const int lane_id = threadIdx.x % WARP_SIZE;
+    
+    // GQA ratio
+    const int kv_head_idx = head_idx / (num_heads / num_kv_heads);
+    
+    // Compute strides
+    const int q_stride_batch = num_heads * seq_len * head_dim;
+    const int q_stride_head = seq_len * head_dim;
+    const int kv_stride_batch = num_kv_heads * seq_len * head_dim;
+    const int kv_stride_head = seq_len * head_dim;
+    
+    // Query pointer
+    const half* q_ptr = Q + batch_idx * q_stride_batch 
+                          + head_idx * q_stride_head 
+                          + query_pos * head_dim;
+    
+    // Shared memory for K, V tiles
+    __shared__ half s_k[BLOCK_N][head_dim + 1];  // +1 for bank conflict avoidance
+    __shared__ half s_v[BLOCK_N][head_dim + 1];
+    __shared__ float s_scores[BLOCK_N];
+    
+    float output_acc[4] = {0.0f};  // Accumulator per thread
+    float max_score = -INFINITY;
+    float sum_exp = 0.0f;
+    
+    // Iterate over key-value sequence in tiles
+    for (int kv_start = 0; kv_start < seq_len; kv_start += BLOCK_N) {
+        int kv_end = min(kv_start + BLOCK_N, seq_len);
+        int tile_size = kv_end - kv_start;
+        
+        // Load K, V into shared memory
+        for (int i = threadIdx.x; i < tile_size * head_dim; i += blockDim.x) {
+            int kv_pos = kv_start + i / head_dim;
+            int dim_idx = i % head_dim;
+            
+            const half* k_ptr = K + batch_idx * kv_stride_batch 
+                                  + kv_head_idx * kv_stride_head 
+                                  + kv_pos * head_dim;
+            const half* v_ptr = V + batch_idx * kv_stride_batch 
+                                  + kv_head_idx * kv_stride_head 
+                                  + kv_pos * head_dim;
+            
+            s_k[i / head_dim][dim_idx] = k_ptr[dim_idx];
+            s_v[i / head_dim][dim_idx] = v_ptr[dim_idx];
+        }
+        __syncthreads();
+        
+        // Compute Q @ K^T scores
+        for (int i = lane_id; i < tile_size; i += WARP_SIZE) {
+            float score = 0.0f;
+            for (int d = 0; d < head_dim; d++) {
+                score += __half2float(q_ptr[d]) * __half2float(s_k[i][d]);
+            }
+            s_scores[i] = score * scale;
+        }
+        __syncthreads();
+        
+        // Online softmax update
+        float tile_max = -INFINITY;
+        for (int i = lane_id; i < tile_size; i += WARP_SIZE) {
+            tile_max = max(tile_max, s_scores[i]);
+        }
+        tile_max = warp_max_64(tile_max);
+        
+        float new_max = max(max_score, tile_max);
+        float scale_old = expf(max_score - new_max);
+        float scale_new = expf(tile_max - new_max);
+        
+        // Update running sum
+        float tile_sum = 0.0f;
+        for (int i = lane_id; i < tile_size; i += WARP_SIZE) {
+            tile_sum += expf(s_scores[i] - tile_max);
+        }
+        tile_sum = warp_sum_64(tile_sum);
+        
+        sum_exp = sum_exp * scale_old + tile_sum * scale_new;
+        
+        // Scale previous output accumulator
+        for (int d = 0; d < 4; d++) {
+            output_acc[d] *= scale_old;
+        }
+        
+        // Accumulate attention @ V
+        for (int i = 0; i < tile_size; i++) {
+            float attn_weight = expf(s_scores[i] - new_max);
+            for (int d = lane_id; d < head_dim; d += WARP_SIZE) {
+                int local_d = d / WARP_SIZE;
+                if (local_d < 4) {
+                    output_acc[local_d] += attn_weight * __half2float(s_v[i][d]);
+                }
+            }
+        }
+        
+        max_score = new_max;
+        __syncthreads();
+    }
+    
+    // Final normalization and write output
+    float inv_sum = 1.0f / sum_exp;
+    half* out_ptr = output + batch_idx * q_stride_batch 
+                           + head_idx * q_stride_head 
+                           + query_pos * head_dim;
+    
+    for (int d = lane_id; d < head_dim; d += WARP_SIZE) {
+        int local_d = d / WARP_SIZE;
+        if (local_d < 4) {
+            out_ptr[d] = __float2half(output_acc[local_d] * inv_sum);
+        }
+    }
+}
+
+// =============================================================================
+// Flash Attention (Memory-Efficient Version)
+// =============================================================================
+
+__global__ void flash_attention_f16_maca(
+    const half* __restrict__ Q,
+    const half* __restrict__ K,
+    const half* __restrict__ V,
+    half* __restrict__ output,
+    float* __restrict__ L,  // Log-sum-exp for backward
+    float scale,
+    int batch_size,
+    int num_heads,
+    int num_kv_heads,
+    int seq_len,
+    int head_dim,
+    bool causal
+) {
+    const int batch_idx = blockIdx.z;
+    const int head_idx = blockIdx.y;
+    const int q_tile_idx = blockIdx.x;
+    const int lane_id = threadIdx.x % WARP_SIZE;
+    const int warp_id = threadIdx.x / WARP_SIZE;
+    
+    const int kv_head_idx = head_idx / (num_heads / num_kv_heads);
+    
+    const int q_start = q_tile_idx * BLOCK_M;
+    const int q_end = min(q_start + BLOCK_M, seq_len);
+    
+    // Shared memory
+    extern __shared__ char smem[];
+    half* s_q = (half*)smem;
+    half* s_k = s_q + BLOCK_M * head_dim;
+    half* s_v = s_k + BLOCK_N * head_dim;
+    float* s_o = (float*)(s_v + BLOCK_N * head_dim);
+    float* s_l = s_o + BLOCK_M * head_dim;
+    float* s_m = s_l + BLOCK_M;
+    
+    // Load Q tile
+    for (int i = threadIdx.x; i < (q_end - q_start) * head_dim; i += blockDim.x) {
+        int q_pos = q_start + i / head_dim;
+        int dim_idx = i % head_dim;
+        s_q[i] = Q[batch_idx * num_heads * seq_len * head_dim +
+                   head_idx * seq_len * head_dim +
+                   q_pos * head_dim + dim_idx];
+    }
+    
+    // Initialize output accumulators
+    for (int i = threadIdx.x; i < (q_end - q_start) * head_dim; i += blockDim.x) {
+        s_o[i] = 0.0f;
+    }
+    for (int i = threadIdx.x; i < (q_end - q_start); i += blockDim.x) {
+        s_l[i] = 0.0f;
+        s_m[i] = -INFINITY;
+    }
+    __syncthreads();
+    
+    // Iterate over K, V tiles
+    int kv_end_limit = causal ? min(q_end, seq_len) : seq_len;
+    
+    for (int kv_start = 0; kv_start < kv_end_limit; kv_start += BLOCK_N) {
+        int kv_end = min(kv_start + BLOCK_N, kv_end_limit);
+        int kv_tile_size = kv_end - kv_start;
+        
+        // Load K, V tiles
+        for (int i = threadIdx.x; i < kv_tile_size * head_dim; i += blockDim.x) {
+            int kv_pos = kv_start + i / head_dim;
+            int dim_idx = i % head_dim;
+            s_k[i] = K[batch_idx * num_kv_heads * seq_len * head_dim +
+                       kv_head_idx * seq_len * head_dim +
+                       kv_pos * head_dim + dim_idx];
+            s_v[i] = V[batch_idx * num_kv_heads * seq_len * head_dim +
+                       kv_head_idx * seq_len * head_dim +
+                       kv_pos * head_dim + dim_idx];
+        }
+        __syncthreads();
+        
+        // Compute QK^T and update output
+        for (int q_offset = warp_id; q_offset < (q_end - q_start); q_offset += blockDim.x / WARP_SIZE) {
+            int q_pos = q_start + q_offset;
+            
+            float m_new = s_m[q_offset];
+            float l_new = s_l[q_offset];
+            
+            for (int kv_offset = 0; kv_offset < kv_tile_size; kv_offset++) {
+                int kv_pos = kv_start + kv_offset;
+                
+                // Causal mask
+                if (causal && kv_pos > q_pos) continue;
+                
+                // Compute dot product
+                float score = 0.0f;
+                for (int d = lane_id; d < head_dim; d += WARP_SIZE) {
+                    score += __half2float(s_q[q_offset * head_dim + d]) *
+                             __half2float(s_k[kv_offset * head_dim + d]);
+                }
+                score = warp_sum_64(score) * scale;
+                
+                // Online softmax update
+                float m_prev = m_new;
+                m_new = max(m_new, score);
+                float p = expf(score - m_new);
+                float scale_factor = expf(m_prev - m_new);
+                l_new = l_new * scale_factor + p;
+                
+                // Update output
+                for (int d = lane_id; d < head_dim; d += WARP_SIZE) {
+                    s_o[q_offset * head_dim + d] = 
+                        s_o[q_offset * head_dim + d] * scale_factor +
+                        p * __half2float(s_v[kv_offset * head_dim + d]);
+                }
+            }
+            
+            if (lane_id == 0) {
+                s_m[q_offset] = m_new;
+                s_l[q_offset] = l_new;
+            }
+        }
+        __syncthreads();
+    }
+    
+    // Final normalization and store
+    for (int i = threadIdx.x; i < (q_end - q_start) * head_dim; i += blockDim.x) {
+        int q_offset = i / head_dim;
+        int dim_idx = i % head_dim;
+        int q_pos = q_start + q_offset;
+        
+        float out_val = s_o[i] / s_l[q_offset];
+        output[batch_idx * num_heads * seq_len * head_dim +
+               head_idx * seq_len * head_dim +
+               q_pos * head_dim + dim_idx] = __float2half(out_val);
+    }
+    
+    // Store log-sum-exp for backward pass
+    if (L != nullptr) {
+        for (int i = threadIdx.x; i < (q_end - q_start); i += blockDim.x) {
+            int q_pos = q_start + i;
+            L[batch_idx * num_heads * seq_len +
+              head_idx * seq_len + q_pos] = s_m[i] + logf(s_l[i]);
+        }
+    }
+}
+
+// =============================================================================
+// RoPE (Rotary Position Embedding)
+// =============================================================================
+
+__global__ void apply_rope_f16_maca(
+    half* __restrict__ query,
+    half* __restrict__ key,
+    const float* __restrict__ cos_cache,
+    const float* __restrict__ sin_cache,
+    int batch_size,
+    int num_q_heads,
+    int num_kv_heads,
+    int seq_len,
+    int head_dim,
+    int rotary_dim
+) {
+    const int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const int total_elements = batch_size * num_q_heads * seq_len * (rotary_dim / 2);
+    
+    if (idx >= total_elements) return;
+    
+    const int half_rotary = rotary_dim / 2;
+    const int pair_idx = idx % half_rotary;
+    const int pos = (idx / half_rotary) % seq_len;
+    const int head_idx = (idx / (half_rotary * seq_len)) % num_q_heads;
+    const int batch_idx = idx / (half_rotary * seq_len * num_q_heads);
+    
+    const int kv_head_idx = head_idx / (num_q_heads / num_kv_heads);
+    
+    // Get cos and sin
+    float cos_val = cos_cache[pos * half_rotary + pair_idx];
+    float sin_val = sin_cache[pos * half_rotary + pair_idx];
+    
+    // Apply to query
+    int q_base = batch_idx * num_q_heads * seq_len * head_dim +
+                 head_idx * seq_len * head_dim +
+                 pos * head_dim;
+    
+    float q0 = __half2float(query[q_base + pair_idx * 2]);
+    float q1 = __half2float(query[q_base + pair_idx * 2 + 1]);
+    query[q_base + pair_idx * 2] = __float2half(q0 * cos_val - q1 * sin_val);
+    query[q_base + pair_idx * 2 + 1] = __float2half(q0 * sin_val + q1 * cos_val);
+    
+    // Apply to key (only for first num_kv_heads heads per group)
+    if (head_idx % (num_q_heads / num_kv_heads) == 0) {
+        int k_base = batch_idx * num_kv_heads * seq_len * head_dim +
+                     kv_head_idx * seq_len * head_dim +
+                     pos * head_dim;
+        
+        float k0 = __half2float(key[k_base + pair_idx * 2]);
+        float k1 = __half2float(key[k_base + pair_idx * 2 + 1]);
+        key[k_base + pair_idx * 2] = __float2half(k0 * cos_val - k1 * sin_val);
+        key[k_base + pair_idx * 2 + 1] = __float2half(k0 * sin_val + k1 * cos_val);
+    }
+}
+
+// =============================================================================
+// Launch Wrappers
+// =============================================================================
+
+void launch_flash_attention_f16_maca(
+    const half* Q, const half* K, const half* V,
+    half* output, float* L,
+    float scale,
+    int batch_size, int num_heads, int num_kv_heads,
+    int seq_len, int head_dim,
+    bool causal,
+    mcStream_t stream
+) {
+    dim3 grid((seq_len + BLOCK_M - 1) / BLOCK_M, num_heads, batch_size);
+    int threads = 256;
+    
+    size_t smem_size = (BLOCK_M + 2 * BLOCK_N) * head_dim * sizeof(half) +
+                       BLOCK_M * head_dim * sizeof(float) +
+                       2 * BLOCK_M * sizeof(float);
+    
+    flash_attention_f16_maca<<<grid, threads, smem_size, stream>>>(
+        Q, K, V, output, L, scale,
+        batch_size, num_heads, num_kv_heads, seq_len, head_dim, causal);
+}
+
+void launch_apply_rope_f16_maca(
+    half* query, half* key,
+    const float* cos_cache, const float* sin_cache,
+    int batch_size, int num_q_heads, int num_kv_heads,
+    int seq_len, int head_dim, int rotary_dim,
+    mcStream_t stream
+) {
+    int total = batch_size * num_q_heads * seq_len * (rotary_dim / 2);
+    int threads = 256;
+    int blocks = (total + threads - 1) / threads;
+    
+    apply_rope_f16_maca<<<blocks, threads, 0, stream>>>(
+        query, key, cos_cache, sin_cache,
+        batch_size, num_q_heads, num_kv_heads, seq_len, head_dim, rotary_dim);
+}
+
+}  // namespace maca
+}  // namespace kernel
+}  // namespace yirage
+
+#endif  // YIRAGE_BACKEND_MACA_ENABLED

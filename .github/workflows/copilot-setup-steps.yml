@@ -1,0 +1,47 @@
+name: Copilot Setup Steps
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - name: Install Python tools
+        run: |
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user accelforge
+          python3 -m pip install --user \
+            jupyterlab==4.5.6 \
+            ipywidgets==8.1.8
+
+      - name: Clone and install AccelForge from source
+        run: |
+          rm -rf /tmp/accelforge
+          git clone https://github.com/accelergy-project/accelforge.git /tmp/accelforge
+          # Install the cloned source last so Copilot uses the repository copy
+          # while still validating that the PyPI package can be installed.
+          python3 -m pip install --user /tmp/accelforge
+
+      - name: Verify installation
+        run: |
+          python3 - <<'PY'
+          import accelforge
+          import IPython
+          import ipywidgets
+          import jupyterlab
+
+          print("accelforge:", getattr(accelforge, "__version__", "installed"))
+          print("IPython:", IPython.__version__)
+          print("ipywidgets:", ipywidgets.__version__)
+          print("jupyterlab:", jupyterlab.__version__)
+          PY
