@@ -42,6 +42,7 @@ GeneratorConfig GeneratorConfig::get_cpu_search_config() {
       type::KN_CHUNK_1_OP,
       type::KN_CHUNK_2_OP,
       type::KN_TRANSPOSE_01_OP,
+      type::KN_CONV2D_OP,
       type::KN_CUSTOMIZED_OP,
   };
   config.tbop_to_explore = {

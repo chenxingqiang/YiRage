@@ -88,7 +88,7 @@ kn_ops:
   kn_conv2d_op:
     tier: supported
     layer: kn
-    note: NCHW input, OIHW weight; F.conv2d parity; stride/padding/dilation in JSON; search explore deferred
+    note: NCHW input, OIHW weight; F.conv2d parity; stride/padding/dilation in JSON; CPU interpreter + search explore
   kn_concat_then_matmul_op:
     tier: unsupported
     layer: layout
@@ -244,6 +244,7 @@ search_cpu_default_explore:
     - kn_chunk_1_op
     - kn_chunk_2_op
     - kn_transpose_01_op
+    - kn_conv2d_op
     - kn_customized_op
   tb:
     - tb_matmul_op

@@ -70,6 +70,7 @@ bool is_binary(type::KNOperatorType op) {
       type::KNOperatorType::KN_CONCAT_0_OP,
       type::KNOperatorType::KN_CONCAT_1_OP,
       type::KNOperatorType::KN_CONCAT_2_OP,
+      type::KNOperatorType::KN_CONV2D_OP,
   };
   return contains(true_values, op);
 }
@@ -199,6 +200,12 @@ KNOperator *create_op(kernel::Graph &g,
     case type::KNOperatorType::KN_CONCAT_2_OP: {
       int dim = (int)type - (int)type::KNOperatorType::KN_CONCAT_0_OP;
       return g.create_concat_op(input1, input2, dim);
+    }
+    case type::KNOperatorType::KN_CONV2D_OP: {
+      if (input1.num_dims != 4 || input2.num_dims != 4) {
+        return nullptr;
+      }
+      return g.create_conv2d_op(input1, input2, 1, 1, 0, 0, 1, 1);
     }
     default:
       assert(false && "Unsupported operator");

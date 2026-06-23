@@ -49,6 +49,14 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
     case type::KNOperatorType::KN_MATMUL_OP:
       return abstract_expr_make_red(tensors[0].dim[tensors[0].num_dims - 1],
                                     abstract_expr_make_mul(opds[0], opds[1]));
+    case type::KNOperatorType::KN_CONV2D_OP: {
+      if (tensors[0].num_dims != 4 || tensors[1].num_dims != 4) {
+        return nullptr;
+      }
+      return abstract_expr_make_red(
+          tensors[0].dim[1] * tensors[1].dim[2] * tensors[1].dim[3],
+          abstract_expr_make_mul(opds[0], opds[1]));
+    }
     case type::KNOperatorType::KN_ADD_OP:
       return abstract_expr_make_add(opds[0], opds[1]);
     case type::KNOperatorType::KN_SUB_OP:
@@ -518,6 +526,18 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
     case type::KNOperatorType::KN_MATMUL_OP: {
       assert(opds.size() == 2);
       return abstract_expr_make_red(tensors[0].dims[tensors[0].dims.size() - 1],
+                                    abstract_expr_make_mul(opds[0], opds[1]));
+    }
+    case type::KNOperatorType::KN_CONV2D_OP: {
+      assert(opds.size() == 2);
+      if (tensors[0].dims.size() != 4 || tensors[1].dims.size() != 4) {
+        return nullptr;
+      }
+      DimVarAssignments empty;
+      int channels = tensors[0].dims[1].dim_expr->get_value(empty);
+      int kh = tensors[1].dims[2].dim_expr->get_value(empty);
+      int kw = tensors[1].dims[3].dim_expr->get_value(empty);
+      return abstract_expr_make_red(channels * kh * kw,
                                     abstract_expr_make_mul(opds[0], opds[1]));
     }
     case type::KNOperatorType::KN_ADD_OP: {

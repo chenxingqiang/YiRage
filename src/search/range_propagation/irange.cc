@@ -392,6 +392,10 @@ IKNRange forward_propagate(IKNRange const &range,
           range.range_set.transpose(0, 1).truncate(op.output_tensors[0]));
       break;
     }
+    case type::KNOperatorType::KN_CONV2D_OP: {
+      ret = IKNRange(range.range_set.truncate(op.output_tensors[0]));
+      break;
+    }
     default:
       assert(false && "Invalid operator type");
   }
@@ -491,6 +495,10 @@ IKNRange backward_propagate(IKNRange const &knrange,
       assert(opd_idx == 0);
       ret = IKNRange(
           knrange.range_set.transpose(0, 1).truncate(op.input_tensors[0]));
+      break;
+    }
+    case type::KNOperatorType::KN_CONV2D_OP: {
+      ret = IKNRange(knrange.range_set.truncate(op.input_tensors[opd_idx]));
       break;
     }
 
