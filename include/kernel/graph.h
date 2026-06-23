@@ -203,6 +203,10 @@ public:
   std::vector<DTensor> chunk(DTensor const &input, int chunk_size, int dim);
   int chunk(DTensor const *input, int chunk_size, int dim);
   KNOperator *create_chunk_op(DTensor const &input, int chunk_size, int dim);
+  // transpose operator (swap dims 0 and 1)
+  DTensor transpose01(DTensor const &input);
+  DTensor *transpose01(DTensor const *input);
+  KNOperator *create_transpose01_op(DTensor const &input);
   // customized operator
   std::vector<DTensor> customized(std::vector<DTensor> const &inputs,
                                   yirage::threadblock::Graph const &_graph);

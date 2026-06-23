@@ -96,6 +96,12 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
       int split_size = tensors[0].dim[dim] / 2;
       return abstract_expr_make_split(dim, split_size, 0, opds[0]);
     }
+    case type::KNOperatorType::KN_TRANSPOSE_01_OP: {
+      if (tensors[0].num_dims < 2) {
+        return nullptr;
+      }
+      return opds[0];
+    }
     case type::KNOperatorType::KN_CONCAT_THEN_MATMUL_OP: {
       assert(tensors.size() == 4);
       if (tensors[0].num_dims != tensors[1].num_dims ||
@@ -581,6 +587,12 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
       }
       int split_size = axis / 2;
       return abstract_expr_make_split(dim, split_size, 0, opds[0]);
+    }
+    case type::KNOperatorType::KN_TRANSPOSE_01_OP: {
+      if (tensors[0].dims.size() < 2) {
+        return nullptr;
+      }
+      return opds[0];
     }
     default: {
       fprintf(stderr, "Unsupported operator: %d\n", (int)op);

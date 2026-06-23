@@ -386,6 +386,14 @@ void from_json(json const &j, Graph &g) {
         }
         break;
       }
+      case type::KNOperatorType::KN_TRANSPOSE_01_OP: {
+        size_t guid, guidO;
+        jop.at("input_tensors")[0].at("guid").get_to(guid);
+        jop.at("output_tensors")[0].at("guid").get_to(guidO);
+        DTensor const &output = g.transpose01(get_tensor_from_guid(guid));
+        guid_mapping[output.guid] = guidO;
+        break;
+      }
       case type::KNOperatorType::KN_CUSTOMIZED_OP: {
         std::vector<DTensor> inputs;
         for (auto const &jinput : jop.at("input_tensors")) {

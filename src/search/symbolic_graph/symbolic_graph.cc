@@ -812,6 +812,21 @@ bool SymbolicKNGraph::add_operator(type::KNOperatorType op_type,
       this->output_indices.push_back(out_indices);
       break;
     }
+    case type::KNOperatorType::KN_TRANSPOSE_01_OP: {
+      assert(input_indices.size() == 1);
+      SymbolicDTensor A = this->tensors[input_indices[0]];
+      if ((int)A.dims.size() < 2) {
+        return false;
+      }
+      std::vector<SymbolicTensorDim> out_dims = A.dims;
+      std::swap(out_dims[0], out_dims[1]);
+      this->operators.push_back(SymbolicKNOp(op_type));
+      int out_idx = (int)this->tensors.size();
+      this->tensors.push_back(SymbolicDTensor(out_dims));
+      this->input_indices.push_back(input_indices);
+      this->output_indices.push_back({out_idx});
+      break;
+    }
     default: {
       return false;
     }

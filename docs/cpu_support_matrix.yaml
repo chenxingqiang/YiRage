@@ -81,6 +81,10 @@ kn_ops:
     tier: supported
     layer: layout
     note: torch.chunk along dim 2; CPU interpreter (first slice value-verified)
+  kn_transpose_01_op:
+    tier: supported
+    layer: layout
+    note: swap dims 0 and 1; torch.transpose(0, 1); CPU interpreter + search explore
   kn_concat_then_matmul_op:
     tier: unsupported
     layer: layout
@@ -227,6 +231,7 @@ search_cpu_default_explore:
     - kn_chunk_0_op
     - kn_chunk_1_op
     - kn_chunk_2_op
+    - kn_transpose_01_op
     - kn_customized_op
   tb:
     - tb_matmul_op

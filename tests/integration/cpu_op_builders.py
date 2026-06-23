@@ -264,6 +264,18 @@ def build_kn_chunk(dim: int) -> Builder:
     return _build
 
 
+def build_kn_transpose_01() -> Builder:
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.transpose(x, dim0=0, dim1=1))
+        inp = _f16((8, 16))
+        ref = inp.transpose(0, 1).contiguous()
+        return g, [inp], ref
+
+    return _build
+
+
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_rms_norm_op": build_kn_rms_norm(),
@@ -294,6 +306,7 @@ KN_OP_BUILDERS = {
     "kn_chunk_0_op": build_kn_chunk(0),
     "kn_chunk_1_op": build_kn_chunk(1),
     "kn_chunk_2_op": build_kn_chunk(2),
+    "kn_transpose_01_op": build_kn_transpose_01(),
 }
 
 def build_kn_unfused_rms_matmul() -> Builder:

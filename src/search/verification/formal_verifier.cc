@@ -564,6 +564,12 @@ std::vector<std::string>
           }
           break;
         }
+        case type::KNOperatorType::KN_TRANSPOSE_01_OP: {
+          std::string input = tensor_exprs.at(op->input_tensors[0].guid);
+          tensor_exprs.emplace(op->output_tensors[0].guid,
+                               "(transpose01 " + input + ")");
+          break;
+        }
         case type::KNOperatorType::KN_CUSTOMIZED_OP: {
           calc_stensor_exprs(static_cast<kernel::KNCustomizedOp *>(op)->bgraph);
           break;

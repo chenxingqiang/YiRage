@@ -1036,6 +1036,9 @@ def _interpret_mugraph_on_cpu_impl(cygraph, input_tensors):
             for guid, piece in zip(out_guids, pieces):
                 tensor_map[guid] = piece
 
+        elif ot == "kn_transpose_01_op":
+            tensor_map[out_guids[0]] = ins[0].transpose(0, 1).contiguous()
+
         elif ot in _KN_CONCAT_OPS:
             concat_dim = int(op.get("concat_dim", _kn_concat_axis(ot)))
             tensor_map[out_guids[0]] = torch.cat([ins[0], ins[1]], dim=concat_dim)
@@ -1208,6 +1211,14 @@ class KNGraph:
 
     def split(self, A: DTensor, split_size: int, dim: int) -> list:
         return self.cygraph.split(A, split_size, dim)
+
+    def transpose(self, A: DTensor, dim0: int = 0, dim1: int = 1) -> DTensor:
+        """Swap two dimensions (``kn_transpose_01_op`` when ``dim0=0`` and ``dim1=1``)."""
+        if dim0 == 0 and dim1 == 1:
+            return self.cygraph.transpose01(A)
+        raise NotImplementedError(
+            "CPU transpose currently supports dim0=0, dim1=1 only; use kn_transpose_01_op"
+        )
 
     def rms_norm(self, A: DTensor, normalized_shape: tuple):
         return self.cygraph.rms_norm(A, normalized_shape)

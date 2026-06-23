@@ -95,6 +95,7 @@ bool is_unary(type::KNOperatorType op) {
       type::KNOperatorType::KN_CHUNK_0_OP,
       type::KNOperatorType::KN_CHUNK_1_OP,
       type::KNOperatorType::KN_CHUNK_2_OP,
+      type::KNOperatorType::KN_TRANSPOSE_01_OP,
   };
   return contains(true_values, op);
 }
@@ -171,6 +172,8 @@ KNOperator *create_op(kernel::Graph &g,
       }
       return g.create_chunk_op(input, 2, dim);
     }
+    case type::KNOperatorType::KN_TRANSPOSE_01_OP:
+      return g.create_transpose01_op(input);
     default:
       assert(false && "Unsupported operator");
   }
