@@ -8,8 +8,12 @@ import pytest
 
 from yirage.storage.mugraph_store import (
     MuGraphStore,
+    bucket_dim,
+    bucket_input_shapes,
+    input_shapes_bucket_match,
     input_shapes_match,
     mugraph_require_shape_match,
+    mugraph_shape_bucket_enabled,
     normalize_input_shapes,
 )
 
@@ -71,6 +75,68 @@ def test_find_best_shape_mismatch_falls_back_without_require(store):
     entry = store.find_best(gh, "cpu", input_shapes=[[99, 99], [99, 99]])
     assert entry is not None
     assert entry.metadata.latency_ms == 2.0
+
+
+def test_bucket_dim_pow2_ceil():
+    assert bucket_dim(1) == 1
+    assert bucket_dim(8) == 8
+    assert bucket_dim(9) == 16
+    assert bucket_dim(12) == 16
+    assert bucket_dim(50) == 64
+
+
+def test_find_best_bucket_match_before_global_fallback(store):
+    dummy = {"type": "matmul"}
+    gh = "shape_bucket_hash"
+    store.save(
+        graph_hash=gh,
+        optimized_graph=dummy,
+        backend="cpu",
+        latency_ms=1.0,
+        input_shapes=[[16, 32], [32, 64]],
+        griddims=[[1, 1, 1]],
+    )
+    store.save(
+        graph_hash=gh,
+        optimized_graph=dummy,
+        backend="cpu",
+        latency_ms=0.1,
+        input_shapes=[[512, 512], [512, 512]],
+        griddims=[[2, 1, 1]],
+    )
+
+    assert mugraph_shape_bucket_enabled() is True
+    entry = store.find_best(gh, "cpu", input_shapes=[[12, 32], [32, 50]])
+    assert entry is not None
+    assert entry.metadata.latency_ms == 1.0
+    assert bucket_input_shapes([[12, 32], [32, 50]]) == [[16, 32], [32, 64]]
+
+
+def test_find_best_bucket_disabled_falls_back_global(store, monkeypatch):
+    monkeypatch.setenv("YIRAGE_MUGraph_SHAPE_BUCKET", "0")
+    assert mugraph_shape_bucket_enabled() is False
+
+    dummy = {"type": "matmul"}
+    gh = "shape_bucket_off_hash"
+    store.save(
+        graph_hash=gh,
+        optimized_graph=dummy,
+        backend="cpu",
+        latency_ms=1.0,
+        input_shapes=[[16, 32], [32, 64]],
+        griddims=[[1, 1, 1]],
+    )
+    store.save(
+        graph_hash=gh,
+        optimized_graph=dummy,
+        backend="cpu",
+        latency_ms=0.1,
+        input_shapes=[[512, 512], [512, 512]],
+        griddims=[[2, 1, 1]],
+    )
+
+    entry = store.find_best(gh, "cpu", input_shapes=[[12, 32], [32, 50]])
+    assert entry.metadata.latency_ms == 0.1
 
 
 def test_find_best_require_shape_match_returns_none(store, monkeypatch):
