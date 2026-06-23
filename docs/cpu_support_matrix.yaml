@@ -26,6 +26,7 @@ kn_ops:
   kn_relu_op: { tier: supported, layer: kn }
   kn_log_op: { tier: supported, layer: kn }
   kn_add_op: { tier: supported, layer: kn }
+  kn_sub_op: { tier: supported, layer: kn }
   kn_mul_op: { tier: supported, layer: kn }
   kn_div_op: { tier: supported, layer: kn }
   kn_pow_op: { tier: supported, layer: kn }
@@ -80,6 +81,10 @@ kn_ops:
     tier: supported
     layer: layout
     note: torch.chunk along dim 2; CPU interpreter (first slice value-verified)
+  kn_transpose_01_op:
+    tier: supported
+    layer: layout
+    note: swap dims 0 and 1; torch.transpose(0, 1); CPU interpreter + search explore
   kn_concat_then_matmul_op:
     tier: unsupported
     layer: layout
@@ -153,6 +158,14 @@ tb_ops:
     tier: supported
     layer: tb
     note: elementwise max across forloop tiles (same shape as input tile)
+  tb_forloop_accum_no_red_rescale_op:
+    tier: supported
+    layer: tb
+    note: online softmax rescale; acc = acc * rescale + src (FlashAttention-style); search explore deferred
+  tb_forloop_accum_red_ld_sum_rescale_op:
+    tier: supported
+    layer: tb
+    note: reduce-sum along last dim then acc = acc * rescale + partial; search explore deferred
   tb_concat_0_op:
     tier: supported
     layer: layout
@@ -213,6 +226,7 @@ search_cpu_default_explore:
     - kn_reduction_1_op
     - kn_reduction_2_op
     - kn_add_op
+    - kn_sub_op
     - kn_mul_op
     - kn_div_op
     - kn_pow_op
@@ -225,6 +239,7 @@ search_cpu_default_explore:
     - kn_chunk_0_op
     - kn_chunk_1_op
     - kn_chunk_2_op
+    - kn_transpose_01_op
     - kn_customized_op
   tb:
     - tb_matmul_op

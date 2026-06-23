@@ -424,6 +424,13 @@ std::vector<std::string>
                                "(ew_add " + lhs + " " + rhs + ")");
           break;
         }
+        case type::KNOperatorType::KN_SUB_OP: {
+          std::string lhs = tensor_exprs.at(op->input_tensors[0].guid);
+          std::string rhs = tensor_exprs.at(op->input_tensors[1].guid);
+          tensor_exprs.emplace(op->output_tensors[0].guid,
+                               "(ew_add " + lhs + " (ew_neg " + rhs + "))");
+          break;
+        }
         case type::KNOperatorType::KN_DIV_OP: {
           std::string lhs = tensor_exprs.at(op->input_tensors[0].guid);
           std::string rhs = tensor_exprs.at(op->input_tensors[1].guid);
@@ -555,6 +562,12 @@ std::vector<std::string>
                                          " " + size + ")";
             tensor_exprs.emplace(op->output_tensors[i].guid, expr);
           }
+          break;
+        }
+        case type::KNOperatorType::KN_TRANSPOSE_01_OP: {
+          std::string input = tensor_exprs.at(op->input_tensors[0].guid);
+          tensor_exprs.emplace(op->output_tensors[0].guid,
+                               "(transpose01 " + input + ")");
           break;
         }
         case type::KNOperatorType::KN_CUSTOMIZED_OP: {

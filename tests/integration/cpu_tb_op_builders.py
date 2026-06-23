@@ -296,6 +296,59 @@ def build_customized_tb_forloop_accum_max() -> Builder:
     return _build
 
 
+def build_customized_tb_forloop_accum_no_red_rescale() -> Builder:
+    """TB forloop_accum_rescale (no reduction): acc = acc * rescale + src."""
+
+    def _build():
+        rows, cols, tile, fl = 4, 32, 16, 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(rows, cols), dtype=yr.float16)
+        r = g.new_input(dims=(rows, 1), dtype=yr.float16)
+        tb = _tb_graph(forloop_range=fl, block=tile, reduction_dimx=tile)
+        tx = tb.new_input(dtensor=x, input_map=(-1, -1, -1), forloop_dim=1)
+        tr = tb.new_input(dtensor=r, input_map=(-1, -1, -1), forloop_dim=-1)
+        tacc = tb.forloop_accum_rescale(tx, tr)
+        tb.new_output(stensor=tacc, output_map=(-1, -1, -1))
+        out = g.customized([x, r], tb)
+        g.mark_output(out[0])
+        inp = _f16((rows, cols))
+        resc = (_f16((rows, 1), positive=True) * 0.5 + 0.25).to(torch.float16)
+        acc = torch.zeros(rows, tile, dtype=torch.float32)
+        for i in range(fl):
+            sl = inp[:, i * tile : (i + 1) * tile].float()
+            acc = acc * resc.float() + sl
+        return g, [inp, resc], acc.to(torch.float16)
+
+    return _build
+
+
+def build_customized_tb_forloop_accum_red_ld_sum_rescale() -> Builder:
+    """TB forloop_accum_rescale (sum): partial = sum(src); acc = acc * rescale + partial."""
+
+    def _build():
+        rows, cols, tile, fl = 4, 32, 16, 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(rows, cols), dtype=yr.float16)
+        r = g.new_input(dims=(rows, 1), dtype=yr.float16)
+        tb = _tb_graph(forloop_range=fl, block=tile, reduction_dimx=tile)
+        tx = tb.new_input(dtensor=x, input_map=(-1, -1, -1), forloop_dim=1)
+        tr = tb.new_input(dtensor=r, input_map=(-1, -1, -1), forloop_dim=-1)
+        tacc = tb.forloop_accum_rescale(tx, tr, "sum")
+        tb.new_output(stensor=tacc, output_map=(-1, -1, -1))
+        out = g.customized([x, r], tb)
+        g.mark_output(out[0])
+        inp = _f16((rows, cols))
+        resc = (_f16((rows, 1), positive=True) * 0.5 + 0.25).to(torch.float16)
+        acc = torch.zeros(rows, 1, dtype=torch.float32)
+        for i in range(fl):
+            sl = inp[:, i * tile : (i + 1) * tile].float()
+            partial = sl.sum(dim=-1, keepdim=True)
+            acc = acc * resc.float() + partial
+        return g, [inp, resc], acc.to(torch.float16)
+
+    return _build
+
+
 def build_customized_tb_forloop_accum_red_ld_rms() -> Builder:
     """TB forloop_accum(..., acc='rms'): RMS epilogue on last forloop iteration."""
 
@@ -534,6 +587,8 @@ TB_OP_BUILDERS = {
     "tb_forloop_accum_red_ld_rms_op": build_customized_tb_forloop_accum_red_ld_rms(),
     "tb_forloop_accum_redtox_ld_sum_op": build_customized_tb_forloop_accum_redtox_ld_sum(),
     "tb_forloop_accum_max_op": build_customized_tb_forloop_accum_max(),
+    "tb_forloop_accum_no_red_rescale_op": build_customized_tb_forloop_accum_no_red_rescale(),
+    "tb_forloop_accum_red_ld_sum_rescale_op": build_customized_tb_forloop_accum_red_ld_sum_rescale(),
     "tb_clamp_op": build_customized_tb_clamp(),
     "tb_mul_scalar_op": build_customized_tb_mul_scalar(),
     "tb_concat_0_op": build_customized_tb_concat(0),

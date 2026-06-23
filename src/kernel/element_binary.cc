@@ -31,6 +31,14 @@ DTensor *Graph::add(DTensor const *input1, DTensor const *input2) {
   return elementbinary(input1, input2, yirage::type::KN_ADD_OP);
 }
 
+DTensor Graph::sub(DTensor const &input1, DTensor const &input2) {
+  return elementbinary(input1, input2, yirage::type::KN_SUB_OP);
+}
+
+DTensor *Graph::sub(DTensor const *input1, DTensor const *input2) {
+  return elementbinary(input1, input2, yirage::type::KN_SUB_OP);
+}
+
 DTensor Graph::mul(DTensor const &input1, DTensor const &input2) {
   return elementbinary(input1, input2, yirage::type::KN_MUL_OP);
 }

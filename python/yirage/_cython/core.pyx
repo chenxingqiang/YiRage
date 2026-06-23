@@ -140,6 +140,8 @@ def get_kn_operator_type_string(int op_type):
         return "kn_div_op"
     elif op_type == KN_POW_OP:
         return "kn_pow_op"
+    elif op_type == KN_SUB_OP:
+        return "kn_sub_op"
     elif op_type == KN_REDUCTION_0_OP:
         return "kn_reduction_0_op"
     elif op_type == KN_REDUCTION_1_OP:
@@ -172,6 +174,8 @@ def get_kn_operator_type_string(int op_type):
         return "kn_chunk_1_op"
     elif op_type == KN_CHUNK_2_OP:
         return "kn_chunk_2_op"
+    elif op_type == KN_TRANSPOSE_01_OP:
+        return "kn_transpose_01_op"
     elif op_type == KN_SPLIT_LAST_OP_ID:
         return "kn_split_last_op_id"
     elif op_type == KN_ALLREDUCE_OP:
@@ -795,6 +799,11 @@ cdef class CyKNGraph:
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
         return DTensor(t)
 
+    def sub(self, DTensor A, DTensor B):
+        cdef CppDTensor* ptr = self.p_kgraph.sub(A.c_ptr, B.c_ptr)
+        t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
+        return DTensor(t)
+
     def mul(self, DTensor A, DTensor B):
         cdef CppDTensor* ptr = self.p_kgraph.mul(A.c_ptr, B.c_ptr)
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
@@ -850,6 +859,13 @@ cdef class CyKNGraph:
             t = ctypes.cast(<unsigned long long>coutputs[i], ctypes.c_void_p)
             outputs.append(DTensor(t))
         return outputs
+
+    def transpose01(self, DTensor input):
+        cdef CppDTensor* ptr = self.p_kgraph.transpose01(input.c_ptr)
+        if ptr == NULL:
+            raise ValueError("transpose01 failed: input must have rank >= 2")
+        t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
+        return DTensor(t)
 
     def customized(self, list inputs, CyTBGraph bgraph):
         cdef vector[const CppDTensor*] cinputs

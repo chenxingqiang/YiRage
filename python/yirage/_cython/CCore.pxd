@@ -76,6 +76,7 @@ cdef extern from "type.h" namespace "yirage::type":
         KN_MUL_OP = 1201,
         KN_DIV_OP = 1202,
         KN_POW_OP = 1203,
+        KN_SUB_OP = 1204,
         # Reduction & Normalization
         KN_REDUCTION_0_OP = 1300,
         KN_REDUCTION_1_OP = 1301,
@@ -94,6 +95,7 @@ cdef extern from "type.h" namespace "yirage::type":
         KN_CHUNK_0_OP = 1423,
         KN_CHUNK_1_OP = 1424,
         KN_CHUNK_2_OP = 1425,
+        KN_TRANSPOSE_01_OP = 1426,
         KN_SPLIT_LAST_OP_ID = 1429,
         # Communication
         KN_ALLREDUCE_OP = 1900,
@@ -230,12 +232,14 @@ cdef extern from "kernel/graph.h" namespace "yirage::kernel":
         CppDTensor* sqrt(const CppDTensor* input)
         CppDTensor* square(const CppDTensor* input)
         CppDTensor* add(const CppDTensor* op1, const CppDTensor* op2)
+        CppDTensor* sub(const CppDTensor* op1, const CppDTensor* op2)
         CppDTensor* mul(const CppDTensor* op1, const CppDTensor* op2)
         CppDTensor* div(const CppDTensor* op1, const CppDTensor* op2)
         CppDTensor* pow(const CppDTensor* op1, const CppDTensor* op2)
         CppDTensor* concat(const CppDTensor* A, const CppDTensor* B, int dim) except +
         int split(const CppDTensor *input, int split_size, int dim) except +
         int chunk(const CppDTensor *input, int chunk_size, int dim) except +
+        CppDTensor* transpose01(const CppDTensor *input) except +
         int customized(vector[const CppDTensor*] inputs,
                        CppDTensor** outputs,
                        CppTBGraph* bgraph)

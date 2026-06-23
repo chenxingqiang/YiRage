@@ -283,6 +283,8 @@ _TB_FORLOOP_ACCUM_SUPPORTED = frozenset(
         "tb_forloop_accum_red_ld_rms_op",
         "tb_forloop_accum_red_ld_sum_op",
         "tb_forloop_accum_redtox_ld_sum_op",
+        "tb_forloop_accum_no_red_rescale_op",
+        "tb_forloop_accum_red_ld_sum_rescale_op",
     }
 )
 
@@ -318,6 +320,68 @@ def _cpu_rms_matmul(x: torch.Tensor, w: torch.Tensor) -> torch.Tensor:
     from .cpu_native import cpu_rms_matmul
 
     return cpu_rms_matmul(x, w)
+
+
+def _kn_customized_tb_softmax_last_dim(
+    g,
+    x,
+    *,
+    rows: int,
+    cols: int,
+    dim: int = -1,
+):
+    """Stable softmax on last dim via TB reduction_max (PyTorch F.softmax aligned)."""
+    import yirage as yr
+
+    axis = dim if dim >= 0 else 1
+    tb = yr.new_threadblock_graph(
+        grid_dim=(1, 1, 1),
+        block_dim=(rows, cols, 1),
+        forloop_range=1,
+        reduction_dimx=cols,
+    )
+    tx = tb.new_input(dtensor=x, input_map=(-1, -1, -1), forloop_dim=1)
+    tmax, _ = tb.reduction_max(tx, dim=axis)
+    tsub = tb.sub(tx, tmax)
+    texp = tb.exp(tsub)
+    tsum = tb.reduction(texp, dim=axis)
+    tout = tb.div(texp, tsum)
+    tacc = tb.forloop_accum(tout)
+    tb.new_output(stensor=tacc, output_map=(-1, -1, -1))
+    return g.customized([x], tb)[0]
+
+
+def _kn_customized_tb_layer_norm_last_dim(
+    g,
+    x,
+    *,
+    rows: int,
+    cols: int,
+    eps: float = 1e-5,
+):
+    """LayerNorm on last dim (elementwise_affine=False; matches F.layer_norm without weight/bias)."""
+    import yirage as yr
+
+    axis = 1
+    inv_n = 1.0 / float(cols)
+    tb = yr.new_threadblock_graph(
+        grid_dim=(1, 1, 1),
+        block_dim=(rows, cols, 1),
+        forloop_range=1,
+        reduction_dimx=cols,
+    )
+    tx = tb.new_input(dtensor=x, input_map=(-1, -1, -1), forloop_dim=1)
+    tsum = tb.reduction(tx, dim=axis)
+    mean = tb.mul_scalar(tsum, inv_n)
+    centered = tb.sub(tx, mean)
+    tsq = tb.square(centered)
+    tvar_sum = tb.reduction(tsq, dim=axis)
+    tvar = tb.mul_scalar(tvar_sum, inv_n)
+    denom = tb.sqrt(tvar)
+    tout = tb.div(centered, denom)
+    tacc = tb.forloop_accum(tout)
+    tb.new_output(stensor=tacc, output_map=(-1, -1, -1))
+    return g.customized([x], tb)[0]
 
 
 def _op_clamp_bounds(op_info: dict, *, layer: str) -> tuple:
@@ -717,6 +781,17 @@ def _compute_tb_block_patches(kn_op_info, tensor_map, input_dtensor_map, bx, by,
                         stensor_map[out_t["guid"]], in_ts[0]
                     )
 
+            elif ot == "tb_forloop_accum_no_red_rescale_op":
+                src, rescale = in_ts[0], in_ts[1]
+                acc = stensor_map[out_t["guid"]]
+                stensor_map[out_t["guid"]] = acc * rescale + src
+
+            elif ot == "tb_forloop_accum_red_ld_sum_rescale_op":
+                src, rescale = in_ts[0], in_ts[1]
+                partial = src.sum(dim=-1, keepdim=True)
+                acc = stensor_map[out_t["guid"]]
+                stensor_map[out_t["guid"]] = acc * rescale + partial
+
             elif ot.startswith("tb_forloop_accum"):
                 if ot not in _TB_FORLOOP_ACCUM_SUPPORTED:
                     _raise_cpu_unsupported_tb(ot, "forloop")
@@ -1009,6 +1084,9 @@ def _interpret_mugraph_on_cpu_impl(cygraph, input_tensors):
         elif ot == "kn_add_op":
             tensor_map[out_guids[0]] = ins[0] + ins[1]
 
+        elif ot == "kn_sub_op":
+            tensor_map[out_guids[0]] = ins[0] - ins[1]
+
         elif ot == "kn_mul_op":
             tensor_map[out_guids[0]] = ins[0] * ins[1]
 
@@ -1032,6 +1110,9 @@ def _interpret_mugraph_on_cpu_impl(cygraph, input_tensors):
                 )
             for guid, piece in zip(out_guids, pieces):
                 tensor_map[guid] = piece
+
+        elif ot == "kn_transpose_01_op":
+            tensor_map[out_guids[0]] = ins[0].transpose(0, 1).contiguous()
 
         elif ot in _KN_CONCAT_OPS:
             concat_dim = int(op.get("concat_dim", _kn_concat_axis(ot)))
@@ -1185,6 +1266,9 @@ class KNGraph:
     def add(self, A: DTensor, B: DTensor):
         return self.cygraph.add(A, B)
 
+    def sub(self, A: DTensor, B: DTensor):
+        return self.cygraph.sub(A, B)
+
     def mul(self, A: DTensor, B: DTensor):
         return self.cygraph.mul(A, B)
 
@@ -1203,8 +1287,45 @@ class KNGraph:
     def split(self, A: DTensor, split_size: int, dim: int) -> list:
         return self.cygraph.split(A, split_size, dim)
 
+    def transpose(self, A: DTensor, dim0: int = 0, dim1: int = 1) -> DTensor:
+        """Swap two dimensions (``kn_transpose_01_op`` when ``dim0=0`` and ``dim1=1``)."""
+        if dim0 == 0 and dim1 == 1:
+            return self.cygraph.transpose01(A)
+        raise NotImplementedError(
+            "CPU transpose currently supports dim0=0, dim1=1 only; use kn_transpose_01_op"
+        )
+
     def rms_norm(self, A: DTensor, normalized_shape: tuple):
         return self.cygraph.rms_norm(A, normalized_shape)
+
+    def softmax(self, A: DTensor, dim: int = -1) -> DTensor:
+        """Row-wise softmax aligned with ``torch.nn.functional.softmax`` (stable TB path)."""
+        rows, cols = A.dim(0), A.dim(1)
+        if A.num_dims != 2:
+            raise NotImplementedError(
+                "CPU softmax currently supports 2D tensors; use TB customized graphs for other ranks"
+            )
+        return _kn_customized_tb_softmax_last_dim(
+            self, A, rows=rows, cols=cols, dim=dim
+        )
+
+    def layer_norm(
+        self,
+        A: DTensor,
+        normalized_shape: tuple,
+        eps: float = 1e-5,
+    ) -> DTensor:
+        """LayerNorm on last dim (``elementwise_affine=False``; PyTorch ``F.layer_norm`` without γ/β)."""
+        if len(normalized_shape) != 1:
+            raise NotImplementedError(
+                "CPU layer_norm currently supports 1D normalized_shape on 2D input"
+            )
+        rows, cols = A.dim(0), A.dim(1)
+        if int(normalized_shape[0]) != cols:
+            raise ValueError("normalized_shape must match input last dim")
+        return _kn_customized_tb_layer_norm_last_dim(
+            self, A, rows=rows, cols=cols, eps=eps
+        )
 
     def customized(self, inputs: list[DTensor], bgraph: TBGraph) -> list[DTensor]:
         return self.cygraph.customized(inputs, bgraph.cygraph)
@@ -1287,38 +1408,15 @@ class KNGraph:
     ) -> DTensor:
         """
         GEMM followed by row-wise Softmax (COMET GEMM-Softmax fusion).
-        
-        Implements: softmax(A @ B, dim)
-        
-        This fusion keeps the GEMM output in on-chip memory for the softmax,
-        reducing DRAM traffic significantly.
-        
-        Args:
-            A: Left input tensor [M, K]
-            B: Right input tensor [K, N]
-            dim: Dimension for softmax (default: -1 for last dimension)
-        
-        Returns:
-            Output tensor with shape [M, N]
+
+        Implements: ``softmax(A @ B, dim)`` with numerically stable max-subtract
+        (PyTorch ``F.softmax`` aligned; not naive exp/sum/div).
         """
-        # GEMM
         C = self.cygraph.matmul(A, B)
-        
-        # Simplified softmax: exp -> sum -> div
-        # Note: For numerical stability, max subtraction should be done
-        # but we use the basic form here as the graph system may optimize it
-        actual_dim = dim if dim >= 0 else -1
-        
-        # exp
-        C_exp = self.cygraph.exp(C)
-        
-        # sum reduction along the softmax dimension
-        sum_exp = self.cygraph.reduction(C_exp, actual_dim)
-        
-        # div (normalize) - broadcasting handled by the graph system
-        result = self.cygraph.div(C_exp, sum_exp)
-        
-        return result
+        rows, cols = C.dim(0), C.dim(1)
+        return _kn_customized_tb_softmax_last_dim(
+            self, C, rows=rows, cols=cols, dim=dim
+        )
 
     def gemm_layernorm(
         self,
@@ -1329,29 +1427,17 @@ class KNGraph:
     ) -> DTensor:
         """
         GEMM followed by LayerNorm (COMET GEMM-LayerNorm fusion).
-        
-        Implements: LayerNorm(A @ B)
-        
-        This fusion keeps the GEMM output in on-chip memory for normalization,
-        reducing DRAM traffic.
-        
-        Args:
-            A: Left input tensor [M, K]
-            B: Right input tensor [K, N]
-            normalized_shape: Shape for normalization (typically (N,))
-            eps: Epsilon for numerical stability
-        
-        Returns:
-            Normalized output tensor with shape [M, N]
+
+        Implements: ``LayerNorm(A @ B)`` (``elementwise_affine=False``;
+        PyTorch ``F.layer_norm`` without weight/bias).
         """
-        # GEMM
         C = self.cygraph.matmul(A, B)
-        
-        # LayerNorm: (x - mean) / sqrt(var + eps)
-        # Using RMS norm as approximation (simpler, common in LLMs)
-        result = self.cygraph.rms_norm(C, normalized_shape)
-        
-        return result
+        rows, cols = C.dim(0), C.dim(1)
+        if len(normalized_shape) != 1 or int(normalized_shape[0]) != cols:
+            raise ValueError("normalized_shape must match matmul output last dim")
+        return _kn_customized_tb_layer_norm_last_dim(
+            self, C, rows=rows, cols=cols, eps=eps
+        )
 
     def self_attention(
         self,

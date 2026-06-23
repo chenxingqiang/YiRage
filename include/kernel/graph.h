@@ -105,10 +105,12 @@ public:
 
   // elementunary operator
   DTensor add(DTensor const &input1, DTensor const &input2);
+  DTensor sub(DTensor const &input1, DTensor const &input2);
   DTensor mul(DTensor const &input1, DTensor const &input2);
   DTensor div(DTensor const &input1, DTensor const &input2);
   DTensor pow(DTensor const &input1, DTensor const &input2);
   DTensor *add(DTensor const *input1, DTensor const *input2);
+  DTensor *sub(DTensor const *input1, DTensor const *input2);
   DTensor *mul(DTensor const *input1, DTensor const *input2);
   DTensor *div(DTensor const *input1, DTensor const *input2);
   DTensor *pow(DTensor const *input1, DTensor const *input2);
@@ -201,6 +203,10 @@ public:
   std::vector<DTensor> chunk(DTensor const &input, int chunk_size, int dim);
   int chunk(DTensor const *input, int chunk_size, int dim);
   KNOperator *create_chunk_op(DTensor const &input, int chunk_size, int dim);
+  // transpose operator (swap dims 0 and 1)
+  DTensor transpose01(DTensor const &input);
+  DTensor *transpose01(DTensor const *input);
+  KNOperator *create_transpose01_op(DTensor const &input);
   // customized operator
   std::vector<DTensor> customized(std::vector<DTensor> const &inputs,
                                   yirage::threadblock::Graph const &_graph);

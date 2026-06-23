@@ -59,6 +59,7 @@ def build_kn_binary(op_name: str) -> Builder:
         tb = _f16((8, 16), positive=True)
         ref_ops = {
             "add": lambda x, y: x + y,
+            "sub": lambda x, y: x - y,
             "mul": lambda x, y: x * y,
             "div": lambda x, y: x / y,
             "pow": lambda x, y: torch.pow(x.float(), y.float()).to(torch.float16),
@@ -263,6 +264,18 @@ def build_kn_chunk(dim: int) -> Builder:
     return _build
 
 
+def build_kn_transpose_01() -> Builder:
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.transpose(x, dim0=0, dim1=1))
+        inp = _f16((8, 16))
+        ref = inp.transpose(0, 1).contiguous()
+        return g, [inp], ref
+
+    return _build
+
+
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_rms_norm_op": build_kn_rms_norm(),
@@ -277,6 +290,7 @@ KN_OP_BUILDERS = {
     "kn_clamp_op": build_kn_clamp(),
     "kn_mul_scalar_op": build_kn_mul_scalar(),
     "kn_add_op": build_kn_binary("add"),
+    "kn_sub_op": build_kn_binary("sub"),
     "kn_mul_op": build_kn_binary("mul"),
     "kn_div_op": build_kn_binary("div"),
     "kn_pow_op": build_kn_binary("pow"),
@@ -292,6 +306,7 @@ KN_OP_BUILDERS = {
     "kn_chunk_0_op": build_kn_chunk(0),
     "kn_chunk_1_op": build_kn_chunk(1),
     "kn_chunk_2_op": build_kn_chunk(2),
+    "kn_transpose_01_op": build_kn_transpose_01(),
 }
 
 def build_kn_unfused_rms_matmul() -> Builder:
@@ -314,10 +329,77 @@ def build_kn_unfused_rms_matmul() -> Builder:
     return _build
 
 
+    return _build
+
+
+def build_kn_softmax() -> Builder:
+    """KN softmax via stable TB reduction_max path (general ML, not LLM-only)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.softmax(x, dim=-1))
+        inp = _f16((8, 16))
+        ref = torch.nn.functional.softmax(inp.float(), dim=-1).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_layer_norm() -> Builder:
+    """KN layer_norm (elementwise_affine=False; eps=0 matches TB sqrt(var) path)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.layer_norm(x, normalized_shape=(16,), eps=0.0))
+        inp = _f16((8, 16))
+        ref = torch.nn.functional.layer_norm(inp.float(), (16,), eps=0.0).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_gemm_softmax() -> Builder:
+    """COMET gemm_softmax compound op vs torch matmul + F.softmax."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_softmax(a, b, dim=-1))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.softmax(c, dim=-1).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm() -> Builder:
+    """COMET gemm_layernorm compound op vs torch matmul + F.layer_norm (eps=0)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.layer_norm(c, (16,), eps=0.0).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul": build_customized_tb_matmul(),
     "customized_tb_exp": build_customized_tb_exp(),
     "customized_tb_matmul_add_bias": build_customized_tb_matmul_add_bias(),
+    "kn_softmax": build_kn_softmax(),
+    "kn_layer_norm": build_kn_layer_norm(),
+    "gemm_softmax": build_gemm_softmax(),
+    "gemm_layernorm": build_gemm_layernorm(),
 }
 
 FAST_PATH_BUILDERS = {

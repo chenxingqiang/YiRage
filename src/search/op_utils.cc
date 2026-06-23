@@ -60,11 +60,11 @@ bool is_unary(type::TBOperatorType op) {
 bool is_binary(type::KNOperatorType op) {
   std::unordered_set<type::KNOperatorType> true_values{
       type::KNOperatorType::KN_ADD_OP,
+      type::KNOperatorType::KN_SUB_OP,
       type::KNOperatorType::KN_MUL_OP,
       type::KNOperatorType::KN_MATMUL_OP,
       type::KNOperatorType::KN_DIV_OP,
       type::KNOperatorType::KN_POW_OP,
-      type::KNOperatorType::KN_MUL_OP,
       type::KNOperatorType::KN_CONCAT_0_OP,
       type::KNOperatorType::KN_CONCAT_1_OP,
       type::KNOperatorType::KN_CONCAT_2_OP,
@@ -95,6 +95,7 @@ bool is_unary(type::KNOperatorType op) {
       type::KNOperatorType::KN_CHUNK_0_OP,
       type::KNOperatorType::KN_CHUNK_1_OP,
       type::KNOperatorType::KN_CHUNK_2_OP,
+      type::KNOperatorType::KN_TRANSPOSE_01_OP,
   };
   return contains(true_values, op);
 }
@@ -171,6 +172,8 @@ KNOperator *create_op(kernel::Graph &g,
       }
       return g.create_chunk_op(input, 2, dim);
     }
+    case type::KNOperatorType::KN_TRANSPOSE_01_OP:
+      return g.create_transpose01_op(input);
     default:
       assert(false && "Unsupported operator");
   }
@@ -185,6 +188,7 @@ KNOperator *create_op(kernel::Graph &g,
       return g.create_matmul_op(input1, input2);
     case type::KNOperatorType::KN_DIV_OP:
     case type::KNOperatorType::KN_ADD_OP:
+    case type::KNOperatorType::KN_SUB_OP:
     case type::KNOperatorType::KN_MUL_OP:
     case type::KNOperatorType::KN_POW_OP:
       return g.create_elementbinary_op(input1, input2, type);

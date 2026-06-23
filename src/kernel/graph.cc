@@ -283,6 +283,7 @@ void from_json(json const &j, Graph &g) {
       }
       case type::KNOperatorType::KN_DIV_OP:
       case type::KNOperatorType::KN_ADD_OP:
+      case type::KNOperatorType::KN_SUB_OP:
       case type::KNOperatorType::KN_MUL_OP:
       case type::KNOperatorType::KN_POW_OP: {
         size_t guidA, guidB, guidO;
@@ -383,6 +384,14 @@ void from_json(json const &j, Graph &g) {
           jop.at("output_tensors")[i].at("guid").get_to(guidO);
           guid_mapping[outputs[i].guid] = guidO;
         }
+        break;
+      }
+      case type::KNOperatorType::KN_TRANSPOSE_01_OP: {
+        size_t guid, guidO;
+        jop.at("input_tensors")[0].at("guid").get_to(guid);
+        jop.at("output_tensors")[0].at("guid").get_to(guidO);
+        DTensor const &output = g.transpose01(get_tensor_from_guid(guid));
+        guid_mapping[output.guid] = guidO;
         break;
       }
       case type::KNOperatorType::KN_CUSTOMIZED_OP: {
