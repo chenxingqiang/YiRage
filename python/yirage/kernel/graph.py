@@ -1182,6 +1182,11 @@ class KNGraph:
         """Load best matching muGraph from ~/.yirage/mugraphs/ if graph_json is stored."""
         graph_hash = hex(self.cygraph.get_owner_independent_hash())[2:]
 
+        input_shapes = []
+        for t in self.cygraph.get_input_dtensors():
+            dims, _ = self.cygraph.get_input_dtensor_shape_and_stride(t)
+            input_shapes.append(list(dims))
+
         entry = find_mugraph(
             graph_hash,
             backend,
@@ -1193,7 +1198,7 @@ class KNGraph:
             franges=franges,
         )
         if entry is None or not entry.graph_json:
-            entry = find_best_mugraph(graph_hash, backend)
+            entry = find_best_mugraph(graph_hash, backend, input_shapes=input_shapes)
         if entry is None or not entry.graph_json:
             return None
 
@@ -1204,6 +1209,8 @@ class KNGraph:
         print("✓ Restored muGraph from persistent storage (skipped search)")
         print(f"  - Backend: {entry.metadata.backend}")
         print(f"  - Latency: {entry.metadata.latency_ms:.4f} ms")
+        if entry.metadata.input_shapes:
+            print(f"  - Input shapes: {entry.metadata.input_shapes}")
         print(f"  - Stored at: {entry.metadata.created_at}")
         return restored
 
