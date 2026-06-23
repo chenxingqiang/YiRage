@@ -176,6 +176,8 @@ def get_kn_operator_type_string(int op_type):
         return "kn_chunk_2_op"
     elif op_type == KN_TRANSPOSE_01_OP:
         return "kn_transpose_01_op"
+    elif op_type == KN_CONV2D_OP:
+        return "kn_conv2d_op"
     elif op_type == KN_SPLIT_LAST_OP_ID:
         return "kn_split_last_op_id"
     elif op_type == KN_ALLREDUCE_OP:
@@ -867,6 +869,30 @@ cdef class CyKNGraph:
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
         return DTensor(t)
 
+    def conv2d(self,
+               DTensor input,
+               DTensor weight,
+               int stride_h=1,
+               int stride_w=1,
+               int padding_h=0,
+               int padding_w=0,
+               int dilation_h=1,
+               int dilation_w=1):
+        cdef CppDTensor* ptr = self.p_kgraph.conv2d(input.c_ptr,
+                                                  weight.c_ptr,
+                                                  stride_h,
+                                                  stride_w,
+                                                  padding_h,
+                                                  padding_w,
+                                                  dilation_h,
+                                                  dilation_w)
+        if ptr == NULL:
+            raise ValueError(
+                "conv2d failed: expect NCHW input and OIHW weight with matching in_channels"
+            )
+        t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
+        return DTensor(t)
+
     def customized(self, list inputs, CyTBGraph bgraph):
         cdef vector[const CppDTensor*] cinputs
         cinputs.resize(len(inputs))
@@ -974,6 +1000,12 @@ cdef class CyKNGraph:
         cdef float min_val = 0.0
         cdef float max_val = 0.0
         cdef float scalar = 0.0
+        cdef int stride_h = 0
+        cdef int stride_w = 0
+        cdef int padding_h = 0
+        cdef int padding_w = 0
+        cdef int dilation_h = 0
+        cdef int dilation_w = 0
         if op.op_type == "kn_customized_op":
             return {
                 "op_type": op.op_type,
@@ -994,6 +1026,20 @@ cdef class CyKNGraph:
             elif op.op_type == "kn_mul_scalar_op":
                 if kn_operator_mul_scalar_value(op.c_ptr, &scalar):
                     ans["scalar"] = scalar
+            elif op.op_type == "kn_conv2d_op":
+                if kn_operator_conv2d_params(op.c_ptr,
+                                             &stride_h,
+                                             &stride_w,
+                                             &padding_h,
+                                             &padding_w,
+                                             &dilation_h,
+                                             &dilation_w):
+                    ans["stride_h"] = stride_h
+                    ans["stride_w"] = stride_w
+                    ans["padding_h"] = padding_h
+                    ans["padding_w"] = padding_w
+                    ans["dilation_h"] = dilation_h
+                    ans["dilation_w"] = dilation_w
             return ans
 
     def get_graph_structure(self):
