@@ -26,6 +26,7 @@ kn_ops:
   kn_relu_op: { tier: supported, layer: kn }
   kn_log_op: { tier: supported, layer: kn }
   kn_add_op: { tier: supported, layer: kn }
+  kn_sub_op: { tier: supported, layer: kn }
   kn_mul_op: { tier: supported, layer: kn }
   kn_div_op: { tier: supported, layer: kn }
   kn_pow_op: { tier: supported, layer: kn }
@@ -213,6 +214,7 @@ search_cpu_default_explore:
     - kn_reduction_1_op
     - kn_reduction_2_op
     - kn_add_op
+    - kn_sub_op
     - kn_mul_op
     - kn_div_op
     - kn_pow_op

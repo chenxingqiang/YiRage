@@ -283,6 +283,7 @@ void from_json(json const &j, Graph &g) {
       }
       case type::KNOperatorType::KN_DIV_OP:
       case type::KNOperatorType::KN_ADD_OP:
+      case type::KNOperatorType::KN_SUB_OP:
       case type::KNOperatorType::KN_MUL_OP:
       case type::KNOperatorType::KN_POW_OP: {
         size_t guidA, guidB, guidO;

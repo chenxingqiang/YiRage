@@ -29,6 +29,7 @@ _CPP_CPU_KN_EXPLORE = sorted(
         "kn_reduction_1_op",
         "kn_reduction_2_op",
         "kn_add_op",
+        "kn_sub_op",
         "kn_mul_op",
         "kn_div_op",
         "kn_pow_op",

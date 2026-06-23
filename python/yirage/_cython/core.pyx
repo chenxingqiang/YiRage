@@ -140,6 +140,8 @@ def get_kn_operator_type_string(int op_type):
         return "kn_div_op"
     elif op_type == KN_POW_OP:
         return "kn_pow_op"
+    elif op_type == KN_SUB_OP:
+        return "kn_sub_op"
     elif op_type == KN_REDUCTION_0_OP:
         return "kn_reduction_0_op"
     elif op_type == KN_REDUCTION_1_OP:
@@ -792,6 +794,11 @@ cdef class CyKNGraph:
 
     def add(self, DTensor A, DTensor B):
         cdef CppDTensor* ptr = self.p_kgraph.add(A.c_ptr, B.c_ptr)
+        t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
+        return DTensor(t)
+
+    def sub(self, DTensor A, DTensor B):
+        cdef CppDTensor* ptr = self.p_kgraph.sub(A.c_ptr, B.c_ptr)
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
         return DTensor(t)
 

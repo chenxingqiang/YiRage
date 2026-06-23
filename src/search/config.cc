@@ -28,6 +28,7 @@ GeneratorConfig GeneratorConfig::get_cpu_search_config() {
       type::KN_REDUCTION_1_OP,
       type::KN_REDUCTION_2_OP,
       type::KN_ADD_OP,
+      type::KN_SUB_OP,
       type::KN_MUL_OP,
       type::KN_DIV_OP,
       type::KN_POW_OP,

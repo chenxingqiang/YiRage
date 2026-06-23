@@ -51,6 +51,8 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
                                     abstract_expr_make_mul(opds[0], opds[1]));
     case type::KNOperatorType::KN_ADD_OP:
       return abstract_expr_make_add(opds[0], opds[1]);
+    case type::KNOperatorType::KN_SUB_OP:
+      return abstract_expr_make_sub(opds[0], opds[1]);
     case type::KNOperatorType::KN_DIV_OP:
       return abstract_expr_make_div(opds[0], opds[1]);
     case type::KNOperatorType::KN_MUL_OP:
@@ -496,6 +498,10 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
     case type::KNOperatorType::KN_ADD_OP: {
       assert(opds.size() == 2);
       return abstract_expr_make_add(opds[0], opds[1]);
+    }
+    case type::KNOperatorType::KN_SUB_OP: {
+      assert(opds.size() == 2);
+      return abstract_expr_make_sub(opds[0], opds[1]);
     }
     case type::KNOperatorType::KN_EXP_OP: {
       assert(opds.size() == 1);

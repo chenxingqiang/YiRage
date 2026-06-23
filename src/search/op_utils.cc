@@ -60,11 +60,11 @@ bool is_unary(type::TBOperatorType op) {
 bool is_binary(type::KNOperatorType op) {
   std::unordered_set<type::KNOperatorType> true_values{
       type::KNOperatorType::KN_ADD_OP,
+      type::KNOperatorType::KN_SUB_OP,
       type::KNOperatorType::KN_MUL_OP,
       type::KNOperatorType::KN_MATMUL_OP,
       type::KNOperatorType::KN_DIV_OP,
       type::KNOperatorType::KN_POW_OP,
-      type::KNOperatorType::KN_MUL_OP,
       type::KNOperatorType::KN_CONCAT_0_OP,
       type::KNOperatorType::KN_CONCAT_1_OP,
       type::KNOperatorType::KN_CONCAT_2_OP,
@@ -185,6 +185,7 @@ KNOperator *create_op(kernel::Graph &g,
       return g.create_matmul_op(input1, input2);
     case type::KNOperatorType::KN_DIV_OP:
     case type::KNOperatorType::KN_ADD_OP:
+    case type::KNOperatorType::KN_SUB_OP:
     case type::KNOperatorType::KN_MUL_OP:
     case type::KNOperatorType::KN_POW_OP:
       return g.create_elementbinary_op(input1, input2, type);

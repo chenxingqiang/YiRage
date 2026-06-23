@@ -1009,6 +1009,9 @@ def _interpret_mugraph_on_cpu_impl(cygraph, input_tensors):
         elif ot == "kn_add_op":
             tensor_map[out_guids[0]] = ins[0] + ins[1]
 
+        elif ot == "kn_sub_op":
+            tensor_map[out_guids[0]] = ins[0] - ins[1]
+
         elif ot == "kn_mul_op":
             tensor_map[out_guids[0]] = ins[0] * ins[1]
 
@@ -1184,6 +1187,9 @@ class KNGraph:
 
     def add(self, A: DTensor, B: DTensor):
         return self.cygraph.add(A, B)
+
+    def sub(self, A: DTensor, B: DTensor):
+        return self.cygraph.sub(A, B)
 
     def mul(self, A: DTensor, B: DTensor):
         return self.cygraph.mul(A, B)

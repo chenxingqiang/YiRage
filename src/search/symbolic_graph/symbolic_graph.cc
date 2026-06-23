@@ -607,6 +607,7 @@ bool SymbolicKNGraph::add_operator(type::KNOperatorType op_type,
                                    std::vector<int> input_indices) {
   switch (op_type) {
     case type::KNOperatorType::KN_ADD_OP:
+    case type::KNOperatorType::KN_SUB_OP:
     case type::KNOperatorType::KN_MUL_OP:
     case type::KNOperatorType::KN_DIV_OP: {
       assert(input_indices.size() == 2);

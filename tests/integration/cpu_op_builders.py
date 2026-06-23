@@ -59,6 +59,7 @@ def build_kn_binary(op_name: str) -> Builder:
         tb = _f16((8, 16), positive=True)
         ref_ops = {
             "add": lambda x, y: x + y,
+            "sub": lambda x, y: x - y,
             "mul": lambda x, y: x * y,
             "div": lambda x, y: x / y,
             "pow": lambda x, y: torch.pow(x.float(), y.float()).to(torch.float16),
@@ -277,6 +278,7 @@ KN_OP_BUILDERS = {
     "kn_clamp_op": build_kn_clamp(),
     "kn_mul_scalar_op": build_kn_mul_scalar(),
     "kn_add_op": build_kn_binary("add"),
+    "kn_sub_op": build_kn_binary("sub"),
     "kn_mul_op": build_kn_binary("mul"),
     "kn_div_op": build_kn_binary("div"),
     "kn_pow_op": build_kn_binary("pow"),

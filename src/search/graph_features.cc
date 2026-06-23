@@ -381,7 +381,7 @@ MuGraphFeatures GraphFeatureExtractor::extract_from_kernel_graph(
                    op->op_type <= type::KN_REDUCTION_2_OP) {
             num_reductions++;
         } else if (op->op_type >= type::KN_ADD_OP && 
-                   op->op_type <= type::KN_POW_OP) {
+                   op->op_type <= type::KN_SUB_OP) {
             num_elementwise++;
         }
         
