@@ -1474,9 +1474,12 @@ class KNGraph:
         Q: DTensor,
         K: DTensor,
         V: DTensor,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
     ) -> DTensor:
         """
-        Self-attention compound op (COMET): ``softmax(Q @ K, dim=-1) @ V``.
+        Self-attention compound op (COMET): ``softmax(scale * Q @ K, dim=-1) @ V``.
 
         Uses the same stable TB softmax path as :meth:`softmax` / :meth:`gemm_softmax`
         (``reduction_max`` subtract), not naive ``exp / sum``.
@@ -1485,6 +1488,8 @@ class KNGraph:
             Q: Query ``[S, D]``
             K: Key already transposed for ``Q @ K`` — ``[D, S]``
             V: Value ``[S, D]``
+            scale: Optional multiplier applied to ``Q @ K`` before softmax.
+            head_dim: When set, uses ``scale = 1 / sqrt(head_dim)`` (standard dot-product attention).
 
         Returns:
             Attention output ``[S, D]``
@@ -1495,6 +1500,10 @@ class KNGraph:
                 "K must be transposed ([D, S]) for Q @ K"
             )
         QK = self.cygraph.matmul(Q, K)
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        if scale is not None:
+            QK = self.mul_scalar(QK, float(scale))
         rows, cols = QK.dim(0), QK.dim(1)
         QK_norm = _kn_customized_tb_softmax_last_dim(
             self, QK, rows=rows, cols=cols, dim=-1

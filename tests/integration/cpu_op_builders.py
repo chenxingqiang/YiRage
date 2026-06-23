@@ -427,6 +427,26 @@ def build_self_attention() -> Builder:
     return _build
 
 
+def build_self_attention_scaled() -> Builder:
+    """Scaled self_attention: softmax(Q @ K / sqrt(d)) @ V (standard dot-product attention)."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention(q, k, v, head_dim=dim))
+        tq, tk, tv = _f16((seq, dim)), _f16((dim, seq)), _f16((seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq.float(), tk.float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul": build_customized_tb_matmul(),
     "customized_tb_exp": build_customized_tb_exp(),
@@ -436,6 +456,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_softmax": build_gemm_softmax(),
     "gemm_layernorm": build_gemm_layernorm(),
     "self_attention": build_self_attention(),
+    "self_attention_scaled": build_self_attention_scaled(),
 }
 
 FAST_PATH_BUILDERS = {
