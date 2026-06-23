@@ -232,6 +232,13 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
       // Placeholder degree for search; runtime uses elementwise max.
       return abstract_expr_make_red(forloop_range, opds[0]);
     }
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
+      return abstract_expr_make_red(forloop_range, opds[0]);
+    }
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+      return abstract_expr_make_red(
+          forloop_range * tensors[0].dim[tensors[0].num_dims - 1], opds[0]);
+    }
     case type::TBOperatorType::TB_MATMUL_OP:
       return abstract_expr_make_red(tensors[0].dim[tensors[0].num_dims - 1],
                                     abstract_expr_make_mul(opds[0], opds[1]));
@@ -431,6 +438,18 @@ std::shared_ptr<AbstractExpr const> get_abstract_expr(
     case type::TBOperatorType::TB_FORLOOP_ACCUM_MAX_OP: {
       assert(opds.size() == 1);
       return abstract_expr_make_red(g.forloop_range, opds[0]);
+    }
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
+      assert(opds.size() == 2);
+      return abstract_expr_make_red(g.forloop_range, opds[0]);
+    }
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+      assert(opds.size() == 2);
+      std::shared_ptr<TensorDimExpr const> reduction_size_expr =
+          dim_expr_make_mul(
+              g.forloop_range.dim_expr,
+              tensors[0].dims[tensors[0].dims.size() - 1].dim_expr);
+      return abstract_expr_make_red(reduction_size_expr, opds[0]);
     }
     case type::TBOperatorType::TB_REDUCTION_0_OP:
       return abstract_expr_make_red(tensors[0].dims[0], opds[0]);

@@ -86,6 +86,8 @@ GeneratorConfig GeneratorConfig::get_cpu_search_config() {
       type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP,
       type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP,
       type::TB_FORLOOP_ACCUM_MAX_OP,
+      type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP,
+      type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP,
   };
   // Expands to concat+concat+matmul (all CPU-supported after Loop R14/R15).
   config.enable_concat_matmul_transformation();

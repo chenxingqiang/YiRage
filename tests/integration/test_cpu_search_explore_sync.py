@@ -89,6 +89,8 @@ _CPP_CPU_TB_EXPLORE = sorted(
         "tb_forloop_accum_red_ld_rms_op",
         "tb_forloop_accum_redtox_ld_sum_op",
         "tb_forloop_accum_max_op",
+        "tb_forloop_accum_no_red_rescale_op",
+        "tb_forloop_accum_red_ld_sum_rescale_op",
     ]
 )
 

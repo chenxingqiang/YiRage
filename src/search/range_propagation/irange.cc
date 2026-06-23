@@ -831,6 +831,17 @@ ITBRange forward_propagate(ITBRange const &tbrange,
       ret = ret.extend_forloop_dim();
       break;
     }
+    case type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
+      ret = tbrange.extend_forloop_dim();
+      break;
+    }
+    case type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+      ret = ITBRange(
+          tbrange.range_set.extend_dim(op.output_tensors[0].num_dims - 1)
+              .truncate(op.output_tensors[0]));
+      ret = ret.extend_forloop_dim();
+      break;
+    }
     case type::TB_INPUT_OP:
     case type::TB_OUTPUT_OP: {
       assert(false && "Invalid Operator Type (should be handled elsewhere)");
@@ -970,6 +981,17 @@ ITBRange backward_propagate(ITBRange const &tbrange,
     case type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP:
     case type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP:
     case type::TB_FORLOOP_ACCUM_REDTOX_LD_SUM_OP: {
+      ret = ITBRange(
+          tbrange.range_set.extend_dim(op.input_tensors[opd_idx].num_dims - 1)
+              .truncate(op.input_tensors[opd_idx]));
+      ret = ret.extend_forloop_dim();
+      break;
+    }
+    case type::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
+      ret = tbrange.extend_forloop_dim();
+      break;
+    }
+    case type::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
       ret = ITBRange(
           tbrange.range_set.extend_dim(op.input_tensors[opd_idx].num_dims - 1)
               .truncate(op.input_tensors[opd_idx]));

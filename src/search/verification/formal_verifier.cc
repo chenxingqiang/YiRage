@@ -295,6 +295,23 @@ std::vector<std::string>
                                "(sum " + a + " " + data_dim[0] + ")");
           break;
         }
+        case type::TBOperatorType::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP: {
+          std::string a = tensor_exprs.at(op->input_tensors[0].guid);
+          if (graph.forloop_range > 1) {
+            a = "(reduce " + a + " " + df + ")";
+          }
+          tensor_exprs.emplace(op->output_tensors[0].guid, a);
+          break;
+        }
+        case type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+          std::string a = tensor_exprs.at(op->input_tensors[0].guid);
+          if (graph.forloop_range > 1) {
+            a = "(reduce " + a + " " + df + ")";
+          }
+          tensor_exprs.emplace(op->output_tensors[0].guid,
+                               "(sum " + a + " " + data_dim[0] + ")");
+          break;
+        }
         case type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_MEAN_OP: {
           std::string a = tensor_exprs.at(op->input_tensors[0].guid);
           if (graph.forloop_range > 1) {
