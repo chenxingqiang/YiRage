@@ -1832,6 +1832,18 @@ class KNGraph:
             self, C, rows=rows, cols=cols, eps=eps
         )
 
+    def gemm_gelu(
+        self,
+        A: DTensor,
+        B: DTensor,
+    ) -> DTensor:
+        """
+        GEMM followed by GELU (FFN up-projection fusion pattern).
+
+        Implements: ``GELU(A @ B)`` (PyTorch ``F.gelu`` aligned).
+        """
+        return self.gelu(self.cygraph.matmul(A, B))
+
     def self_attention(
         self,
         Q: DTensor,

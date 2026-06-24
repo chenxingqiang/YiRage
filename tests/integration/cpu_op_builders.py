@@ -764,6 +764,22 @@ def build_gemm_layernorm() -> Builder:
     return _build
 
 
+def build_gemm_gelu() -> Builder:
+    """COMET-style gemm_gelu compound op vs torch matmul + F.gelu."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_gelu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.gelu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_self_attention() -> Builder:
     """COMET self_attention: softmax(Q @ K) @ V with stable TB softmax (K transposed)."""
 
@@ -883,6 +899,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_layer_norm": build_kn_layer_norm(),
     "gemm_softmax": build_gemm_softmax(),
     "gemm_layernorm": build_gemm_layernorm(),
+    "gemm_gelu": build_gemm_gelu(),
     "self_attention": build_self_attention(),
     "self_attention_scaled": build_self_attention_scaled(),
     "self_attention_online": build_self_attention_online(),

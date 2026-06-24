@@ -37,6 +37,7 @@ def _force_kn_interpreter(monkeypatch):
         "kn_layer_norm",
         "gemm_softmax",
         "gemm_layernorm",
+        "gemm_gelu",
         "self_attention",
         "self_attention_scaled",
         "self_attention_online",
