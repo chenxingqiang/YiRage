@@ -1974,6 +1974,32 @@ class KNGraph:
             )
         return self.add(out, bias)
 
+    def gemm_bias_relu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        bias: DTensor,
+    ) -> DTensor:
+        """
+        GEMM + bias + ReLU (``F.relu(A @ B + bias)`` aligned).
+
+        Same tensor contracts as :meth:`gemm_bias`.
+        """
+        return self.relu(self.gemm_bias(A, B, bias))
+
+    def gemm_bias_gelu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        bias: DTensor,
+    ) -> DTensor:
+        """
+        GEMM + bias + GELU (``F.gelu(A @ B + bias)`` aligned).
+
+        Same tensor contracts as :meth:`gemm_bias`.
+        """
+        return self.gelu(self.gemm_bias(A, B, bias))
+
     def self_attention(
         self,
         Q: DTensor,
