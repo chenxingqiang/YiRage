@@ -39,6 +39,7 @@ def _force_kn_interpreter(monkeypatch):
         "gemm_layernorm",
         "self_attention",
         "self_attention_scaled",
+        "self_attention_online",
         "self_attention_multi_head",
         "self_attention_batched",
         "conv2d_bias",
