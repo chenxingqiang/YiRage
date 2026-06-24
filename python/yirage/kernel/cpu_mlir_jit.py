@@ -101,8 +101,12 @@ def rms_matmul_shapes_from_cygraph(cygraph) -> Optional[Tuple[int, int, int]]:
     inputs = cygraph.get_input_dtensors()
     if len(inputs) != 2:
         return None
-    (m, k), _ = _tensor_shape_dtype(cygraph, inputs[0])
-    (k2, n), _ = _tensor_shape_dtype(cygraph, inputs[1])
+    shape0, _ = _tensor_shape_dtype(cygraph, inputs[0])
+    shape1, _ = _tensor_shape_dtype(cygraph, inputs[1])
+    if len(shape0) != 2 or len(shape1) != 2:
+        return None
+    m, k = shape0
+    k2, n = shape1
     if k != k2:
         return None
     return m, k, n

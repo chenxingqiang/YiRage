@@ -40,6 +40,7 @@ def _force_kn_interpreter(monkeypatch):
         "self_attention",
         "self_attention_scaled",
         "self_attention_multi_head",
+        "self_attention_batched",
     ],
 )
 def test_general_ml_compound_patterns_match_pytorch(pattern: str):
