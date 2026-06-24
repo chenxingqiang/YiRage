@@ -342,6 +342,70 @@ def build_conv2d_bias() -> Builder:
     return _build
 
 
+def build_conv2d_bias_groups() -> Builder:
+    """Grouped conv2d + bias (groups=2)."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias(
+                x,
+                w,
+                b,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        inp_b = _f16((1, 8, 1, 1))
+        ref = torch.nn.functional.conv2d(
+            inp_x,
+            inp_w,
+            bias=inp_b.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            dilation=(1, 1),
+            groups=groups,
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_depthwise_bias() -> Builder:
+    """Depthwise conv2d + bias (groups = in_channels)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_depthwise_bias(x, w, b, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((4, 1, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.conv2d(
+            inp_x,
+            inp_w,
+            bias=inp_b.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            groups=4,
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_rms_norm_op": build_kn_rms_norm(),
@@ -559,6 +623,8 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_batched": build_self_attention_batched(),
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_groups": build_kn_conv2d_groups(),
+    "conv2d_bias_groups": build_conv2d_bias_groups(),
+    "conv2d_depthwise_bias": build_conv2d_depthwise_bias(),
 }
 
 FAST_PATH_BUILDERS = {

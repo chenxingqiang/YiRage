@@ -1381,6 +1381,38 @@ class KNGraph:
             )
         return self.add(out, bias)
 
+    def conv2d_depthwise_bias(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d with bias (``groups = in_channels``).
+
+        Expects weight ``[C, 1, kH, kW]`` and input ``[N, C, H, W]``.
+        """
+        if input.num_dims != 4 or weight.num_dims != 4:
+            raise ValueError("conv2d_depthwise_bias expects 4D input and weight")
+        in_c = input.dim(1)
+        if weight.dim(0) != in_c or weight.dim(1) != 1:
+            raise ValueError(
+                f"depthwise weight must be [C, 1, kH, kW], got "
+                f"[{weight.dim(0)}, {weight.dim(1)}, ...]"
+            )
+        return self.conv2d_bias(
+            input,
+            weight,
+            bias,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=in_c,
+        )
+
     def rms_norm(self, A: DTensor, normalized_shape: tuple):
         return self.cygraph.rms_norm(A, normalized_shape)
 
