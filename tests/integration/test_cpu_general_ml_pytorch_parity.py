@@ -41,6 +41,7 @@ def _force_kn_interpreter(monkeypatch):
         "gemm_silu",
         "gemm_relu",
         "gated_mlp",
+        "rms_norm_linear",
         "self_attention",
         "self_attention_scaled",
         "self_attention_online",
