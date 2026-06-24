@@ -49,9 +49,11 @@ def _force_kn_interpreter(monkeypatch):
         "conv2d_bias_groups",
         "conv2d_depthwise_bias",
         "conv2d_depthwise_bias_relu",
+        "conv2d_depthwise_bias_gelu",
         "conv2d_separable",
         "conv2d_separable_bias",
         "conv2d_separable_bias_relu",
+        "conv2d_separable_bias_gelu",
     ],
 )
 def test_general_ml_compound_patterns_match_pytorch(pattern: str):
