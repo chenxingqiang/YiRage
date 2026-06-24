@@ -1949,6 +1949,31 @@ class KNGraph:
         """
         return self.relu(self.cygraph.matmul(A, B))
 
+    def gemm_bias(
+        self,
+        A: DTensor,
+        B: DTensor,
+        bias: DTensor,
+    ) -> DTensor:
+        """
+        GEMM with broadcast bias (linear layer fusion pattern).
+
+        Implements: ``A @ B + bias`` with ``bias`` broadcastable to the matmul output
+        (typically ``[1, N]`` for output ``[M, N]``).
+
+        Args:
+            A: Left operand ``[M, K]``
+            B: Right operand ``[K, N]``
+            bias: Broadcastable bias (use ``[1, N]`` for row-wise add on ``[M, N]``)
+        """
+        out = self.cygraph.matmul(A, B)
+        if bias.num_dims != out.num_dims:
+            raise ValueError(
+                f"gemm_bias: bias must have {out.num_dims} dims for broadcast add, "
+                f"got bias.num_dims={bias.num_dims} (use [1, N])"
+            )
+        return self.add(out, bias)
+
     def self_attention(
         self,
         Q: DTensor,
