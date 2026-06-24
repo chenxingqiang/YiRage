@@ -1336,6 +1336,36 @@ class KNGraph:
         dh, dw = int(dilation[0]), int(dilation[1])
         return self.cygraph.conv2d(input, weight, sh, sw, ph, pw, dh, dw)
 
+    def conv2d_bias(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Conv2d with per-output-channel bias (``F.conv2d(..., bias=...)`` aligned).
+
+        Args:
+            input: NCHW ``[N, C, H, W]``
+            weight: OIHW ``[O, C, kH, kW]``
+            bias: Broadcastable NCHW bias, typically ``[1, O, 1, 1]`` (KN add requires
+                matching rank; PyTorch ``[O]`` bias is applied at runtime reference only)
+            stride, padding, dilation: Same as :meth:`conv2d`.
+
+        Returns:
+            NCHW output with bias added.
+        """
+        out = self.conv2d(input, weight, stride=stride, padding=padding, dilation=dilation)
+        if bias.num_dims != out.num_dims:
+            raise ValueError(
+                f"conv2d_bias: bias must have {out.num_dims} dims for broadcast add, "
+                f"got bias.num_dims={bias.num_dims} (use [1, O, 1, 1])"
+            )
+        return self.add(out, bias)
+
     def rms_norm(self, A: DTensor, normalized_shape: tuple):
         return self.cygraph.rms_norm(A, normalized_shape)
 
