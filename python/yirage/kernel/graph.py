@@ -1413,6 +1413,79 @@ class KNGraph:
             groups=in_c,
         )
 
+    def conv2d_separable(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d: depthwise conv followed by 1×1 pointwise conv.
+
+        Typical MobileNet-style block:
+        ``conv2d(conv2d(x, dw, groups=C_in), pw)`` with ``dw`` shape ``[C_in, 1, kH, kW]``
+        and ``pw`` shape ``[C_out, C_in, 1, 1]``.
+        """
+        if input.num_dims != 4:
+            raise ValueError("conv2d_separable expects 4D NCHW input")
+        in_c = input.dim(1)
+        hidden = self.conv2d(
+            input,
+            depthwise_weight,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=in_c,
+        )
+        return self.conv2d(
+            hidden,
+            pointwise_weight,
+            stride=(1, 1),
+            padding=(0, 0),
+            dilation=(1, 1),
+            groups=1,
+        )
+
+    def conv2d_separable_bias(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        depthwise_bias: DTensor,
+        pointwise_bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """Separable conv2d with per-stage NCHW broadcast biases ``[1, C, 1, 1]``."""
+        if input.num_dims != 4:
+            raise ValueError("conv2d_separable_bias expects 4D NCHW input")
+        in_c = input.dim(1)
+        hidden = self.conv2d_depthwise_bias(
+            input,
+            depthwise_weight,
+            depthwise_bias,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+        )
+        out = self.conv2d(
+            hidden,
+            pointwise_weight,
+            stride=(1, 1),
+            padding=(0, 0),
+            dilation=(1, 1),
+            groups=1,
+        )
+        if pointwise_bias.num_dims != out.num_dims:
+            raise ValueError(
+                f"pointwise_bias must have {out.num_dims} dims (use [1, C_out, 1, 1])"
+            )
+        return self.add(out, pointwise_bias)
+
     def rms_norm(self, A: DTensor, normalized_shape: tuple):
         return self.cygraph.rms_norm(A, normalized_shape)
 
