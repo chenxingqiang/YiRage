@@ -299,9 +299,14 @@ def matmul_chain_shapes_from_cygraph(
     inputs = cygraph.get_input_dtensors()
     if len(inputs) != 3:
         return None
-    (m, k), _ = _tensor_shape_dtype(cygraph, inputs[0])
-    (k2, kmid), _ = _tensor_shape_dtype(cygraph, inputs[1])
-    (kmid2, n), _ = _tensor_shape_dtype(cygraph, inputs[2])
+    shape0, _ = _tensor_shape_dtype(cygraph, inputs[0])
+    shape1, _ = _tensor_shape_dtype(cygraph, inputs[1])
+    shape2, _ = _tensor_shape_dtype(cygraph, inputs[2])
+    if len(shape0) != 2 or len(shape1) != 2 or len(shape2) != 2:
+        return None
+    m, k = shape0
+    k2, kmid = shape1
+    kmid2, n = shape2
     if k != k2 or kmid != kmid2:
         return None
     return m, k, kmid, n

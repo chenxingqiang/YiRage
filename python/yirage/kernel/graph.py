@@ -329,11 +329,22 @@ def _kn_customized_tb_softmax_last_dim(
     rows: int,
     cols: int,
     dim: int = -1,
+    num_leading_dims: int = 0,
 ):
     """Stable softmax on last dim via TB reduction_max (PyTorch F.softmax aligned)."""
     import yirage as yr
 
-    axis = dim if dim >= 0 else 1
+    if num_leading_dims == 0 and x.num_dims != 2:
+        raise ValueError(
+            f"softmax expects 2D input, got num_dims={x.num_dims}"
+        )
+    if num_leading_dims == 1:
+        if x.num_dims != 3 or x.dim(0) != 1:
+            raise ValueError(
+                f"softmax with num_leading_dims=1 expects [1, rows, cols], "
+                f"got dims={[x.dim(i) for i in range(x.num_dims)]}"
+            )
+    axis = dim if dim >= 0 else (x.num_dims - 1)
     tb = yr.new_threadblock_graph(
         grid_dim=(1, 1, 1),
         block_dim=(rows, cols, 1),
@@ -1509,6 +1520,79 @@ class KNGraph:
             self, QK, rows=rows, cols=cols, dim=-1
         )
         return self.cygraph.matmul(QK_norm, V)
+
+    def _self_attention_leading_batch1(
+        self,
+        Q: DTensor,
+        K: DTensor,
+        V: DTensor,
+        *,
+        scale: float | None,
+        seq: int,
+    ) -> DTensor:
+        """Single-head slice with leading batch dim 1: Q/K/V are [1, S, D] / [1, D, S]."""
+        QK = self.cygraph.matmul(Q, K)
+        if scale is not None:
+            QK = self.mul_scalar(QK, float(scale))
+        QK_norm = _kn_customized_tb_softmax_last_dim(
+            self, QK, rows=seq, cols=seq, dim=-1, num_leading_dims=1
+        )
+        return self.cygraph.matmul(QK_norm, V)
+
+    def self_attention_multi_head(
+        self,
+        Q: DTensor,
+        K: DTensor,
+        V: DTensor,
+        *,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """
+        Multi-head self-attention on 3D tensors (no batch dim).
+
+        Implements ``softmax(scale * Q @ K, dim=-1) @ V`` independently per head,
+        then concatenates on the head dimension.
+
+        Args:
+            Q: ``[H, S, D]``
+            K: ``[H, D, S]`` (transposed keys per head)
+            V: ``[H, S, D]``
+            head_dim: When set, ``scale = 1 / sqrt(head_dim)`` (defaults to ``D``).
+
+        Returns:
+            ``[H, S, D]``
+        """
+        if Q.num_dims != 3 or K.num_dims != 3 or V.num_dims != 3:
+            raise NotImplementedError(
+                "CPU self_attention_multi_head expects 3D Q/K/V "
+                "([H,S,D], [H,D,S], [H,S,D])"
+            )
+        num_heads, seq, dim = Q.dim(0), Q.dim(1), Q.dim(2)
+        if K.dim(0) != num_heads or K.dim(1) != dim or K.dim(2) != seq:
+            raise ValueError("K shape must be [H, D, S]")
+        if V.dim(0) != num_heads or V.dim(1) != seq or V.dim(2) != dim:
+            raise ValueError("V shape must be [H, S, D]")
+        hd = head_dim if head_dim is not None else dim
+        scale = hd ** -0.5
+
+        q_heads = self.chunk(Q, num_heads, 0)
+        k_heads = self.chunk(K, num_heads, 0)
+        v_heads = self.chunk(V, num_heads, 0)
+        if len(q_heads) != num_heads:
+            raise ValueError(
+                f"chunk(Q) expected {num_heads} heads, got {len(q_heads)}"
+            )
+
+        head_outputs = [
+            self._self_attention_leading_batch1(
+                q_heads[i], k_heads[i], v_heads[i], scale=scale, seq=seq
+            )
+            for i in range(num_heads)
+        ]
+        out = head_outputs[0]
+        for i in range(1, num_heads):
+            out = self.concat(out, head_outputs[i], 0)
+        return out
 
     def gated_mlp(
         self,
