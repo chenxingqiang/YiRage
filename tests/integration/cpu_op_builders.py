@@ -889,6 +889,48 @@ def build_gemm_silu() -> Builder:
     return _build
 
 
+def build_gemm_relu() -> Builder:
+    """COMET-style gemm_relu compound op vs torch matmul + F.relu."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_relu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.relu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gated_mlp() -> Builder:
+    """Gated MLP (SiLU gate * up -> down) on 2D [S,D] vs PyTorch reference."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.silu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
 def build_self_attention() -> Builder:
     """COMET self_attention: softmax(Q @ K) @ V with stable TB softmax (K transposed)."""
 
@@ -1010,6 +1052,8 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm": build_gemm_layernorm(),
     "gemm_gelu": build_gemm_gelu(),
     "gemm_silu": build_gemm_silu(),
+    "gemm_relu": build_gemm_relu(),
+    "gated_mlp": build_gated_mlp(),
     "self_attention": build_self_attention(),
     "self_attention_scaled": build_self_attention_scaled(),
     "self_attention_online": build_self_attention_online(),
