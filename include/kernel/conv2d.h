@@ -19,7 +19,8 @@ public:
              int padding_h,
              int padding_w,
              int dilation_h,
-             int dilation_w);
+             int dilation_w,
+             int groups = 1);
   ~KNConv2dOp();
   bool fingerprint(void) override;
 
@@ -32,6 +33,7 @@ public:
   int padding_w;
   int dilation_h;
   int dilation_w;
+  int groups;
 };
 
 void from_json(json const &j, KNConv2dOp &op);
@@ -42,7 +44,8 @@ bool kn_operator_conv2d_params(KNOperator const *op,
                                int *padding_h,
                                int *padding_w,
                                int *dilation_h,
-                               int *dilation_w);
+                               int *dilation_w,
+                               int *groups);
 
 } // namespace kernel
 } // namespace yirage

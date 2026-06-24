@@ -215,7 +215,8 @@ public:
                  int padding_h,
                  int padding_w,
                  int dilation_h,
-                 int dilation_w);
+                 int dilation_w,
+                 int groups = 1);
   DTensor *conv2d(DTensor const *input,
                   DTensor const *weight,
                   int stride_h,
@@ -223,7 +224,8 @@ public:
                   int padding_h,
                   int padding_w,
                   int dilation_h,
-                  int dilation_w);
+                  int dilation_w,
+                  int groups = 1);
   KNOperator *create_conv2d_op(DTensor const &input,
                                DTensor const &weight,
                                int stride_h,
@@ -231,7 +233,8 @@ public:
                                int padding_h,
                                int padding_w,
                                int dilation_h,
-                               int dilation_w);
+                               int dilation_w,
+                               int groups = 1);
   // customized operator
   std::vector<DTensor> customized(std::vector<DTensor> const &inputs,
                                   yirage::threadblock::Graph const &_graph);

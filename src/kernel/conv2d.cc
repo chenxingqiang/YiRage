@@ -30,7 +30,8 @@ DTensor Graph::conv2d(DTensor const &input,
                       int padding_h,
                       int padding_w,
                       int dilation_h,
-                      int dilation_w) {
+                      int dilation_w,
+                      int groups) {
   KNOperator *op = create_conv2d_op(input,
                                     weight,
                                     stride_h,
@@ -38,7 +39,8 @@ DTensor Graph::conv2d(DTensor const &input,
                                     padding_h,
                                     padding_w,
                                     dilation_h,
-                                    dilation_w);
+                                    dilation_w,
+                                    groups);
   assert(op != nullptr);
   operators.push_back(op);
   assert(op->output_tensors.size() == 1);
@@ -52,7 +54,8 @@ DTensor *Graph::conv2d(DTensor const *input,
                        int padding_h,
                        int padding_w,
                        int dilation_h,
-                       int dilation_w) {
+                       int dilation_w,
+                       int groups) {
   KNOperator *op = create_conv2d_op(*input,
                                     *weight,
                                     stride_h,
@@ -60,7 +63,8 @@ DTensor *Graph::conv2d(DTensor const *input,
                                     padding_h,
                                     padding_w,
                                     dilation_h,
-                                    dilation_w);
+                                    dilation_w,
+                                    groups);
   assert(op != nullptr);
   operators.push_back(op);
   assert(op->output_tensors.size() == 1);
@@ -74,11 +78,16 @@ KNOperator *Graph::create_conv2d_op(DTensor const &input,
                                     int padding_h,
                                     int padding_w,
                                     int dilation_h,
-                                    int dilation_w) {
+                                    int dilation_w,
+                                    int groups) {
   if (input.num_dims != 4 || weight.num_dims != 4) {
     return nullptr;
   }
-  if (input.dim[1] != weight.dim[1]) {
+  if (groups <= 0 || input.dim[1] % groups != 0 ||
+      weight.dim[0] % groups != 0) {
+    return nullptr;
+  }
+  if (input.dim[1] != weight.dim[1] * groups) {
     return nullptr;
   }
   if (stride_h <= 0 || stride_w <= 0 || dilation_h <= 0 || dilation_w <= 0) {
@@ -116,7 +125,8 @@ KNOperator *Graph::create_conv2d_op(DTensor const &input,
                         padding_h,
                         padding_w,
                         dilation_h,
-                        dilation_w);
+                        dilation_w,
+                        groups);
 }
 
 KNConv2dOp::KNConv2dOp(Graph *_graph,
@@ -127,17 +137,20 @@ KNConv2dOp::KNConv2dOp(Graph *_graph,
                        int padding_h_,
                        int padding_w_,
                        int dilation_h_,
-                       int dilation_w_)
+                       int dilation_w_,
+                       int groups_)
     : KNOperator(_graph, type::KN_CONV2D_OP, input, weight),
       stride_h(stride_h_),
       stride_w(stride_w_),
       padding_h(padding_h_),
       padding_w(padding_w_),
       dilation_h(dilation_h_),
-      dilation_w(dilation_w_) {
+      dilation_w(dilation_w_),
+      groups(groups_) {
   assert(input.num_dims == 4);
   assert(weight.num_dims == 4);
-  assert(input.dim[1] == weight.dim[1]);
+  assert(groups > 0);
+  assert(input.dim[1] == weight.dim[1] * groups);
   DTensor output;
   output.num_dims = 4;
   output.dim[0] = input.dim[0];
@@ -176,7 +189,8 @@ KNConv2dOp::operator json() const {
               {"padding_h", padding_h},
               {"padding_w", padding_w},
               {"dilation_h", dilation_h},
-              {"dilation_w", dilation_w}};
+              {"dilation_w", dilation_w},
+              {"groups", groups}};
 }
 
 void from_json(json const &j, KNConv2dOp &op) {
@@ -189,6 +203,11 @@ void from_json(json const &j, KNConv2dOp &op) {
   j.at("padding_w").get_to(op.padding_w);
   j.at("dilation_h").get_to(op.dilation_h);
   j.at("dilation_w").get_to(op.dilation_w);
+  if (j.contains("groups")) {
+    j.at("groups").get_to(op.groups);
+  } else {
+    op.groups = 1;
+  }
 }
 
 bool kn_operator_conv2d_params(KNOperator const *op,
@@ -197,7 +216,8 @@ bool kn_operator_conv2d_params(KNOperator const *op,
                                int *padding_h,
                                int *padding_w,
                                int *dilation_h,
-                               int *dilation_w) {
+                               int *dilation_w,
+                               int *groups) {
   if (op == nullptr || op->op_type != yirage::type::KN_CONV2D_OP) {
     return false;
   }
@@ -208,6 +228,7 @@ bool kn_operator_conv2d_params(KNOperator const *op,
   *padding_w = cop->padding_w;
   *dilation_h = cop->dilation_h;
   *dilation_w = cop->dilation_w;
+  *groups = cop->groups;
   return true;
 }
 

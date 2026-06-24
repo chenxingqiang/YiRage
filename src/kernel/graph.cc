@@ -397,6 +397,7 @@ void from_json(json const &j, Graph &g) {
       case type::KNOperatorType::KN_CONV2D_OP: {
         size_t guid_in, guid_w, guidO;
         int stride_h, stride_w, padding_h, padding_w, dilation_h, dilation_w;
+        int groups = 1;
         jop.at("input_tensors")[0].at("guid").get_to(guid_in);
         jop.at("input_tensors")[1].at("guid").get_to(guid_w);
         jop.at("output_tensors")[0].at("guid").get_to(guidO);
@@ -406,6 +407,9 @@ void from_json(json const &j, Graph &g) {
         jop.at("padding_w").get_to(padding_w);
         jop.at("dilation_h").get_to(dilation_h);
         jop.at("dilation_w").get_to(dilation_w);
+        if (jop.contains("groups")) {
+          jop.at("groups").get_to(groups);
+        }
         DTensor const &output = g.conv2d(get_tensor_from_guid(guid_in),
                                          get_tensor_from_guid(guid_w),
                                          stride_h,
@@ -413,7 +417,8 @@ void from_json(json const &j, Graph &g) {
                                          padding_h,
                                          padding_w,
                                          dilation_h,
-                                         dilation_w);
+                                         dilation_w,
+                                         groups);
         guid_mapping[output.guid] = guidO;
         break;
       }
