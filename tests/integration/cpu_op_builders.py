@@ -371,6 +371,35 @@ def build_conv2d_bias_relu() -> Builder:
     return _build
 
 
+def build_conv2d_bias_gelu() -> Builder:
+    """Conv2d + bias + GELU vs F.gelu(F.conv2d(...))."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_gelu(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
 def build_conv2d_bias_groups() -> Builder:
     """Grouped conv2d + bias (groups=2)."""
 
@@ -733,6 +762,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_batched": build_self_attention_batched(),
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_bias_relu": build_conv2d_bias_relu(),
+    "conv2d_bias_gelu": build_conv2d_bias_gelu(),
     "conv2d_groups": build_kn_conv2d_groups(),
     "conv2d_bias_groups": build_conv2d_bias_groups(),
     "conv2d_depthwise_bias": build_conv2d_depthwise_bias(),
