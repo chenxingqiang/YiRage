@@ -1048,6 +1048,25 @@ def build_rms_norm_linear() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_gelu() -> Builder:
+    """RMSNorm + linear + GELU vs F.gelu(rms reference matmul)."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_gelu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.nn.functional.gelu(
+            torch.matmul(tx.float() * scale, tw.float())
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_self_attention() -> Builder:
     """COMET self_attention: softmax(Q @ K) @ V with stable TB softmax (K transposed)."""
 
@@ -1177,6 +1196,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp": build_gated_mlp(),
     "gated_mlp_gelu": build_gated_mlp_gelu(),
     "rms_norm_linear": build_rms_norm_linear(),
+    "rms_norm_linear_gelu": build_rms_norm_linear_gelu(),
     "self_attention": build_self_attention(),
     "self_attention_scaled": build_self_attention_scaled(),
     "self_attention_online": build_self_attention_online(),

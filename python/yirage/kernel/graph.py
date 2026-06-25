@@ -2304,6 +2304,19 @@ class KNGraph:
         
         return result
 
+    def rms_norm_linear_gelu(
+        self,
+        X: DTensor,
+        weight: DTensor,
+        normalized_shape: tuple,
+    ) -> DTensor:
+        """
+        RMSNorm + Linear + GELU (``F.gelu(RMSNorm(X) @ weight)`` aligned).
+
+        Same tensor contracts as :meth:`rms_norm_linear`.
+        """
+        return self.gelu(self.rms_norm_linear(X, weight, normalized_shape))
+
     def get_owner_independent_hash(self):
         return self.cygraph.get_owner_independent_hash()
 
