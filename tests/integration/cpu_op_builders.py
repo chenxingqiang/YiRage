@@ -294,6 +294,33 @@ def build_kn_conv2d() -> Builder:
     return _build
 
 
+def build_conv2d_bias() -> Builder:
+    """Conv2d + broadcast bias (F.conv2d with bias vector parity)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.conv2d(
+            inp_x,
+            inp_w,
+            bias=inp_b.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            dilation=(1, 1),
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_rms_norm_op": build_kn_rms_norm(),
@@ -509,6 +536,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_scaled": build_self_attention_scaled(),
     "self_attention_multi_head": build_self_attention_multi_head(),
     "self_attention_batched": build_self_attention_batched(),
+    "conv2d_bias": build_conv2d_bias(),
 }
 
 FAST_PATH_BUILDERS = {
