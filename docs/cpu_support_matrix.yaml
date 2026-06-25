@@ -88,7 +88,7 @@ kn_ops:
   kn_conv2d_op:
     tier: supported
     layer: kn
-    note: NCHW input, OIHW weight; F.conv2d parity; stride/padding/dilation in JSON; CPU interpreter + search explore
+    note: NCHW input, OIHW weight; F.conv2d parity; stride/padding/dilation/groups in JSON; CPU interpreter + search explore
   kn_concat_then_matmul_op:
     tier: unsupported
     layer: layout

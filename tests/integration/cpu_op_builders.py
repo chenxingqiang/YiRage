@@ -294,6 +294,27 @@ def build_kn_conv2d() -> Builder:
     return _build
 
 
+def build_kn_conv2d_groups() -> Builder:
+    """Grouped conv2d (groups=2) aligned with F.conv2d."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        ref = torch.nn.functional.conv2d(
+            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 def build_conv2d_bias() -> Builder:
     """Conv2d + broadcast bias (F.conv2d with bias vector parity)."""
 
@@ -537,6 +558,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_multi_head": build_self_attention_multi_head(),
     "self_attention_batched": build_self_attention_batched(),
     "conv2d_bias": build_conv2d_bias(),
+    "conv2d_groups": build_kn_conv2d_groups(),
 }
 
 FAST_PATH_BUILDERS = {

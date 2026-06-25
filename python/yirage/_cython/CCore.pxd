@@ -218,7 +218,8 @@ cdef extern from "kernel/conv2d.h" namespace "yirage::kernel":
                                    int* padding_h,
                                    int* padding_w,
                                    int* dilation_h,
-                                   int* dilation_w) except +
+                                   int* dilation_w,
+                                   int* groups) except +
 
 cdef extern from "kernel/graph.h" namespace "yirage::kernel":
     cdef cppclass CppKNGraph "yirage::kernel::Graph":
@@ -257,7 +258,8 @@ cdef extern from "kernel/graph.h" namespace "yirage::kernel":
                            int padding_h,
                            int padding_w,
                            int dilation_h,
-                           int dilation_w) except +
+                           int dilation_w,
+                           int groups) except +
         int customized(vector[const CppDTensor*] inputs,
                        CppDTensor** outputs,
                        CppTBGraph* bgraph)

@@ -877,7 +877,8 @@ cdef class CyKNGraph:
                int padding_h=0,
                int padding_w=0,
                int dilation_h=1,
-               int dilation_w=1):
+               int dilation_w=1,
+               int groups=1):
         cdef CppDTensor* ptr = self.p_kgraph.conv2d(input.c_ptr,
                                                   weight.c_ptr,
                                                   stride_h,
@@ -885,10 +886,12 @@ cdef class CyKNGraph:
                                                   padding_h,
                                                   padding_w,
                                                   dilation_h,
-                                                  dilation_w)
+                                                  dilation_w,
+                                                  groups)
         if ptr == NULL:
             raise ValueError(
-                "conv2d failed: expect NCHW input and OIHW weight with matching in_channels"
+                "conv2d failed: expect NCHW input and OIHW weight with "
+                "in_channels == weight_in * groups"
             )
         t = ctypes.cast(<unsigned long long>ptr, ctypes.c_void_p)
         return DTensor(t)
@@ -1006,6 +1009,7 @@ cdef class CyKNGraph:
         cdef int padding_w = 0
         cdef int dilation_h = 0
         cdef int dilation_w = 0
+        cdef int groups = 1
         if op.op_type == "kn_customized_op":
             return {
                 "op_type": op.op_type,
@@ -1033,13 +1037,15 @@ cdef class CyKNGraph:
                                              &padding_h,
                                              &padding_w,
                                              &dilation_h,
-                                             &dilation_w):
+                                             &dilation_w,
+                                             &groups):
                     ans["stride_h"] = stride_h
                     ans["stride_w"] = stride_w
                     ans["padding_h"] = padding_h
                     ans["padding_w"] = padding_w
                     ans["dilation_h"] = dilation_h
                     ans["dilation_w"] = dilation_w
+                    ans["groups"] = groups
             return ans
 
     def get_graph_structure(self):

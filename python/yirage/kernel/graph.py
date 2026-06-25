@@ -1126,12 +1126,17 @@ def _interpret_mugraph_on_cpu_impl(cygraph, input_tensors):
             tensor_map[out_guids[0]] = ins[0].transpose(0, 1).contiguous()
 
         elif ot == "kn_conv2d_op":
-            tensor_map[out_guids[0]] = torch.nn.functional.conv2d(
-                ins[0],
-                ins[1],
+            kwargs = dict(
                 stride=(int(op["stride_h"]), int(op["stride_w"])),
                 padding=(int(op["padding_h"]), int(op["padding_w"])),
                 dilation=(int(op["dilation_h"]), int(op["dilation_w"])),
+            )
+            if "groups" in op:
+                kwargs["groups"] = int(op["groups"])
+            tensor_map[out_guids[0]] = torch.nn.functional.conv2d(
+                ins[0],
+                ins[1],
+                **kwargs,
             )
 
         elif ot in _KN_CONCAT_OPS:
@@ -1329,12 +1334,14 @@ class KNGraph:
         stride=(1, 1),
         padding=(0, 0),
         dilation=(1, 1),
+        groups: int = 1,
     ) -> DTensor:
         """2D convolution (NCHW input, OIHW weight; aligned with ``F.conv2d``)."""
         sh, sw = int(stride[0]), int(stride[1])
         ph, pw = int(padding[0]), int(padding[1])
         dh, dw = int(dilation[0]), int(dilation[1])
-        return self.cygraph.conv2d(input, weight, sh, sw, ph, pw, dh, dw)
+        g = int(groups)
+        return self.cygraph.conv2d(input, weight, sh, sw, ph, pw, dh, dw, g)
 
     def conv2d_bias(
         self,
@@ -1344,6 +1351,7 @@ class KNGraph:
         stride=(1, 1),
         padding=(0, 0),
         dilation=(1, 1),
+        groups: int = 1,
     ) -> DTensor:
         """
         Conv2d with per-output-channel bias (``F.conv2d(..., bias=...)`` aligned).
@@ -1358,7 +1366,14 @@ class KNGraph:
         Returns:
             NCHW output with bias added.
         """
-        out = self.conv2d(input, weight, stride=stride, padding=padding, dilation=dilation)
+        out = self.conv2d(
+            input,
+            weight,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+        )
         if bias.num_dims != out.num_dims:
             raise ValueError(
                 f"conv2d_bias: bias must have {out.num_dims} dims for broadcast add, "
