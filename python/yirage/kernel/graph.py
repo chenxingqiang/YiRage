@@ -1476,36 +1476,30 @@ class KNGraph:
         V: DTensor,
     ) -> DTensor:
         """
-        Self-attention with FlashAttention-style fusion.
-        
-        Implements: softmax(Q @ K^T) @ V
-        
-        This follows the COMET self-attention compound operation,
-        fusing QK^T computation with softmax and V projection.
-        
-        Note: For full attention with scaling, use separate operations
-        or a custom threadblock graph.
-        
+        Self-attention compound op (COMET): ``softmax(Q @ K, dim=-1) @ V``.
+
+        Uses the same stable TB softmax path as :meth:`softmax` / :meth:`gemm_softmax`
+        (``reduction_max`` subtract), not naive ``exp / sum``.
+
         Args:
-            Q: Query tensor [B, H, S, D] or [S, D]
-            K: Key tensor [B, H, S, D] or [S, D] (should be transposed for K^T)
-            V: Value tensor [B, H, S, D] or [S, D]
-        
+            Q: Query ``[S, D]``
+            K: Key already transposed for ``Q @ K`` — ``[D, S]``
+            V: Value ``[S, D]``
+
         Returns:
-            Attention output tensor
+            Attention output ``[S, D]``
         """
-        # Q @ K (assuming K is already transposed)
+        if Q.num_dims != 2 or K.num_dims != 2 or V.num_dims != 2:
+            raise NotImplementedError(
+                "CPU self_attention currently supports 2D Q/K/V; "
+                "K must be transposed ([D, S]) for Q @ K"
+            )
         QK = self.cygraph.matmul(Q, K)
-        
-        # Softmax: exp -> sum -> div
-        QK_exp = self.cygraph.exp(QK)
-        QK_sum = self.cygraph.reduction(QK_exp, -1)
-        QK_norm = self.cygraph.div(QK_exp, QK_sum)
-        
-        # @ V
-        result = self.cygraph.matmul(QK_norm, V)
-        
-        return result
+        rows, cols = QK.dim(0), QK.dim(1)
+        QK_norm = _kn_customized_tb_softmax_last_dim(
+            self, QK, rows=rows, cols=cols, dim=-1
+        )
+        return self.cygraph.matmul(QK_norm, V)
 
     def gated_mlp(
         self,

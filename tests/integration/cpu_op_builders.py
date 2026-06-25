@@ -348,9 +348,6 @@ def build_kn_unfused_rms_matmul() -> Builder:
     return _build
 
 
-    return _build
-
-
 def build_kn_softmax() -> Builder:
     """KN softmax via stable TB reduction_max path (general ML, not LLM-only)."""
 
@@ -411,6 +408,25 @@ def build_gemm_layernorm() -> Builder:
     return _build
 
 
+def build_self_attention() -> Builder:
+    """COMET self_attention: softmax(Q @ K) @ V with stable TB softmax (K transposed)."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention(q, k, v))
+        tq, tk, tv = _f16((seq, dim)), _f16((dim, seq)), _f16((seq, dim))
+        scores = torch.matmul(tq.float(), tk.float())
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul": build_customized_tb_matmul(),
     "customized_tb_exp": build_customized_tb_exp(),
@@ -419,6 +435,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_layer_norm": build_kn_layer_norm(),
     "gemm_softmax": build_gemm_softmax(),
     "gemm_layernorm": build_gemm_layernorm(),
+    "self_attention": build_self_attention(),
 }
 
 FAST_PATH_BUILDERS = {

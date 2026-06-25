@@ -37,6 +37,7 @@ def _force_kn_interpreter(monkeypatch):
         "kn_layer_norm",
         "gemm_softmax",
         "gemm_layernorm",
+        "self_attention",
     ],
 )
 def test_general_ml_compound_patterns_match_pytorch(pattern: str):
