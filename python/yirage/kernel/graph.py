@@ -1448,6 +1448,33 @@ class KNGraph:
             )
         )
 
+    def conv2d_bias_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + bias + GELU (``F.gelu(F.conv2d(..., bias=...))`` aligned).
+
+        Same tensor contracts as :meth:`conv2d_bias`.
+        """
+        return self.gelu(
+            self.conv2d_bias(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
     def conv2d_depthwise_bias(
         self,
         input: DTensor,
