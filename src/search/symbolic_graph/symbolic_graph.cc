@@ -867,6 +867,42 @@ bool SymbolicKNGraph::add_operator(type::KNOperatorType op_type,
       this->output_indices.push_back({out_idx});
       break;
     }
+    case type::KNOperatorType::KN_CONV2D_OP: {
+      assert(input_indices.size() == 2);
+      SymbolicDTensor A = this->tensors[input_indices[0]];
+      SymbolicDTensor W = this->tensors[input_indices[1]];
+      if (A.dims.size() != 4 || W.dims.size() != 4) {
+        return false;
+      }
+      {
+        std::unordered_set<TensorDimConstraint> constraints;
+        constraints.insert(make_equal_constraint(A.dims[1], W.dims[1]));
+        if (!add_conds_for_new_op(constraints)) {
+          return false;
+        }
+      }
+      auto spatial_out_dim = [&](size_t in_spatial_idx,
+                                 size_t kernel_spatial_idx) {
+        return SymbolicTensorDim(dim_expr_make_add(
+            A.dims[in_spatial_idx].dim_expr,
+            dim_expr_make_add(
+                dim_expr_make_mul(dim_expr_make_const(-1),
+                                  W.dims[kernel_spatial_idx].dim_expr),
+                dim_expr_make_const(1))));
+      };
+      this->operators.push_back(SymbolicKNOp(op_type));
+      std::vector<SymbolicTensorDim> out_dims = {
+          A.dims[0],
+          W.dims[0],
+          spatial_out_dim(2, 2),
+          spatial_out_dim(3, 3),
+      };
+      int out_idx = (int)this->tensors.size();
+      this->tensors.push_back(SymbolicDTensor(out_dims));
+      this->input_indices.push_back(input_indices);
+      this->output_indices.push_back({out_idx});
+      break;
+    }
     default: {
       return false;
     }

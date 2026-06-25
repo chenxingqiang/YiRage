@@ -587,6 +587,13 @@ std::vector<std::string>
                                "(transpose01 " + input + ")");
           break;
         }
+        case type::KNOperatorType::KN_CONV2D_OP: {
+          std::string input = tensor_exprs.at(op->input_tensors[0].guid);
+          std::string weight = tensor_exprs.at(op->input_tensors[1].guid);
+          tensor_exprs.emplace(op->output_tensors[0].guid,
+                               "(conv2d " + input + " " + weight + ")");
+          break;
+        }
         case type::KNOperatorType::KN_CUSTOMIZED_OP: {
           calc_stensor_exprs(static_cast<kernel::KNCustomizedOp *>(op)->bgraph);
           break;

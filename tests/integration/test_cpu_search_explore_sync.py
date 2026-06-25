@@ -43,6 +43,7 @@ _CPP_CPU_KN_EXPLORE = sorted(
         "kn_chunk_1_op",
         "kn_chunk_2_op",
         "kn_transpose_01_op",
+        "kn_conv2d_op",
         "kn_customized_op",
     ]
 )
