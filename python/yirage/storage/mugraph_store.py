@@ -37,6 +37,46 @@ logger = logging.getLogger(__name__)
 DEFAULT_STORE_ROOT = os.path.expanduser("~/.yirage/mugraphs")
 
 
+def normalize_input_shapes(shapes: Optional[Union[List, Tuple]]) -> List[List[int]]:
+    """Normalize runtime or stored input shape lists for equality checks."""
+    if not shapes:
+        return []
+    out: List[List[int]] = []
+    for shape in shapes:
+        if shape is None:
+            continue
+        out.append([int(x) for x in shape])
+    return out
+
+
+def input_shapes_match(
+    stored: Optional[Union[List, Tuple]],
+    requested: Optional[Union[List, Tuple]],
+) -> bool:
+    """Return True when every input tensor shape matches exactly."""
+    a = normalize_input_shapes(stored)
+    b = normalize_input_shapes(requested)
+    return bool(a) and a == b
+
+
+def entry_latency_ms(entry: "MuGraphEntry") -> float:
+    """Best-effort latency for ranking cached muGraph entries."""
+    if entry.metadata.latency_ms > 0:
+        return entry.metadata.latency_ms
+    if entry.performance.latency_ms > 0:
+        return entry.performance.latency_ms
+    return float("inf")
+
+
+def mugraph_require_shape_match() -> bool:
+    """When set, persistent restore refuses shape-mismatched cache entries."""
+    return os.environ.get("YIRAGE_MUGraph_REQUIRE_SHAPE_MATCH", "0").strip() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
 class OpType(str, Enum):
     """Operator types for graph analysis."""
 
@@ -1042,16 +1082,39 @@ class MuGraphStore:
         self,
         graph_hash: str,
         backend: str,
+        input_shapes: Optional[List] = None,
+        *,
+        require_shape_match: Optional[bool] = None,
     ) -> Optional[MuGraphEntry]:
-        """Find the best (lowest latency) muGraph."""
+        """Find the best (lowest latency) muGraph.
+
+        When ``input_shapes`` is provided, prefer entries profiled at the same
+        input shapes (runtime dynamism). Falls back to global best latency unless
+        ``require_shape_match`` is True (or ``YIRAGE_MUGraph_REQUIRE_SHAPE_MATCH=1``).
+        """
         entries = self.find_all_for_graph(graph_hash, backend)
 
         if not entries:
             return None
 
-        entries.sort(
-            key=lambda e: e.metadata.latency_ms if e.metadata.latency_ms > 0 else float("inf")
-        )
+        if require_shape_match is None:
+            require_shape_match = mugraph_require_shape_match()
+
+        if input_shapes is not None:
+            normalized = normalize_input_shapes(input_shapes)
+            if normalized:
+                matched = [
+                    e
+                    for e in entries
+                    if input_shapes_match(e.metadata.input_shapes, normalized)
+                ]
+                if matched:
+                    matched.sort(key=entry_latency_ms)
+                    return matched[0]
+                if require_shape_match:
+                    return None
+
+        entries.sort(key=entry_latency_ms)
         return entries[0]
 
     def list_all(
@@ -1270,6 +1333,13 @@ def find_mugraph(graph_hash: str, backend: str, **kwargs) -> Optional[MuGraphEnt
     return get_mugraph_store().find(graph_hash, backend, **kwargs)
 
 
-def find_best_mugraph(graph_hash: str, backend: str) -> Optional[MuGraphEntry]:
+def find_best_mugraph(
+    graph_hash: str,
+    backend: str,
+    input_shapes: Optional[List] = None,
+    **kwargs,
+) -> Optional[MuGraphEntry]:
     """Convenience function to find the best muGraph."""
-    return get_mugraph_store().find_best(graph_hash, backend)
+    return get_mugraph_store().find_best(
+        graph_hash, backend, input_shapes=input_shapes, **kwargs
+    )

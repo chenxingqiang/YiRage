@@ -31,6 +31,9 @@ from .mugraph_store import (
     save_mugraph,
     find_mugraph,
     find_best_mugraph,
+    normalize_input_shapes,
+    input_shapes_match,
+    mugraph_require_shape_match,
     # Data structures for training
     GraphStructure,
     DeviceCapabilities,
@@ -64,6 +67,9 @@ __all__ = [
     "save_mugraph",
     "find_mugraph",
     "find_best_mugraph",
+    "normalize_input_shapes",
+    "input_shapes_match",
+    "mugraph_require_shape_match",
     # Data structures
     "GraphStructure",
     "DeviceCapabilities",
