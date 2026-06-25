@@ -43,6 +43,8 @@ def _force_kn_interpreter(monkeypatch):
         "self_attention_batched",
         "conv2d_bias",
         "conv2d_groups",
+        "conv2d_bias_groups",
+        "conv2d_depthwise_bias",
     ],
 )
 def test_general_ml_compound_patterns_match_pytorch(pattern: str):
