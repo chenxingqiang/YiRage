@@ -43,6 +43,7 @@ def _force_kn_interpreter(monkeypatch):
         "self_attention_multi_head",
         "self_attention_batched",
         "conv2d_bias",
+        "conv2d_bias_relu",
         "conv2d_groups",
         "conv2d_bias_groups",
         "conv2d_depthwise_bias",
