@@ -77,6 +77,43 @@ def mugraph_require_shape_match() -> bool:
     )
 
 
+def mugraph_shape_bucket_enabled() -> bool:
+    """When enabled, fall back to bucketed shape match before global best latency."""
+    val = os.environ.get("YIRAGE_MUGraph_SHAPE_BUCKET", "1").strip().lower()
+    if val in ("0", "false", "no", "off"):
+        return False
+    return True
+
+
+def bucket_dim(size: int) -> int:
+    """Round a dimension up to the next power-of-two bucket (min 8 when size > 1)."""
+    n = int(size)
+    if n <= 1:
+        return n
+    if n <= 8:
+        return 8
+    bucket = 1
+    while bucket < n:
+        bucket <<= 1
+    return bucket
+
+
+def bucket_input_shapes(shapes: Optional[Union[List, Tuple]]) -> List[List[int]]:
+    """Bucket every dimension of every input tensor (runtime dynamism)."""
+    normalized = normalize_input_shapes(shapes)
+    return [[bucket_dim(d) for d in shape] for shape in normalized]
+
+
+def input_shapes_bucket_match(
+    stored: Optional[Union[List, Tuple]],
+    requested: Optional[Union[List, Tuple]],
+) -> bool:
+    """True when bucketed signatures match (same bucket, different exact dims)."""
+    a = bucket_input_shapes(stored)
+    b = bucket_input_shapes(requested)
+    return bool(a) and bool(b) and a == b
+
+
 class OpType(str, Enum):
     """Operator types for graph analysis."""
 
@@ -1089,8 +1126,10 @@ class MuGraphStore:
         """Find the best (lowest latency) muGraph.
 
         When ``input_shapes`` is provided, prefer entries profiled at the same
-        input shapes (runtime dynamism). Falls back to global best latency unless
-        ``require_shape_match`` is True (or ``YIRAGE_MUGraph_REQUIRE_SHAPE_MATCH=1``).
+        input shapes (runtime dynamism). Then try power-of-two **shape buckets**
+        when ``YIRAGE_MUGraph_SHAPE_BUCKET`` is enabled (default on). Falls back
+        to global best latency unless ``require_shape_match`` is True
+        (or ``YIRAGE_MUGraph_REQUIRE_SHAPE_MATCH=1``).
         """
         entries = self.find_all_for_graph(graph_hash, backend)
 
@@ -1111,6 +1150,19 @@ class MuGraphStore:
                 if matched:
                     matched.sort(key=entry_latency_ms)
                     return matched[0]
+
+                if mugraph_shape_bucket_enabled() and not require_shape_match:
+                    bucketed = [
+                        e
+                        for e in entries
+                        if input_shapes_bucket_match(
+                            e.metadata.input_shapes, normalized
+                        )
+                    ]
+                    if bucketed:
+                        bucketed.sort(key=entry_latency_ms)
+                        return bucketed[0]
+
                 if require_shape_match:
                     return None
 

@@ -15,7 +15,9 @@ bool is_binary(type::TBOperatorType op) {
       type::TBOperatorType::TB_MUL_OP,
       type::TBOperatorType::TB_CONCAT_0_OP,
       type::TBOperatorType::TB_CONCAT_1_OP,
-      type::TBOperatorType::TB_CONCAT_2_OP};
+      type::TBOperatorType::TB_CONCAT_2_OP,
+      type::TBOperatorType::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP,
+      type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP};
   return contains(true_values, op);
 }
 
@@ -350,6 +352,13 @@ TBOperator *create_op(threadblock::Graph &g,
     case type::TBOperatorType::TB_CONCAT_2_OP: {
       int dim = (int)type - (int)type::TBOperatorType::TB_CONCAT_0_OP;
       return g.create_concat_op(input1, input2, dim);
+    }
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP:
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+      if (input1.after_accum) {
+        return nullptr;
+      }
+      return g.create_forloop_accum_rescale_op(input1, input2, type);
     }
     default:
       assert(false && "Unsupported operator");

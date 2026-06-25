@@ -206,6 +206,46 @@ bool SymbolicTBGraph::add_operator(type::TBOperatorType op_type,
       this->output_indices.push_back({(int)this->tensors.size() - 1});
       break;
     }
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_NO_RED_RESCALE_OP:
+    case type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP: {
+      assert(input_indices.size() == 2);
+      SymbolicSTensor A = this->tensors[input_indices[0]];
+      SymbolicSTensor B = this->tensors[input_indices[1]];
+      if (A.after_accum) {
+        return false;
+      }
+      if (A.dims.size() != B.dims.size()) {
+        return false;
+      }
+      {
+        std::unordered_set<TensorDimConstraint> constraints;
+        for (size_t i = 0; i < A.dims.size(); i++) {
+          constraints.insert(
+              make_equal_or_one_constraint(A.dims[i], B.dims[i]));
+        }
+        if (!conds.add_constraints(constraints)) {
+          return false;
+        }
+      }
+      conds.add_constraints({});
+      this->operators.push_back(SymbolicTBOp(op_type));
+      {
+        std::vector<SymbolicTensorDim> dim_templates;
+        for (size_t i = 0; i < A.dims.size(); i++) {
+          dim_templates.push_back(A.dims[i]);
+        }
+        if (op_type ==
+            type::TBOperatorType::TB_FORLOOP_ACCUM_RED_LD_SUM_RESCALE_OP) {
+          dim_templates[dim_templates.size() - 1] =
+              SymbolicTensorDim(std::make_shared<TensorDimConst>(1));
+        }
+        SymbolicSTensor C(dim_templates, true);
+        this->tensors.push_back(C);
+      }
+      this->input_indices.push_back(input_indices);
+      this->output_indices.push_back({(int)this->tensors.size() - 1});
+      break;
+    }
     case type::TBOperatorType::TB_MATMUL_OP: {
       assert(input_indices.size() == 2);
       SymbolicSTensor A = this->tensors[input_indices[0]];

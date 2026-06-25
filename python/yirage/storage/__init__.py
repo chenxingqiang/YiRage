@@ -34,6 +34,10 @@ from .mugraph_store import (
     normalize_input_shapes,
     input_shapes_match,
     mugraph_require_shape_match,
+    mugraph_shape_bucket_enabled,
+    bucket_dim,
+    bucket_input_shapes,
+    input_shapes_bucket_match,
     # Data structures for training
     GraphStructure,
     DeviceCapabilities,
@@ -70,6 +74,10 @@ __all__ = [
     "normalize_input_shapes",
     "input_shapes_match",
     "mugraph_require_shape_match",
+    "mugraph_shape_bucket_enabled",
+    "bucket_dim",
+    "bucket_input_shapes",
+    "input_shapes_bucket_match",
     # Data structures
     "GraphStructure",
     "DeviceCapabilities",
