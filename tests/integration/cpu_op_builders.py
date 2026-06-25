@@ -617,6 +617,28 @@ def build_self_attention_scaled() -> Builder:
     return _build
 
 
+def build_self_attention_online() -> Builder:
+    """Online rescale self_attention (tile=4 on seq=8) vs scaled stable reference."""
+
+    def _build():
+        seq, dim, tile = 8, 32, 4
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(
+            g.self_attention_online(q, k, v, head_dim=dim, tile=tile)
+        )
+        tq, tk, tv = _f16((seq, dim)), _f16((dim, seq)), _f16((seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq.float(), tk.float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 def build_self_attention_multi_head() -> Builder:
     """Multi-head self_attention on 3D [H,S,D] / [H,D,S] with scaled stable softmax."""
 
@@ -677,6 +699,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm": build_gemm_layernorm(),
     "self_attention": build_self_attention(),
     "self_attention_scaled": build_self_attention_scaled(),
+    "self_attention_online": build_self_attention_online(),
     "self_attention_multi_head": build_self_attention_multi_head(),
     "self_attention_batched": build_self_attention_batched(),
     "conv2d_bias": build_conv2d_bias(),

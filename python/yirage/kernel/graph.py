@@ -362,6 +362,46 @@ def _kn_customized_tb_softmax_last_dim(
     return g.customized([x], tb)[0]
 
 
+def _kn_customized_tb_self_attention_online(
+    g,
+    Q,
+    K,
+    V,
+    *,
+    seq: int,
+    dim: int,
+    tile: int,
+    scale: float,
+) -> DTensor:
+    """Online rescale self-attention (FlashAttention-style) on 2D Q/K/V via TB forloop tiles."""
+    import yirage as yr
+
+    if tile <= 0 or seq % tile != 0:
+        raise ValueError(
+            f"online attention requires tile dividing seq, got seq={seq} tile={tile}"
+        )
+    forloop_range = seq // tile
+    tb = yr.new_threadblock_graph(
+        grid_dim=(1, 1, 1),
+        block_dim=(seq, tile, 1),
+        forloop_range=forloop_range,
+        reduction_dimx=tile,
+    )
+    bq = tb.new_input(dtensor=Q, input_map=(-1, -1, -1), forloop_dim=-1)
+    bk = tb.new_input(dtensor=K, input_map=(-1, -1, -1), forloop_dim=1)
+    bv = tb.new_input(dtensor=V, input_map=(-1, -1, -1), forloop_dim=0)
+    scores = tb.mul_scalar(tb.matmul(bq, bk), float(scale))
+    tmax, tdiff = tb.reduction_max(scores, dim=1)
+    texp = tb.exp(tb.sub(scores, tmax))
+    texp_diff = tb.exp(tdiff)
+    tdenom = tb.forloop_accum_rescale(texp, texp_diff, "sum")
+    tnum = tb.forloop_accum_rescale(tb.matmul(texp, bv), texp_diff)
+    tb.new_output(stensor=tnum, output_map=(-1, -1, -1))
+    tb.new_output(stensor=tdenom, output_map=(-1, -1, -1))
+    num, denom = g.customized([Q, K, V], tb)
+    return g.div(num, denom)
+
+
 def _kn_customized_tb_layer_norm_last_dim(
     g,
     x,
@@ -1670,6 +1710,53 @@ class KNGraph:
             self, QK, rows=rows, cols=cols, dim=-1
         )
         return self.cygraph.matmul(QK_norm, V)
+
+    def self_attention_online(
+        self,
+        Q: DTensor,
+        K: DTensor,
+        V: DTensor,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+        tile: int | None = None,
+    ) -> DTensor:
+        """
+        Self-attention via online softmax rescale (forloop over key tiles).
+
+        Implements ``softmax(scale * Q @ K) @ V`` using ``reduction_max`` +
+        ``forloop_accum_rescale`` (transpiler FlashAttention pattern), aligned
+        with :meth:`self_attention` numerically but streaming over ``tile``-wide
+        key slices.
+
+        Args:
+            Q: ``[S, D]``
+            K: ``[D, S]`` (transposed keys)
+            V: ``[S, D]``
+            scale / head_dim: Dot-product scale (defaults to ``1/sqrt(D)``).
+            tile: Key-sequence tile size; ``S`` must be divisible by ``tile``.
+                Defaults to ``S // 2`` when ``S >= 2``, else ``S``.
+
+        Returns:
+            ``[S, D]``
+        """
+        if Q.num_dims != 2 or K.num_dims != 2 or V.num_dims != 2:
+            raise NotImplementedError(
+                "CPU self_attention_online expects 2D Q/K/V "
+                "([S,D], [D,S], [S,D])"
+            )
+        seq, dim = Q.dim(0), Q.dim(1)
+        if K.dim(0) != dim or K.dim(1) != seq or V.dim(0) != seq or V.dim(1) != dim:
+            raise ValueError("Q/K/V shape mismatch for self_attention_online")
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        elif scale is None:
+            scale = dim ** -0.5
+        if tile is None:
+            tile = seq // 2 if seq >= 2 else seq
+        return _kn_customized_tb_self_attention_online(
+            self, Q, K, V, seq=seq, dim=dim, tile=int(tile), scale=float(scale)
+        )
 
     def _self_attention_leading_batch1(
         self,
