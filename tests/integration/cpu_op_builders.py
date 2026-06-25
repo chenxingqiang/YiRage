@@ -472,6 +472,31 @@ def build_self_attention_multi_head() -> Builder:
     return _build
 
 
+def build_self_attention_batched() -> Builder:
+    """Batched scaled self_attention on 3D [B,S,D] / [B,D,S]."""
+
+    def _build():
+        batch, seq, dim = 2, 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(batch, dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_batched(q, k, v, head_dim=dim))
+        tq = _f16((batch, seq, dim))
+        tk = _f16((batch, dim, seq))
+        tv = _f16((batch, seq, dim))
+        scale = dim ** -0.5
+        outs = []
+        for b in range(batch):
+            scores = torch.matmul(tq[b].float(), tk[b].float()) * scale
+            attn = torch.nn.functional.softmax(scores, dim=-1)
+            outs.append(torch.matmul(attn, tv[b].float()))
+        ref = torch.stack(outs, dim=0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul": build_customized_tb_matmul(),
     "customized_tb_exp": build_customized_tb_exp(),
@@ -483,6 +508,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention": build_self_attention(),
     "self_attention_scaled": build_self_attention_scaled(),
     "self_attention_multi_head": build_self_attention_multi_head(),
+    "self_attention_batched": build_self_attention_batched(),
 }
 
 FAST_PATH_BUILDERS = {

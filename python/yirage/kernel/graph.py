@@ -1594,6 +1594,59 @@ class KNGraph:
             out = self.concat(out, head_outputs[i], 0)
         return out
 
+    def self_attention_batched(
+        self,
+        Q: DTensor,
+        K: DTensor,
+        V: DTensor,
+        *,
+        head_dim: int | None = None,
+        scale: float | None = None,
+    ) -> DTensor:
+        """
+        Batched scaled self-attention on 3D tensors (single head per batch item).
+
+        Implements ``softmax(scale * Q @ K, dim=-1) @ V`` independently per batch row.
+
+        Args:
+            Q: ``[B, S, D]``
+            K: ``[B, D, S]`` (transposed keys)
+            V: ``[B, S, D]``
+            head_dim: When set, ``scale = 1 / sqrt(head_dim)`` (overrides ``scale``).
+            scale: Optional explicit scale (defaults to ``1/sqrt(D)`` when ``head_dim`` unset).
+
+        Returns:
+            ``[B, S, D]``
+        """
+        if Q.num_dims != 3 or K.num_dims != 3 or V.num_dims != 3:
+            raise NotImplementedError(
+                "CPU self_attention_batched expects 3D Q/K/V "
+                "([B,S,D], [B,D,S], [B,S,D])"
+            )
+        batch, seq, dim = Q.dim(0), Q.dim(1), Q.dim(2)
+        if K.dim(0) != batch or K.dim(1) != dim or K.dim(2) != seq:
+            raise ValueError("K shape must be [B, D, S]")
+        if V.dim(0) != batch or V.dim(1) != seq or V.dim(2) != dim:
+            raise ValueError("V shape must be [B, S, D]")
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        elif scale is None:
+            scale = dim ** -0.5
+
+        q_batches = self.chunk(Q, batch, 0)
+        k_batches = self.chunk(K, batch, 0)
+        v_batches = self.chunk(V, batch, 0)
+        batch_outputs = [
+            self._self_attention_leading_batch1(
+                q_batches[i], k_batches[i], v_batches[i], scale=scale, seq=seq
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = self.concat(out, batch_outputs[i], 0)
+        return out
+
     def gated_mlp(
         self,
         X: DTensor,
