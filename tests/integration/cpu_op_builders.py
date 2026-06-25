@@ -406,6 +406,64 @@ def build_conv2d_depthwise_bias() -> Builder:
     return _build
 
 
+def build_conv2d_separable() -> Builder:
+    """Depthwise + 1x1 pointwise separable conv (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable(x, dw, pw, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
+        )
+        ref = torch.nn.functional.conv2d(hidden, inp_pw)
+        return g, [inp_x, inp_dw, inp_pw], ref
+
+    return _build
+
+
+def build_conv2d_separable_bias() -> Builder:
+    """Separable conv with depthwise and pointwise broadcast biases."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        db = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        pb = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_bias(
+                x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        inp_db = _f16((1, 4, 1, 1))
+        inp_pb = _f16((1, 8, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x,
+            inp_dw,
+            bias=inp_db.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            groups=4,
+        )
+        mid = torch.nn.functional.conv2d(hidden, inp_pw)
+        ref = mid + inp_pb
+        return g, [inp_x, inp_dw, inp_pw, inp_db, inp_pb], ref
+
+    return _build
+
+
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_rms_norm_op": build_kn_rms_norm(),
@@ -625,6 +683,8 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_groups": build_kn_conv2d_groups(),
     "conv2d_bias_groups": build_conv2d_bias_groups(),
     "conv2d_depthwise_bias": build_conv2d_depthwise_bias(),
+    "conv2d_separable": build_conv2d_separable(),
+    "conv2d_separable_bias": build_conv2d_separable_bias(),
 }
 
 FAST_PATH_BUILDERS = {
