@@ -276,6 +276,24 @@ def build_kn_transpose_01() -> Builder:
     return _build
 
 
+def build_kn_conv2d() -> Builder:
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.conv2d(
+            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_rms_norm_op": build_kn_rms_norm(),
@@ -307,6 +325,7 @@ KN_OP_BUILDERS = {
     "kn_chunk_1_op": build_kn_chunk(1),
     "kn_chunk_2_op": build_kn_chunk(2),
     "kn_transpose_01_op": build_kn_transpose_01(),
+    "kn_conv2d_op": build_kn_conv2d(),
 }
 
 def build_kn_unfused_rms_matmul() -> Builder:

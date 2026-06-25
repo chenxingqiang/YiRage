@@ -85,6 +85,10 @@ kn_ops:
     tier: supported
     layer: layout
     note: swap dims 0 and 1; torch.transpose(0, 1); CPU interpreter + search explore
+  kn_conv2d_op:
+    tier: supported
+    layer: kn
+    note: NCHW input, OIHW weight; F.conv2d parity; stride/padding/dilation in JSON; search explore deferred
   kn_concat_then_matmul_op:
     tier: unsupported
     layer: layout

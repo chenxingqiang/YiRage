@@ -394,6 +394,29 @@ void from_json(json const &j, Graph &g) {
         guid_mapping[output.guid] = guidO;
         break;
       }
+      case type::KNOperatorType::KN_CONV2D_OP: {
+        size_t guid_in, guid_w, guidO;
+        int stride_h, stride_w, padding_h, padding_w, dilation_h, dilation_w;
+        jop.at("input_tensors")[0].at("guid").get_to(guid_in);
+        jop.at("input_tensors")[1].at("guid").get_to(guid_w);
+        jop.at("output_tensors")[0].at("guid").get_to(guidO);
+        jop.at("stride_h").get_to(stride_h);
+        jop.at("stride_w").get_to(stride_w);
+        jop.at("padding_h").get_to(padding_h);
+        jop.at("padding_w").get_to(padding_w);
+        jop.at("dilation_h").get_to(dilation_h);
+        jop.at("dilation_w").get_to(dilation_w);
+        DTensor const &output = g.conv2d(get_tensor_from_guid(guid_in),
+                                         get_tensor_from_guid(guid_w),
+                                         stride_h,
+                                         stride_w,
+                                         padding_h,
+                                         padding_w,
+                                         dilation_h,
+                                         dilation_w);
+        guid_mapping[output.guid] = guidO;
+        break;
+      }
       case type::KNOperatorType::KN_CUSTOMIZED_OP: {
         std::vector<DTensor> inputs;
         for (auto const &jinput : jop.at("input_tensors")) {

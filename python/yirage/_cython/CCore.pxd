@@ -96,6 +96,7 @@ cdef extern from "type.h" namespace "yirage::type":
         KN_CHUNK_1_OP = 1424,
         KN_CHUNK_2_OP = 1425,
         KN_TRANSPOSE_01_OP = 1426,
+        KN_CONV2D_OP = 1427,
         KN_SPLIT_LAST_OP_ID = 1429,
         # Communication
         KN_ALLREDUCE_OP = 1900,
@@ -210,6 +211,15 @@ cdef extern from "kernel/element_unary.h" namespace "yirage::kernel":
     bint kn_operator_clamp_bounds(const CppKNOperator* op, float* min_val, float* max_val) except +
     bint kn_operator_mul_scalar_value(const CppKNOperator* op, float* scalar) except +
 
+cdef extern from "kernel/conv2d.h" namespace "yirage::kernel":
+    bint kn_operator_conv2d_params(const CppKNOperator* op,
+                                   int* stride_h,
+                                   int* stride_w,
+                                   int* padding_h,
+                                   int* padding_w,
+                                   int* dilation_h,
+                                   int* dilation_w) except +
+
 cdef extern from "kernel/graph.h" namespace "yirage::kernel":
     cdef cppclass CppKNGraph "yirage::kernel::Graph":
         CppKNGraph(dim3 gpu_dim, bool disable_fingerprint)
@@ -240,6 +250,14 @@ cdef extern from "kernel/graph.h" namespace "yirage::kernel":
         int split(const CppDTensor *input, int split_size, int dim) except +
         int chunk(const CppDTensor *input, int chunk_size, int dim) except +
         CppDTensor* transpose01(const CppDTensor *input) except +
+        CppDTensor* conv2d(const CppDTensor *input,
+                           const CppDTensor *weight,
+                           int stride_h,
+                           int stride_w,
+                           int padding_h,
+                           int padding_w,
+                           int dilation_h,
+                           int dilation_w) except +
         int customized(vector[const CppDTensor*] inputs,
                        CppDTensor** outputs,
                        CppTBGraph* bgraph)

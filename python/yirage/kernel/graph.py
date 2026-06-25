@@ -1114,6 +1114,15 @@ def _interpret_mugraph_on_cpu_impl(cygraph, input_tensors):
         elif ot == "kn_transpose_01_op":
             tensor_map[out_guids[0]] = ins[0].transpose(0, 1).contiguous()
 
+        elif ot == "kn_conv2d_op":
+            tensor_map[out_guids[0]] = torch.nn.functional.conv2d(
+                ins[0],
+                ins[1],
+                stride=(int(op["stride_h"]), int(op["stride_w"])),
+                padding=(int(op["padding_h"]), int(op["padding_w"])),
+                dilation=(int(op["dilation_h"]), int(op["dilation_w"])),
+            )
+
         elif ot in _KN_CONCAT_OPS:
             concat_dim = int(op.get("concat_dim", _kn_concat_axis(ot)))
             tensor_map[out_guids[0]] = torch.cat([ins[0], ins[1]], dim=concat_dim)
@@ -1301,6 +1310,20 @@ class KNGraph:
         raise NotImplementedError(
             "CPU transpose currently supports dim0=0, dim1=1 only; use kn_transpose_01_op"
         )
+
+    def conv2d(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """2D convolution (NCHW input, OIHW weight; aligned with ``F.conv2d``)."""
+        sh, sw = int(stride[0]), int(stride[1])
+        ph, pw = int(padding[0]), int(padding[1])
+        dh, dw = int(dilation[0]), int(dilation[1])
+        return self.cygraph.conv2d(input, weight, sh, sw, ph, pw, dh, dw)
 
     def rms_norm(self, A: DTensor, normalized_shape: tuple):
         return self.cygraph.rms_norm(A, normalized_shape)

@@ -207,6 +207,31 @@ public:
   DTensor transpose01(DTensor const &input);
   DTensor *transpose01(DTensor const *input);
   KNOperator *create_transpose01_op(DTensor const &input);
+  // conv2d operator (NCHW input, OIHW weight; matches torch.nn.functional.conv2d)
+  DTensor conv2d(DTensor const &input,
+                 DTensor const &weight,
+                 int stride_h,
+                 int stride_w,
+                 int padding_h,
+                 int padding_w,
+                 int dilation_h,
+                 int dilation_w);
+  DTensor *conv2d(DTensor const *input,
+                  DTensor const *weight,
+                  int stride_h,
+                  int stride_w,
+                  int padding_h,
+                  int padding_w,
+                  int dilation_h,
+                  int dilation_w);
+  KNOperator *create_conv2d_op(DTensor const &input,
+                               DTensor const &weight,
+                               int stride_h,
+                               int stride_w,
+                               int padding_h,
+                               int padding_w,
+                               int dilation_h,
+                               int dilation_w);
   // customized operator
   std::vector<DTensor> customized(std::vector<DTensor> const &inputs,
                                   yirage::threadblock::Graph const &_graph);
