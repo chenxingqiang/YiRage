@@ -39,6 +39,7 @@ def _force_kn_interpreter(monkeypatch):
         "gemm_layernorm",
         "self_attention",
         "self_attention_scaled",
+        "self_attention_multi_head",
     ],
 )
 def test_general_ml_compound_patterns_match_pytorch(pattern: str):
