@@ -2000,6 +2000,19 @@ class KNGraph:
         """
         return self.gelu(self.gemm_bias(A, B, bias))
 
+    def gemm_bias_silu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        bias: DTensor,
+    ) -> DTensor:
+        """
+        GEMM + bias + SiLU (``F.silu(A @ B + bias)`` aligned).
+
+        Same tensor contracts as :meth:`gemm_bias`.
+        """
+        return self.silu(self.gemm_bias(A, B, bias))
+
     def self_attention(
         self,
         Q: DTensor,
