@@ -84,6 +84,20 @@ def build_kn_matmul() -> Builder:
     return _build
 
 
+def build_kn_matmul_3d_2d() -> Builder:
+    """KN matmul with PyTorch-style broadcast: [B,M,K] @ [K,N] -> [B,M,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(2, 4, 8), dtype=yr.float16)
+        b = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.matmul(a, b))
+        ta, tb = _f16((2, 4, 8)), _f16((8, 16))
+        return g, [ta, tb], torch.matmul(ta, tb)
+
+    return _build
+
+
 def build_kn_rms_norm() -> Builder:
     def _build():
         g = yr.new_kernel_graph()
@@ -745,6 +759,7 @@ def build_conv2d_separable_bias_silu() -> Builder:
 
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
+    "kn_matmul_3d_2d_op": build_kn_matmul_3d_2d(),
     "kn_rms_norm_op": build_kn_rms_norm(),
     "kn_exp_op": build_kn_unary("exp"),
     "kn_square_op": build_kn_unary("square"),
@@ -1192,6 +1207,32 @@ def build_gated_mlp_batched_gelu() -> Builder:
     return _build
 
 
+def build_gated_mlp_3d() -> Builder:
+    """3D gated MLP [B,S,D] with shared 2D weights (KN 3D×2D matmul broadcast)."""
+
+    def _build():
+        batch, seq, dim, d_ff = 2, 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((batch, seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.silu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
 def build_rms_norm_linear() -> Builder:
     """RMSNorm + linear vs rms reference matmul (QKV-style projection)."""
 
@@ -1401,6 +1442,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp_gelu": build_gated_mlp_gelu(),
     "gated_mlp_batched": build_gated_mlp_batched(),
     "gated_mlp_batched_gelu": build_gated_mlp_batched_gelu(),
+    "gated_mlp_3d": build_gated_mlp_3d(),
     "rms_norm_linear": build_rms_norm_linear(),
     "rms_norm_linear_gelu": build_rms_norm_linear_gelu(),
     "rms_norm_linear_relu": build_rms_norm_linear_relu(),

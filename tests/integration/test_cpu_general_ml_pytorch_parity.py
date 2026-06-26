@@ -53,6 +53,7 @@ def _force_kn_interpreter(monkeypatch):
         "gated_mlp_gelu",
         "gated_mlp_batched",
         "gated_mlp_batched_gelu",
+        "gated_mlp_3d",
         "rms_norm_linear",
         "rms_norm_linear_gelu",
         "rms_norm_linear_relu",

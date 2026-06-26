@@ -255,24 +255,33 @@ def _validate_kernel_matmul(A: DTensor, B: DTensor) -> None:
     """Match ``yirage::kernel::Graph::create_matmul_op`` shape rules; raise before native code."""
     if A.num_dims is None or B.num_dims is None:
         raise ValueError("matmul: invalid DTensor (missing dimensions)")
-    if A.num_dims != B.num_dims:
-        raise ValueError(
-            f"matmul: rank mismatch (A.num_dims={A.num_dims}, B.num_dims={B.num_dims})"
-        )
-    nd = A.num_dims
-    if nd < 2:
+    na, nb = A.num_dims, B.num_dims
+    if na < 2 or nb < 2:
         raise ValueError("matmul: tensors need at least 2 dimensions")
-    if A.dim(nd - 1) != B.dim(nd - 2):
+    if A.dim(na - 1) != B.dim(nb - 2):
         raise ValueError(
             "matmul: inner dimensions do not match for contraction: "
-            f"A[..., -1]={A.dim(nd - 1)} vs B[..., -2]={B.dim(nd - 2)}"
+            f"A[..., -1]={A.dim(na - 1)} vs B[..., -2]={B.dim(nb - 2)}"
         )
-    for i in range(nd - 2):
-        if A.dim(i) != B.dim(i):
-            raise ValueError(
-                f"matmul: batch dimension {i} mismatch: "
-                f"A.dim={A.dim(i)} vs B.dim={B.dim(i)}"
-            )
+    if na == nb:
+        for i in range(na - 2):
+            if A.dim(i) != B.dim(i):
+                raise ValueError(
+                    f"matmul: batch dimension {i} mismatch: "
+                    f"A.dim={A.dim(i)} vs B.dim={B.dim(i)}"
+                )
+        return
+    if na == nb + 1:
+        for i in range(nb - 2):
+            if A.dim(i) != B.dim(i):
+                raise ValueError(
+                    f"matmul: batch dimension {i} mismatch: "
+                    f"A.dim={A.dim(i)} vs B.dim={B.dim(i)}"
+                )
+        return
+    raise ValueError(
+        f"matmul: rank mismatch (A.num_dims={na}, B.num_dims={nb})"
+    )
 
 
 _TB_FORLOOP_ACCUM_SUPPORTED = frozenset(
@@ -2381,8 +2390,8 @@ class KNGraph:
         Implements: W_down @ (act(X @ W_gate) * (X @ W_up))
         
         Args:
-            X: Input tensor [B, S, D]
-            W_gate: Gate weight [D, D_ff]
+            X: Input tensor ``[B, S, D]`` or ``[S, D]`` (3D uses broadcast matmul with 2D weights)
+            W_gate: Gate weight ``[D, D_ff]``
             W_up: Up projection weight [D, D_ff]
             W_down: Down projection weight [D_ff, D] (optional)
             activation: Activation function ("silu" or "gelu")

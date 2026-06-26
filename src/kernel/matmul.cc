@@ -26,6 +26,47 @@
 namespace yirage {
 namespace kernel {
 
+namespace {
+
+bool kn_matmul_output_shape(DTensor const &A, DTensor const &B, DTensor &C) {
+  int const nd_a = A.num_dims;
+  int const nd_b = B.num_dims;
+  if (nd_a < 2 || nd_b < 2) {
+    return false;
+  }
+  if (A.dim[nd_a - 1] != B.dim[nd_b - 2]) {
+    return false;
+  }
+  if (nd_a == nd_b) {
+    for (int i = 0; i < nd_a - 2; ++i) {
+      if (A.dim[i] != B.dim[i]) {
+        return false;
+      }
+    }
+    C.num_dims = nd_a;
+    for (int i = 0; i < nd_a; ++i) {
+      C.dim[i] = A.dim[i];
+    }
+    C.dim[nd_a - 1] = B.dim[nd_b - 1];
+    return true;
+  }
+  if (nd_a == nd_b + 1) {
+    for (int i = 0; i < nd_b - 2; ++i) {
+      if (A.dim[i] != B.dim[i]) {
+        return false;
+      }
+    }
+    C.num_dims = nd_a;
+    for (int i = 0; i < nd_a - 1; ++i) {
+      C.dim[i] = A.dim[i];
+    }
+    C.dim[nd_a - 1] = B.dim[nd_b - 1];
+    return true;
+  }
+  return false;
+}
+
+} // namespace
 
 DTensor Graph::matmul(DTensor const &A, DTensor const &B) {
   KNOperator *op = create_matmul_op(A, B);
@@ -51,24 +92,10 @@ DTensor *Graph::matmul(DTensor const *A, DTensor const *B) {
 }
 
 KNOperator *Graph::create_matmul_op(DTensor const &A, DTensor const &B) {
-  if (A.num_dims != B.num_dims) {
-    return nullptr;
-  }
-  if (A.dim[A.num_dims - 1] != B.dim[B.num_dims - 2]) {
-    return nullptr;
-  }
-  for (int i = 0; i < A.num_dims - 2; i++) {
-    if (A.dim[i] != B.dim[i]) {
-      return nullptr;
-    }
-  }
-
   DTensor C;
-  C.num_dims = A.num_dims;
-  for (int i = 0; i < C.num_dims; i++) {
-    C.dim[i] = A.dim[i];
+  if (!kn_matmul_output_shape(A, B, C)) {
+    return nullptr;
   }
-  C.dim[C.num_dims - 1] = B.dim[C.num_dims - 1];
   C.data_type = A.data_type;
 
   if (!can_allocate(C)) {
@@ -82,18 +109,9 @@ KNOperator *Graph::create_matmul_op(DTensor const &A, DTensor const &B) {
 KNMatmulOp::KNMatmulOp(Graph *_kgraph, DTensor const &A, DTensor const &B)
     : KNOperator(_kgraph, yirage::type::KN_MATMUL_OP, A, B) {
   DTensor C;
-  assert(A.num_dims == B.num_dims);
-  assert(A.dim[A.num_dims - 1] == B.dim[B.num_dims - 2]);
-  for (int i = 0; i < A.num_dims - 2; i++) {
-    assert(A.dim[i] == B.dim[i]);
-  }
+  assert(kn_matmul_output_shape(A, B, C));
   // Currently only support row-major output
   // to be consistent with cutlass
-  C.num_dims = A.num_dims;
-  for (int i = 0; i < C.num_dims; i++) {
-    C.dim[i] = A.dim[i];
-  }
-  C.dim[C.num_dims - 1] = B.dim[C.num_dims - 1];
   C.layout = yirage::layout::DmemRowMajor;
   C.data_type = A.data_type;
   C.owner_op = this;
