@@ -1085,6 +1085,73 @@ def build_gated_mlp_gelu() -> Builder:
     return _build
 
 
+def _gated_mlp_batched_ref(
+    tx: torch.Tensor,
+    twg: torch.Tensor,
+    twu: torch.Tensor,
+    twd: torch.Tensor,
+    *,
+    activation: str,
+) -> torch.Tensor:
+    """PyTorch reference for 3D gated MLP with [1,D,*] weights."""
+    batch = tx.shape[0]
+    outs = []
+    act_fn = torch.nn.functional.silu if activation == "silu" else torch.nn.functional.gelu
+    for b in range(batch):
+        xb = tx[b : b + 1].float()
+        gate = act_fn(torch.matmul(xb, twg.float()))
+        up = torch.matmul(xb, twu.float())
+        inter = gate * up
+        outs.append(torch.matmul(inter, twd.float()))
+    return torch.cat(outs, dim=0).to(torch.float16)
+
+
+def build_gated_mlp_batched() -> Builder:
+    """3D gated MLP [B,S,D] with shared [1,D,D_ff] weights (SiLU gate)."""
+
+    def _build():
+        batch, seq, dim, d_ff = 2, 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(1, d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp_batched(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((batch, seq, dim))
+        twg = _f16((1, dim, d_ff))
+        twu = _f16((1, dim, d_ff))
+        twd = _f16((1, d_ff, dim))
+        ref = _gated_mlp_batched_ref(tx, twg, twu, twd, activation="silu")
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_gated_mlp_batched_gelu() -> Builder:
+    """3D gated MLP [B,S,D] with shared [1,D,D_ff] weights (GELU gate)."""
+
+    def _build():
+        batch, seq, dim, d_ff = 2, 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(1, d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp_batched(x, w_gate, w_up, w_down, activation="gelu")
+        )
+        tx = _f16((batch, seq, dim))
+        twg = _f16((1, dim, d_ff))
+        twu = _f16((1, dim, d_ff))
+        twd = _f16((1, d_ff, dim))
+        ref = _gated_mlp_batched_ref(tx, twg, twu, twd, activation="gelu")
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
 def build_rms_norm_linear() -> Builder:
     """RMSNorm + linear vs rms reference matmul (QKV-style projection)."""
 
@@ -1290,6 +1357,8 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_bias_silu": build_gemm_bias_silu(),
     "gated_mlp": build_gated_mlp(),
     "gated_mlp_gelu": build_gated_mlp_gelu(),
+    "gated_mlp_batched": build_gated_mlp_batched(),
+    "gated_mlp_batched_gelu": build_gated_mlp_batched_gelu(),
     "rms_norm_linear": build_rms_norm_linear(),
     "rms_norm_linear_gelu": build_rms_norm_linear_gelu(),
     "rms_norm_linear_relu": build_rms_norm_linear_relu(),

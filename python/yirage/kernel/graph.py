@@ -2317,6 +2317,74 @@ class KNGraph:
         
         return result
 
+    def _gated_mlp_batch1(
+        self,
+        X: DTensor,
+        W_gate: DTensor,
+        W_up: DTensor,
+        W_down: DTensor | None,
+        *,
+        activation: str,
+    ) -> DTensor:
+        """Single batch slice ``[1, S, D]`` with shared ``[1, D, D_ff]`` weights."""
+        gate = self.cygraph.matmul(X, W_gate)
+        if activation == "silu":
+            gate_act = self.silu(gate)
+        elif activation == "gelu":
+            gate_act = self.gelu(gate)
+        else:
+            gate_act = gate
+        up = self.cygraph.matmul(X, W_up)
+        intermediate = self.mul(gate_act, up)
+        if W_down is not None:
+            return self.cygraph.matmul(intermediate, W_down)
+        return intermediate
+
+    def gated_mlp_batched(
+        self,
+        X: DTensor,
+        W_gate: DTensor,
+        W_up: DTensor,
+        W_down: DTensor = None,
+        activation: str = "silu",
+    ) -> DTensor:
+        """
+        Gated MLP on batched 3D activations ``[B, S, D]``.
+
+        Weights must be rank-3 with leading batch dim 1 (``[1, D, D_ff]`` /
+        ``[1, D_ff, D]``) so each batch slice uses ``[1, S, D] @ [1, D, D_ff]``.
+        For ``B > 1``, runs per-batch ``gated_mlp`` via chunk/concat (KN matmul
+        does not yet broadcast shared 2D weights onto 3D activations).
+        """
+        if X.num_dims != 3:
+            raise NotImplementedError(
+                "CPU gated_mlp_batched expects 3D X [B, S, D]"
+            )
+        if W_gate.num_dims != 3 or W_up.num_dims != 3:
+            raise ValueError(
+                "gated_mlp_batched expects 3D W_gate/W_up [1, D, D_ff]"
+            )
+        if W_down is not None and W_down.num_dims != 3:
+            raise ValueError(
+                "gated_mlp_batched expects 3D W_down [1, D_ff, D]"
+            )
+        batch = X.dim(0)
+        if batch == 1:
+            return self._gated_mlp_batch1(
+                X, W_gate, W_up, W_down, activation=activation
+            )
+        x_batches = self.chunk(X, batch, 0)
+        batch_outputs = [
+            self._gated_mlp_batch1(
+                x_batches[i], W_gate, W_up, W_down, activation=activation
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = self.concat(out, batch_outputs[i], 0)
+        return out
+
     def rms_norm_linear(
         self,
         X: DTensor,

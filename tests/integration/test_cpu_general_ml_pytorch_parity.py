@@ -49,6 +49,8 @@ def _force_kn_interpreter(monkeypatch):
         "gemm_bias_silu",
         "gated_mlp",
         "gated_mlp_gelu",
+        "gated_mlp_batched",
+        "gated_mlp_batched_gelu",
         "rms_norm_linear",
         "rms_norm_linear_gelu",
         "rms_norm_linear_relu",
