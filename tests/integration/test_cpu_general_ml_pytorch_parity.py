@@ -34,7 +34,11 @@ def _force_kn_interpreter(monkeypatch):
     "pattern",
     [
         "kn_softmax",
+        "kn_softmax_3d",
+        "kn_softmax_3d_batch1",
         "kn_layer_norm",
+        "kn_rms_norm_3d",
+        "kn_rms_norm_3d_batch1",
         "kn_layer_norm_3d",
         "gemm_softmax",
         "gemm_softmax_scaled",
