@@ -1276,6 +1276,68 @@ def build_rms_norm_linear_3d() -> Builder:
     return _build
 
 
+def _rms_norm_linear_3d_ref(
+    tx: torch.Tensor, tw: torch.Tensor, *, activation: str | None = None
+) -> torch.Tensor:
+    scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+    out = torch.matmul(tx.float() * scale, tw.float())
+    if activation == "gelu":
+        out = torch.nn.functional.gelu(out)
+    elif activation == "relu":
+        out = torch.nn.functional.relu(out)
+    elif activation == "silu":
+        out = torch.nn.functional.silu(out)
+    return out.to(torch.float16)
+
+
+def build_rms_norm_linear_3d_gelu() -> Builder:
+    """3D RMSNorm + linear + GELU [B,S,D] @ [D,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_gelu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((batch, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="gelu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_relu() -> Builder:
+    """3D RMSNorm + linear + ReLU [B,S,D] @ [D,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_relu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((batch, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="relu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_silu() -> Builder:
+    """3D RMSNorm + linear + SiLU [B,S,D] @ [D,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_silu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((batch, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="silu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_rms_norm_linear() -> Builder:
     """RMSNorm + linear vs rms reference matmul (QKV-style projection)."""
 
@@ -1489,6 +1551,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp_3d_gelu": build_gated_mlp_3d_gelu(),
     "rms_norm_linear": build_rms_norm_linear(),
     "rms_norm_linear_3d": build_rms_norm_linear_3d(),
+    "rms_norm_linear_3d_gelu": build_rms_norm_linear_3d_gelu(),
+    "rms_norm_linear_3d_relu": build_rms_norm_linear_3d_relu(),
+    "rms_norm_linear_3d_silu": build_rms_norm_linear_3d_silu(),
     "rms_norm_linear_gelu": build_rms_norm_linear_gelu(),
     "rms_norm_linear_relu": build_rms_norm_linear_relu(),
     "rms_norm_linear_silu": build_rms_norm_linear_silu(),
