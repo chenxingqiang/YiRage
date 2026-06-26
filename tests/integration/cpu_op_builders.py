@@ -859,6 +859,28 @@ def build_gemm_softmax_scaled() -> Builder:
     return _build
 
 
+def build_gemm_softmax_scaled_batched() -> Builder:
+    """Batched scaled gemm_softmax on 3D [B,S,D] / [B,D,S]."""
+
+    def _build():
+        batch, seq, dim = 2, 8, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        b = g.new_input(dims=(batch, dim, seq), dtype=yr.float16)
+        g.mark_output(g.gemm_softmax_scaled_batched(a, b, dim=-1, head_dim=dim))
+        ta = _f16((batch, seq, dim))
+        tb = _f16((batch, dim, seq))
+        scale = dim ** -0.5
+        outs = []
+        for bi in range(batch):
+            scores = torch.matmul(ta[bi].float(), tb[bi].float()) * scale
+            outs.append(torch.nn.functional.softmax(scores, dim=-1))
+        ref = torch.stack(outs, dim=0).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_layernorm() -> Builder:
     """COMET gemm_layernorm compound op vs torch matmul + F.layer_norm (eps=0)."""
 
@@ -1363,6 +1385,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_layer_norm": build_kn_layer_norm(),
     "gemm_softmax": build_gemm_softmax(),
     "gemm_softmax_scaled": build_gemm_softmax_scaled(),
+    "gemm_softmax_scaled_batched": build_gemm_softmax_scaled_batched(),
     "gemm_layernorm": build_gemm_layernorm(),
     "gemm_layernorm_gelu": build_gemm_layernorm_gelu(),
     "gemm_layernorm_relu": build_gemm_layernorm_relu(),

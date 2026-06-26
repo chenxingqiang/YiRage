@@ -1917,6 +1917,79 @@ class KNGraph:
             self, C, rows=rows, cols=cols, dim=dim
         )
 
+    def _gemm_softmax_scaled_batch1(
+        self,
+        A: DTensor,
+        B: DTensor,
+        dim: int = -1,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """Single batch slice ``[1, S, D] @ [1, D, S]`` with stable 3D softmax."""
+        if A.num_dims != 3 or B.num_dims != 3:
+            raise ValueError(
+                "_gemm_softmax_scaled_batch1 expects 3D A/B "
+                "([1, S, D], [1, D, S])"
+            )
+        C = self.cygraph.matmul(A, B)
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        if scale is not None:
+            C = self.mul_scalar(C, float(scale))
+        seq = C.dim(1)
+        cols = C.dim(2)
+        return _kn_customized_tb_softmax_last_dim(
+            self, C, rows=seq, cols=cols, dim=dim, num_leading_dims=1
+        )
+
+    def gemm_softmax_scaled_batched(
+        self,
+        A: DTensor,
+        B: DTensor,
+        dim: int = -1,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """
+        Batched scaled GEMM + Softmax on 3D tensors.
+
+        Implements ``softmax(scale * A @ B, dim)`` independently per batch row.
+
+        Args:
+            A: ``[B, S, D]``
+            B: ``[B, D, S]`` (transposed keys per batch item)
+            scale / head_dim: Dot-product scale (defaults via ``head_dim``).
+
+        Returns:
+            ``[B, S, S]`` attention score tensor
+        """
+        if A.num_dims != 3 or B.num_dims != 3:
+            raise NotImplementedError(
+                "CPU gemm_softmax_scaled_batched expects 3D A/B "
+                "([B, S, D], [B, D, S])"
+            )
+        batch, seq, dim_in = A.dim(0), A.dim(1), A.dim(2)
+        if B.dim(0) != batch or B.dim(1) != dim_in or B.dim(2) != seq:
+            raise ValueError("B shape must be [B, D, S]")
+        if batch == 1:
+            return self._gemm_softmax_scaled_batch1(
+                A, B, dim, scale=scale, head_dim=head_dim
+            )
+        a_batches = self.chunk(A, batch, 0)
+        b_batches = self.chunk(B, batch, 0)
+        batch_outputs = [
+            self._gemm_softmax_scaled_batch1(
+                a_batches[i], b_batches[i], dim, scale=scale, head_dim=head_dim
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = self.concat(out, batch_outputs[i], 0)
+        return out
+
     def gemm_layernorm(
         self,
         A: DTensor,
