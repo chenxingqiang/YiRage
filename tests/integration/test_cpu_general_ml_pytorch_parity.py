@@ -36,6 +36,7 @@ def _force_kn_interpreter(monkeypatch):
         "kn_softmax",
         "kn_layer_norm",
         "gemm_softmax",
+        "gemm_softmax_scaled",
         "gemm_layernorm",
         "gemm_layernorm_gelu",
         "gemm_layernorm_relu",

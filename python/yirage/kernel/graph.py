@@ -1892,6 +1892,31 @@ class KNGraph:
             self, C, rows=rows, cols=cols, dim=dim
         )
 
+    def gemm_softmax_scaled(
+        self,
+        A: DTensor,
+        B: DTensor,
+        dim: int = -1,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """
+        Scaled GEMM + Softmax (``softmax(scale * A @ B, dim)`` aligned).
+
+        Same stable TB softmax path as :meth:`gemm_softmax`; ``head_dim`` sets
+        ``scale = 1 / sqrt(head_dim)`` (standard dot-product attention scores).
+        """
+        C = self.cygraph.matmul(A, B)
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        if scale is not None:
+            C = self.mul_scalar(C, float(scale))
+        rows, cols = C.dim(0), C.dim(1)
+        return _kn_customized_tb_softmax_last_dim(
+            self, C, rows=rows, cols=cols, dim=dim
+        )
+
     def gemm_layernorm(
         self,
         A: DTensor,
