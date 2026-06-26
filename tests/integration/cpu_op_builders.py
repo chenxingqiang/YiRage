@@ -857,6 +857,60 @@ def build_gemm_layernorm() -> Builder:
     return _build
 
 
+def build_gemm_layernorm_gelu() -> Builder:
+    """GEMM + LayerNorm + GELU vs F.gelu(layer_norm(matmul))."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_gelu(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.layer_norm(c, (16,), eps=0.0)
+        ).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_relu() -> Builder:
+    """GEMM + LayerNorm + ReLU vs F.relu(layer_norm(matmul))."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_relu(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.layer_norm(c, (16,), eps=0.0)
+        ).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_silu() -> Builder:
+    """GEMM + LayerNorm + SiLU vs F.silu(layer_norm(matmul))."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_silu(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.silu(
+            torch.nn.functional.layer_norm(c, (16,), eps=0.0)
+        ).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_gelu() -> Builder:
     """COMET-style gemm_gelu compound op vs torch matmul + F.gelu."""
 
@@ -1224,6 +1278,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_layer_norm": build_kn_layer_norm(),
     "gemm_softmax": build_gemm_softmax(),
     "gemm_layernorm": build_gemm_layernorm(),
+    "gemm_layernorm_gelu": build_gemm_layernorm_gelu(),
+    "gemm_layernorm_relu": build_gemm_layernorm_relu(),
+    "gemm_layernorm_silu": build_gemm_layernorm_silu(),
     "gemm_gelu": build_gemm_gelu(),
     "gemm_silu": build_gemm_silu(),
     "gemm_relu": build_gemm_relu(),

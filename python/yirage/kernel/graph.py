@@ -1913,6 +1913,48 @@ class KNGraph:
             self, C, rows=rows, cols=cols, eps=eps
         )
 
+    def gemm_layernorm_gelu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        normalized_shape: tuple,
+        eps: float = 1e-5,
+    ) -> DTensor:
+        """
+        GEMM + LayerNorm + GELU (``F.gelu(LayerNorm(A @ B))`` aligned).
+
+        Same tensor contracts as :meth:`gemm_layernorm`.
+        """
+        return self.gelu(self.gemm_layernorm(A, B, normalized_shape, eps=eps))
+
+    def gemm_layernorm_relu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        normalized_shape: tuple,
+        eps: float = 1e-5,
+    ) -> DTensor:
+        """
+        GEMM + LayerNorm + ReLU (``F.relu(LayerNorm(A @ B))`` aligned).
+
+        Same tensor contracts as :meth:`gemm_layernorm`.
+        """
+        return self.relu(self.gemm_layernorm(A, B, normalized_shape, eps=eps))
+
+    def gemm_layernorm_silu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        normalized_shape: tuple,
+        eps: float = 1e-5,
+    ) -> DTensor:
+        """
+        GEMM + LayerNorm + SiLU (``F.silu(LayerNorm(A @ B))`` aligned).
+
+        Same tensor contracts as :meth:`gemm_layernorm`.
+        """
+        return self.silu(self.gemm_layernorm(A, B, normalized_shape, eps=eps))
+
     def gemm_gelu(
         self,
         A: DTensor,
