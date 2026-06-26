@@ -255,24 +255,33 @@ def _validate_kernel_matmul(A: DTensor, B: DTensor) -> None:
     """Match ``yirage::kernel::Graph::create_matmul_op`` shape rules; raise before native code."""
     if A.num_dims is None or B.num_dims is None:
         raise ValueError("matmul: invalid DTensor (missing dimensions)")
-    if A.num_dims != B.num_dims:
-        raise ValueError(
-            f"matmul: rank mismatch (A.num_dims={A.num_dims}, B.num_dims={B.num_dims})"
-        )
-    nd = A.num_dims
-    if nd < 2:
+    na, nb = A.num_dims, B.num_dims
+    if na < 2 or nb < 2:
         raise ValueError("matmul: tensors need at least 2 dimensions")
-    if A.dim(nd - 1) != B.dim(nd - 2):
+    if A.dim(na - 1) != B.dim(nb - 2):
         raise ValueError(
             "matmul: inner dimensions do not match for contraction: "
-            f"A[..., -1]={A.dim(nd - 1)} vs B[..., -2]={B.dim(nd - 2)}"
+            f"A[..., -1]={A.dim(na - 1)} vs B[..., -2]={B.dim(nb - 2)}"
         )
-    for i in range(nd - 2):
-        if A.dim(i) != B.dim(i):
-            raise ValueError(
-                f"matmul: batch dimension {i} mismatch: "
-                f"A.dim={A.dim(i)} vs B.dim={B.dim(i)}"
-            )
+    if na == nb:
+        for i in range(na - 2):
+            if A.dim(i) != B.dim(i):
+                raise ValueError(
+                    f"matmul: batch dimension {i} mismatch: "
+                    f"A.dim={A.dim(i)} vs B.dim={B.dim(i)}"
+                )
+        return
+    if na == nb + 1:
+        for i in range(nb - 2):
+            if A.dim(i) != B.dim(i):
+                raise ValueError(
+                    f"matmul: batch dimension {i} mismatch: "
+                    f"A.dim={A.dim(i)} vs B.dim={B.dim(i)}"
+                )
+        return
+    raise ValueError(
+        f"matmul: rank mismatch (A.num_dims={na}, B.num_dims={nb})"
+    )
 
 
 _TB_FORLOOP_ACCUM_SUPPORTED = frozenset(
@@ -1892,6 +1901,104 @@ class KNGraph:
             self, C, rows=rows, cols=cols, dim=dim
         )
 
+    def gemm_softmax_scaled(
+        self,
+        A: DTensor,
+        B: DTensor,
+        dim: int = -1,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """
+        Scaled GEMM + Softmax (``softmax(scale * A @ B, dim)`` aligned).
+
+        Same stable TB softmax path as :meth:`gemm_softmax`; ``head_dim`` sets
+        ``scale = 1 / sqrt(head_dim)`` (standard dot-product attention scores).
+        """
+        C = self.cygraph.matmul(A, B)
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        if scale is not None:
+            C = self.mul_scalar(C, float(scale))
+        rows, cols = C.dim(0), C.dim(1)
+        return _kn_customized_tb_softmax_last_dim(
+            self, C, rows=rows, cols=cols, dim=dim
+        )
+
+    def _gemm_softmax_scaled_batch1(
+        self,
+        A: DTensor,
+        B: DTensor,
+        dim: int = -1,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """Single batch slice ``[1, S, D] @ [1, D, S]`` with stable 3D softmax."""
+        if A.num_dims != 3 or B.num_dims != 3:
+            raise ValueError(
+                "_gemm_softmax_scaled_batch1 expects 3D A/B "
+                "([1, S, D], [1, D, S])"
+            )
+        C = self.cygraph.matmul(A, B)
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        if scale is not None:
+            C = self.mul_scalar(C, float(scale))
+        seq = C.dim(1)
+        cols = C.dim(2)
+        return _kn_customized_tb_softmax_last_dim(
+            self, C, rows=seq, cols=cols, dim=dim, num_leading_dims=1
+        )
+
+    def gemm_softmax_scaled_batched(
+        self,
+        A: DTensor,
+        B: DTensor,
+        dim: int = -1,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """
+        Batched scaled GEMM + Softmax on 3D tensors.
+
+        Implements ``softmax(scale * A @ B, dim)`` independently per batch row.
+
+        Args:
+            A: ``[B, S, D]``
+            B: ``[B, D, S]`` (transposed keys per batch item)
+            scale / head_dim: Dot-product scale (defaults via ``head_dim``).
+
+        Returns:
+            ``[B, S, S]`` attention score tensor
+        """
+        if A.num_dims != 3 or B.num_dims != 3:
+            raise NotImplementedError(
+                "CPU gemm_softmax_scaled_batched expects 3D A/B "
+                "([B, S, D], [B, D, S])"
+            )
+        batch, seq, dim_in = A.dim(0), A.dim(1), A.dim(2)
+        if B.dim(0) != batch or B.dim(1) != dim_in or B.dim(2) != seq:
+            raise ValueError("B shape must be [B, D, S]")
+        if batch == 1:
+            return self._gemm_softmax_scaled_batch1(
+                A, B, dim, scale=scale, head_dim=head_dim
+            )
+        a_batches = self.chunk(A, batch, 0)
+        b_batches = self.chunk(B, batch, 0)
+        batch_outputs = [
+            self._gemm_softmax_scaled_batch1(
+                a_batches[i], b_batches[i], dim, scale=scale, head_dim=head_dim
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = self.concat(out, batch_outputs[i], 0)
+        return out
+
     def gemm_layernorm(
         self,
         A: DTensor,
@@ -1912,6 +2019,48 @@ class KNGraph:
         return _kn_customized_tb_layer_norm_last_dim(
             self, C, rows=rows, cols=cols, eps=eps
         )
+
+    def gemm_layernorm_gelu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        normalized_shape: tuple,
+        eps: float = 1e-5,
+    ) -> DTensor:
+        """
+        GEMM + LayerNorm + GELU (``F.gelu(LayerNorm(A @ B))`` aligned).
+
+        Same tensor contracts as :meth:`gemm_layernorm`.
+        """
+        return self.gelu(self.gemm_layernorm(A, B, normalized_shape, eps=eps))
+
+    def gemm_layernorm_relu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        normalized_shape: tuple,
+        eps: float = 1e-5,
+    ) -> DTensor:
+        """
+        GEMM + LayerNorm + ReLU (``F.relu(LayerNorm(A @ B))`` aligned).
+
+        Same tensor contracts as :meth:`gemm_layernorm`.
+        """
+        return self.relu(self.gemm_layernorm(A, B, normalized_shape, eps=eps))
+
+    def gemm_layernorm_silu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        normalized_shape: tuple,
+        eps: float = 1e-5,
+    ) -> DTensor:
+        """
+        GEMM + LayerNorm + SiLU (``F.silu(LayerNorm(A @ B))`` aligned).
+
+        Same tensor contracts as :meth:`gemm_layernorm`.
+        """
+        return self.silu(self.gemm_layernorm(A, B, normalized_shape, eps=eps))
 
     def gemm_gelu(
         self,
@@ -1999,6 +2148,19 @@ class KNGraph:
         Same tensor contracts as :meth:`gemm_bias`.
         """
         return self.gelu(self.gemm_bias(A, B, bias))
+
+    def gemm_bias_silu(
+        self,
+        A: DTensor,
+        B: DTensor,
+        bias: DTensor,
+    ) -> DTensor:
+        """
+        GEMM + bias + SiLU (``F.silu(A @ B + bias)`` aligned).
+
+        Same tensor contracts as :meth:`gemm_bias`.
+        """
+        return self.silu(self.gemm_bias(A, B, bias))
 
     def self_attention(
         self,
@@ -2228,8 +2390,8 @@ class KNGraph:
         Implements: W_down @ (act(X @ W_gate) * (X @ W_up))
         
         Args:
-            X: Input tensor [B, S, D]
-            W_gate: Gate weight [D, D_ff]
+            X: Input tensor ``[B, S, D]`` or ``[S, D]`` (3D uses broadcast matmul with 2D weights)
+            W_gate: Gate weight ``[D, D_ff]``
             W_up: Up projection weight [D, D_ff]
             W_down: Down projection weight [D_ff, D] (optional)
             activation: Activation function ("silu" or "gelu")
@@ -2262,6 +2424,74 @@ class KNGraph:
         
         return result
 
+    def _gated_mlp_batch1(
+        self,
+        X: DTensor,
+        W_gate: DTensor,
+        W_up: DTensor,
+        W_down: DTensor | None,
+        *,
+        activation: str,
+    ) -> DTensor:
+        """Single batch slice ``[1, S, D]`` with shared ``[1, D, D_ff]`` weights."""
+        gate = self.cygraph.matmul(X, W_gate)
+        if activation == "silu":
+            gate_act = self.silu(gate)
+        elif activation == "gelu":
+            gate_act = self.gelu(gate)
+        else:
+            gate_act = gate
+        up = self.cygraph.matmul(X, W_up)
+        intermediate = self.mul(gate_act, up)
+        if W_down is not None:
+            return self.cygraph.matmul(intermediate, W_down)
+        return intermediate
+
+    def gated_mlp_batched(
+        self,
+        X: DTensor,
+        W_gate: DTensor,
+        W_up: DTensor,
+        W_down: DTensor = None,
+        activation: str = "silu",
+    ) -> DTensor:
+        """
+        Gated MLP on batched 3D activations ``[B, S, D]``.
+
+        Weights must be rank-3 with leading batch dim 1 (``[1, D, D_ff]`` /
+        ``[1, D_ff, D]``) so each batch slice uses ``[1, S, D] @ [1, D, D_ff]``.
+        For ``B > 1``, runs per-batch ``gated_mlp`` via chunk/concat (KN matmul
+        does not yet broadcast shared 2D weights onto 3D activations).
+        """
+        if X.num_dims != 3:
+            raise NotImplementedError(
+                "CPU gated_mlp_batched expects 3D X [B, S, D]"
+            )
+        if W_gate.num_dims != 3 or W_up.num_dims != 3:
+            raise ValueError(
+                "gated_mlp_batched expects 3D W_gate/W_up [1, D, D_ff]"
+            )
+        if W_down is not None and W_down.num_dims != 3:
+            raise ValueError(
+                "gated_mlp_batched expects 3D W_down [1, D_ff, D]"
+            )
+        batch = X.dim(0)
+        if batch == 1:
+            return self._gated_mlp_batch1(
+                X, W_gate, W_up, W_down, activation=activation
+            )
+        x_batches = self.chunk(X, batch, 0)
+        batch_outputs = [
+            self._gated_mlp_batch1(
+                x_batches[i], W_gate, W_up, W_down, activation=activation
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = self.concat(out, batch_outputs[i], 0)
+        return out
+
     def rms_norm_linear(
         self,
         X: DTensor,
@@ -2290,6 +2520,45 @@ class KNGraph:
         result = self.cygraph.matmul(X_norm, weight)
         
         return result
+
+    def rms_norm_linear_gelu(
+        self,
+        X: DTensor,
+        weight: DTensor,
+        normalized_shape: tuple,
+    ) -> DTensor:
+        """
+        RMSNorm + Linear + GELU (``F.gelu(RMSNorm(X) @ weight)`` aligned).
+
+        Same tensor contracts as :meth:`rms_norm_linear`.
+        """
+        return self.gelu(self.rms_norm_linear(X, weight, normalized_shape))
+
+    def rms_norm_linear_relu(
+        self,
+        X: DTensor,
+        weight: DTensor,
+        normalized_shape: tuple,
+    ) -> DTensor:
+        """
+        RMSNorm + Linear + ReLU (``F.relu(RMSNorm(X) @ weight)`` aligned).
+
+        Same tensor contracts as :meth:`rms_norm_linear`.
+        """
+        return self.relu(self.rms_norm_linear(X, weight, normalized_shape))
+
+    def rms_norm_linear_silu(
+        self,
+        X: DTensor,
+        weight: DTensor,
+        normalized_shape: tuple,
+    ) -> DTensor:
+        """
+        RMSNorm + Linear + SiLU (``F.silu(RMSNorm(X) @ weight)`` aligned).
+
+        Same tensor contracts as :meth:`rms_norm_linear`.
+        """
+        return self.silu(self.rms_norm_linear(X, weight, normalized_shape))
 
     def get_owner_independent_hash(self):
         return self.cygraph.get_owner_independent_hash()

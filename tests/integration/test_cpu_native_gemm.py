@@ -501,6 +501,24 @@ def test_unfused_concat_matmul_mugraph_detection():
     assert is_production_concat_matmul_mugraph(g.cygraph)
 
 
+def test_concat_matmul_shapes_ignores_four_3d_inputs():
+    """Four 3D inputs must not crash shape probing (unblocks 3D cpu_call graphs)."""
+    import yirage as yr
+    from yirage.kernel.cpu_mlir_jit import (
+        concat_matmul_shapes_from_cygraph,
+        is_production_concat_matmul_mugraph,
+    )
+
+    g = yr.new_kernel_graph()
+    a = g.new_input(dims=(2, 4, 8), dtype=yr.float16)
+    b = g.new_input(dims=(2, 4, 8), dtype=yr.float16)
+    c = g.new_input(dims=(2, 8, 16), dtype=yr.float16)
+    d = g.new_input(dims=(2, 8, 16), dtype=yr.float16)
+    g.mark_output(g.matmul(a, c))
+    assert concat_matmul_shapes_from_cygraph(g.cygraph) is None
+    assert is_production_concat_matmul_mugraph(g.cygraph) is False
+
+
 def test_unfused_concat_matmul_near_mkl_baseline():
     """LoRA concat_matmul µGraph should use host-BLAS blocked path, not TB interpreter."""
     import time

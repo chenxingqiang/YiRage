@@ -199,10 +199,21 @@ def concat_matmul_shapes_from_cygraph(
     inputs = cygraph.get_input_dtensors()
     if len(inputs) != 4:
         return None
-    (m, k1), _ = _tensor_shape_dtype(cygraph, inputs[0])
-    (m2, k2), _ = _tensor_shape_dtype(cygraph, inputs[1])
-    (k1b, n), _ = _tensor_shape_dtype(cygraph, inputs[2])
-    (k2b, n2), _ = _tensor_shape_dtype(cygraph, inputs[3])
+    shape0, _ = _tensor_shape_dtype(cygraph, inputs[0])
+    shape1, _ = _tensor_shape_dtype(cygraph, inputs[1])
+    shape2, _ = _tensor_shape_dtype(cygraph, inputs[2])
+    shape3, _ = _tensor_shape_dtype(cygraph, inputs[3])
+    if (
+        len(shape0) != 2
+        or len(shape1) != 2
+        or len(shape2) != 2
+        or len(shape3) != 2
+    ):
+        return None
+    m, k1 = shape0
+    m2, k2 = shape1
+    k1b, n = shape2
+    k2b, n2 = shape3
     if m != m2 or k1 != k1b or k2 != k2b or n != n2:
         return None
     return m, k1, k2, n
