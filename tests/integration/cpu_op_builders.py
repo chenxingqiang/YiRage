@@ -826,6 +826,68 @@ def build_kn_softmax() -> Builder:
     return _build
 
 
+def build_kn_softmax_3d() -> Builder:
+    """3D softmax [B,S,N] vs F.softmax on last dim."""
+
+    def _build():
+        batch, seq, n = 2, 4, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, n), dtype=yr.float16)
+        g.mark_output(g.softmax(x, dim=-1))
+        inp = _f16((batch, seq, n))
+        ref = torch.nn.functional.softmax(inp.float(), dim=-1).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_rms_norm_3d() -> Builder:
+    """3D RMSNorm [B,S,D] vs torch rsqrt mean square scaling."""
+
+    def _build():
+        batch, seq, dim = 2, 4, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        g.mark_output(g.rms_norm(x, normalized_shape=(dim,)))
+        inp = _f16((batch, seq, dim))
+        scale = torch.rsqrt(inp.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = (inp.float() * scale).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_softmax_3d_batch1() -> Builder:
+    """3D softmax batch=1 fast path [1,S,N] vs F.softmax."""
+
+    def _build():
+        seq, n = 4, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, n), dtype=yr.float16)
+        g.mark_output(g.softmax(x, dim=-1))
+        inp = _f16((1, seq, n))
+        ref = torch.nn.functional.softmax(inp.float(), dim=-1).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_rms_norm_3d_batch1() -> Builder:
+    """3D RMSNorm batch=1 fast path [1,S,D]."""
+
+    def _build():
+        seq, dim = 4, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        g.mark_output(g.rms_norm(x, normalized_shape=(dim,)))
+        inp = _f16((1, seq, dim))
+        scale = torch.rsqrt(inp.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = (inp.float() * scale).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
 def build_kn_layer_norm() -> Builder:
     """KN layer_norm (elementwise_affine=False; eps=0 matches TB sqrt(var) path)."""
 
@@ -1849,6 +1911,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_exp": build_customized_tb_exp(),
     "customized_tb_matmul_add_bias": build_customized_tb_matmul_add_bias(),
     "kn_softmax": build_kn_softmax(),
+    "kn_softmax_3d": build_kn_softmax_3d(),
+    "kn_softmax_3d_batch1": build_kn_softmax_3d_batch1(),
+    "kn_rms_norm_3d": build_kn_rms_norm_3d(),
+    "kn_rms_norm_3d_batch1": build_kn_rms_norm_3d_batch1(),
     "kn_layer_norm": build_kn_layer_norm(),
     "kn_layer_norm_3d": build_kn_layer_norm_3d(),
     "gemm_softmax": build_gemm_softmax(),

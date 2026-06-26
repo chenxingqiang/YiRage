@@ -1870,15 +1870,11 @@ class KNGraph:
         return self.cygraph.rms_norm(A, normalized_shape)
 
     def softmax(self, A: DTensor, dim: int = -1) -> DTensor:
-        """Row-wise softmax aligned with ``torch.nn.functional.softmax`` (stable TB path)."""
-        rows, cols = A.dim(0), A.dim(1)
-        if A.num_dims != 2:
-            raise NotImplementedError(
-                "CPU softmax currently supports 2D tensors; use TB customized graphs for other ranks"
-            )
-        return _kn_customized_tb_softmax_last_dim(
-            self, A, rows=rows, cols=cols, dim=dim
-        )
+        """Row-wise softmax aligned with ``torch.nn.functional.softmax`` (stable TB path).
+
+        Supports 2D ``[M,N]`` and 3D ``[B,S,N]`` inputs.
+        """
+        return _kn_softmax_batched_last_dim(self, A, dim=dim)
 
     def layer_norm(
         self,
