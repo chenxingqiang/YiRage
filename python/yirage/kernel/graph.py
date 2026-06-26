@@ -1475,6 +1475,33 @@ class KNGraph:
             )
         )
 
+    def conv2d_bias_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + bias + SiLU (``F.silu(F.conv2d(..., bias=...))`` aligned).
+
+        Same tensor contracts as :meth:`conv2d_bias`.
+        """
+        return self.silu(
+            self.conv2d_bias(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
     def conv2d_depthwise_bias(
         self,
         input: DTensor,
@@ -1547,6 +1574,31 @@ class KNGraph:
         Same tensor contracts as :meth:`conv2d_depthwise_bias`.
         """
         return self.gelu(
+            self.conv2d_depthwise_bias(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_depthwise_bias_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d + bias + SiLU (MobileNet-style depthwise block).
+
+        Same tensor contracts as :meth:`conv2d_depthwise_bias`.
+        """
+        return self.silu(
             self.conv2d_depthwise_bias(
                 input,
                 weight,
@@ -1676,6 +1728,35 @@ class KNGraph:
         Same tensor contracts as :meth:`conv2d_separable_bias`.
         """
         return self.gelu(
+            self.conv2d_separable_bias(
+                input,
+                depthwise_weight,
+                pointwise_weight,
+                depthwise_bias,
+                pointwise_bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_separable_bias_silu(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        depthwise_bias: DTensor,
+        pointwise_bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d + biases + SiLU (fused MobileNet block output).
+
+        Same tensor contracts as :meth:`conv2d_separable_bias`.
+        """
+        return self.silu(
             self.conv2d_separable_bias(
                 input,
                 depthwise_weight,
