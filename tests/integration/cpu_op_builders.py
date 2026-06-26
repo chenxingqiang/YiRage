@@ -966,6 +966,87 @@ def build_gemm_layernorm_silu() -> Builder:
     return _build
 
 
+def _gemm_layernorm_3d_ref(
+    ta: torch.Tensor,
+    tb: torch.Tensor,
+    *,
+    activation: str | None = None,
+) -> torch.Tensor:
+    c = torch.matmul(ta.float(), tb.float())
+    out = torch.nn.functional.layer_norm(c, (c.shape[-1],), eps=0.0)
+    if activation == "gelu":
+        out = torch.nn.functional.gelu(out)
+    elif activation == "relu":
+        out = torch.nn.functional.relu(out)
+    elif activation == "silu":
+        out = torch.nn.functional.silu(out)
+    return out.to(torch.float16)
+
+
+def build_gemm_layernorm_3d() -> Builder:
+    """3D GEMM + LayerNorm [B,S,K] @ [K,N] vs torch matmul + F.layer_norm."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm(a, b, normalized_shape=(n,), eps=0.0))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        ref = _gemm_layernorm_3d_ref(ta, tb)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_3d_gelu() -> Builder:
+    """3D GEMM + LayerNorm + GELU [B,S,K] @ [K,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_gelu(a, b, normalized_shape=(n,), eps=0.0))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        ref = _gemm_layernorm_3d_ref(ta, tb, activation="gelu")
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_3d_relu() -> Builder:
+    """3D GEMM + LayerNorm + ReLU [B,S,K] @ [K,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_relu(a, b, normalized_shape=(n,), eps=0.0))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        ref = _gemm_layernorm_3d_ref(ta, tb, activation="relu")
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_3d_silu() -> Builder:
+    """3D GEMM + LayerNorm + SiLU [B,S,K] @ [K,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_silu(a, b, normalized_shape=(n,), eps=0.0))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        ref = _gemm_layernorm_3d_ref(ta, tb, activation="silu")
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_gelu() -> Builder:
     """COMET-style gemm_gelu compound op vs torch matmul + F.gelu."""
 
@@ -1625,6 +1706,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm_gelu": build_gemm_layernorm_gelu(),
     "gemm_layernorm_relu": build_gemm_layernorm_relu(),
     "gemm_layernorm_silu": build_gemm_layernorm_silu(),
+    "gemm_layernorm_3d": build_gemm_layernorm_3d(),
+    "gemm_layernorm_3d_gelu": build_gemm_layernorm_3d_gelu(),
+    "gemm_layernorm_3d_relu": build_gemm_layernorm_3d_relu(),
+    "gemm_layernorm_3d_silu": build_gemm_layernorm_3d_silu(),
     "gemm_gelu": build_gemm_gelu(),
     "gemm_silu": build_gemm_silu(),
     "gemm_relu": build_gemm_relu(),
