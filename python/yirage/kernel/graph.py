@@ -2233,7 +2233,7 @@ class KNGraph:
             Output tensor [B, S, D_out]
         """
         # RMS Norm
-        X_norm = self.cygraph.rms_norm(X, normalized_shape)
+        X_norm = self.rms_norm(X, normalized_shape)
         
         # Linear
         result = self.cygraph.matmul(X_norm, weight)
