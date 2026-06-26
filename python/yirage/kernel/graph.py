@@ -418,11 +418,22 @@ def _kn_customized_tb_layer_norm_last_dim(
     rows: int,
     cols: int,
     eps: float = 1e-5,
+    num_leading_dims: int = 0,
 ):
     """LayerNorm on last dim (elementwise_affine=False; matches F.layer_norm without weight/bias)."""
     import yirage as yr
 
-    axis = 1
+    if num_leading_dims == 0 and x.num_dims != 2:
+        raise ValueError(
+            f"layer_norm expects 2D input, got num_dims={x.num_dims}"
+        )
+    if num_leading_dims == 1:
+        if x.num_dims != 3 or x.dim(0) != 1:
+            raise ValueError(
+                f"layer_norm with num_leading_dims=1 expects [1, rows, cols], "
+                f"got dims={[x.dim(i) for i in range(x.num_dims)]}"
+            )
+    axis = 2 if num_leading_dims == 1 else 1
     inv_n = 1.0 / float(cols)
     tb = yr.new_threadblock_graph(
         grid_dim=(1, 1, 1),
@@ -2011,13 +2022,51 @@ class KNGraph:
 
         Implements: ``LayerNorm(A @ B)`` (``elementwise_affine=False``;
         PyTorch ``F.layer_norm`` without weight/bias).
+
+        Supports 2D ``[M,K] @ [K,N]`` and 3D×2D ``[B,S,K] @ [K,N]`` (R37 broadcast).
         """
         C = self.cygraph.matmul(A, B)
-        rows, cols = C.dim(0), C.dim(1)
-        if len(normalized_shape) != 1 or int(normalized_shape[0]) != cols:
+        if len(normalized_shape) != 1:
             raise ValueError("normalized_shape must match matmul output last dim")
-        return _kn_customized_tb_layer_norm_last_dim(
-            self, C, rows=rows, cols=cols, eps=eps
+        cols = int(normalized_shape[0])
+        if C.num_dims == 2:
+            rows = C.dim(0)
+            if cols != C.dim(1):
+                raise ValueError("normalized_shape must match matmul output last dim")
+            return _kn_customized_tb_layer_norm_last_dim(
+                self, C, rows=rows, cols=cols, eps=eps
+            )
+        if C.num_dims == 3:
+            batch, seq = C.dim(0), C.dim(1)
+            if cols != C.dim(2):
+                raise ValueError("normalized_shape must match matmul output last dim")
+            if batch == 1:
+                return _kn_customized_tb_layer_norm_last_dim(
+                    self,
+                    C,
+                    rows=seq,
+                    cols=cols,
+                    eps=eps,
+                    num_leading_dims=1,
+                )
+            c_batches = self.chunk(C, batch, 0)
+            batch_outputs = [
+                _kn_customized_tb_layer_norm_last_dim(
+                    self,
+                    c_batches[i],
+                    rows=seq,
+                    cols=cols,
+                    eps=eps,
+                    num_leading_dims=1,
+                )
+                for i in range(batch)
+            ]
+            out = batch_outputs[0]
+            for i in range(1, batch):
+                out = self.concat(out, batch_outputs[i], 0)
+            return out
+        raise NotImplementedError(
+            f"CPU gemm_layernorm expects 2D or 3D matmul output, got num_dims={C.num_dims}"
         )
 
     def gemm_layernorm_gelu(
