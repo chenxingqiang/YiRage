@@ -1937,6 +1937,18 @@ class KNGraph:
         """
         return self.silu(self.cygraph.matmul(A, B))
 
+    def gemm_relu(
+        self,
+        A: DTensor,
+        B: DTensor,
+    ) -> DTensor:
+        """
+        GEMM followed by ReLU (linear + activation fusion pattern).
+
+        Implements: ``ReLU(A @ B)`` (PyTorch ``F.relu`` aligned).
+        """
+        return self.relu(self.cygraph.matmul(A, B))
+
     def self_attention(
         self,
         Q: DTensor,
@@ -2179,9 +2191,9 @@ class KNGraph:
         
         # Activation
         if activation == "silu":
-            gate_act = self.cygraph.silu(gate)
+            gate_act = self.silu(gate)
         elif activation == "gelu":
-            gate_act = self.cygraph.gelu(gate)
+            gate_act = self.gelu(gate)
         else:
             gate_act = gate
         
@@ -2189,7 +2201,7 @@ class KNGraph:
         up = self.cygraph.matmul(X, W_up)
         
         # Elementwise multiply
-        intermediate = self.cygraph.mul(gate_act, up)
+        intermediate = self.mul(gate_act, up)
         
         # Down projection
         if W_down is not None:

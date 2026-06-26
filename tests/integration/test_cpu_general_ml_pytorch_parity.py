@@ -39,6 +39,8 @@ def _force_kn_interpreter(monkeypatch):
         "gemm_layernorm",
         "gemm_gelu",
         "gemm_silu",
+        "gemm_relu",
+        "gated_mlp",
         "self_attention",
         "self_attention_scaled",
         "self_attention_online",
