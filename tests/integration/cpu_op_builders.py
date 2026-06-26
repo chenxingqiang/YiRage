@@ -905,6 +905,23 @@ def build_gemm_relu() -> Builder:
     return _build
 
 
+def build_gemm_bias() -> Builder:
+    """GEMM + broadcast bias vs torch.matmul + bias row."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = (torch.matmul(ta.float(), tb.float()) + tbias.float()).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def build_gated_mlp() -> Builder:
     """Gated MLP (SiLU gate * up -> down) on 2D [S,D] vs PyTorch reference."""
 
@@ -1096,6 +1113,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_gelu": build_gemm_gelu(),
     "gemm_silu": build_gemm_silu(),
     "gemm_relu": build_gemm_relu(),
+    "gemm_bias": build_gemm_bias(),
     "gated_mlp": build_gated_mlp(),
     "gated_mlp_gelu": build_gated_mlp_gelu(),
     "rms_norm_linear": build_rms_norm_linear(),
