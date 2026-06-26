@@ -931,6 +931,32 @@ def build_gated_mlp() -> Builder:
     return _build
 
 
+def build_gated_mlp_gelu() -> Builder:
+    """Gated MLP with GELU gate activation on 2D [S,D] vs PyTorch reference."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="gelu")
+        )
+        tx = _f16((seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.gelu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
 def build_rms_norm_linear() -> Builder:
     """RMSNorm + linear vs rms reference matmul (QKV-style projection)."""
 
@@ -1071,6 +1097,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_silu": build_gemm_silu(),
     "gemm_relu": build_gemm_relu(),
     "gated_mlp": build_gated_mlp(),
+    "gated_mlp_gelu": build_gated_mlp_gelu(),
     "rms_norm_linear": build_rms_norm_linear(),
     "self_attention": build_self_attention(),
     "self_attention_scaled": build_self_attention_scaled(),
