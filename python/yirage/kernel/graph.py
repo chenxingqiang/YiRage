@@ -2500,6 +2500,87 @@ class KNGraph:
             out = self.concat(out, batch_outputs[i], 0)
         return out
 
+    def _self_attention_3d_batch1(
+        self,
+        Q: DTensor,
+        K: DTensor,
+        V: DTensor,
+        *,
+        scale: float | None,
+        seq: int,
+    ) -> DTensor:
+        """Single batch slice with shared 2D K/V: Q ``[1,S,D]``, K ``[D,S]``, V ``[S,D]``."""
+        if Q.num_dims != 3 or Q.dim(0) != 1:
+            raise ValueError(
+                "_self_attention_3d_batch1 expects Q [1, S, D]"
+            )
+        if K.num_dims != 2 or V.num_dims != 2:
+            raise ValueError(
+                "_self_attention_3d_batch1 expects K [D, S] and V [S, D]"
+            )
+        QK = self.cygraph.matmul(Q, K)
+        if scale is not None:
+            QK = self.mul_scalar(QK, float(scale))
+        QK_norm = _kn_customized_tb_softmax_last_dim(
+            self, QK, rows=seq, cols=seq, dim=-1, num_leading_dims=1
+        )
+        return self.cygraph.matmul(QK_norm, V)
+
+    def self_attention_3d(
+        self,
+        Q: DTensor,
+        K: DTensor,
+        V: DTensor,
+        *,
+        scale: float | None = None,
+        head_dim: int | None = None,
+    ) -> DTensor:
+        """
+        Batched self-attention with shared 2D K/V (3D×2D matmul broadcast).
+
+        Implements ``softmax(scale * Q @ K, dim=-1) @ V`` per batch row with
+        shared transposed keys ``[D,S]`` and values ``[S,D]``.
+
+        Args:
+            Q: Query ``[B, S, D]``
+            K: Transposed keys ``[D, S]`` (shared across batch)
+            V: Values ``[S, D]`` (shared across batch)
+            scale / head_dim: Dot-product scale (``head_dim`` → ``1/sqrt(d)``).
+
+        Returns:
+            ``[B, S, D]``
+        """
+        if Q.num_dims != 3:
+            raise NotImplementedError(
+                "CPU self_attention_3d expects 3D Q [B, S, D]"
+            )
+        if K.num_dims != 2 or V.num_dims != 2:
+            raise NotImplementedError(
+                "CPU self_attention_3d expects 2D K [D, S] and V [S, D]"
+            )
+        batch, seq, dim = Q.dim(0), Q.dim(1), Q.dim(2)
+        if K.dim(0) != dim or K.dim(1) != seq:
+            raise ValueError("K shape must be [D, S]")
+        if V.dim(0) != seq or V.dim(1) != dim:
+            raise ValueError("V shape must be [S, D]")
+        if head_dim is not None:
+            scale = head_dim ** -0.5
+        if batch == 1:
+            return self._self_attention_3d_batch1(
+                Q, K, V, scale=scale, seq=seq
+            )
+        q_batches = self.chunk(Q, batch, 0)
+        batch_outputs = [
+            self._self_attention_3d_batch1(
+                q_batches[i], K, V, scale=scale, seq=seq
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = self.concat(out, batch_outputs[i], 0)
+        return out
+
     def gated_mlp(
         self,
         X: DTensor,

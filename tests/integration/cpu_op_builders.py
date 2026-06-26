@@ -1163,6 +1163,40 @@ def build_gemm_relu() -> Builder:
     return _build
 
 
+def build_gemm_relu_3d() -> Builder:
+    """3D GEMM + ReLU [B,S,K] @ [K,N] vs matmul + F.relu."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_relu(a, b))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.relu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_silu_3d() -> Builder:
+    """3D GEMM + SiLU [B,S,K] @ [K,N] vs matmul + F.silu."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_silu(a, b))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.silu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_bias() -> Builder:
     """GEMM + broadcast bias vs torch.matmul + bias row."""
 
@@ -1761,6 +1795,55 @@ def build_self_attention_batched() -> Builder:
     return _build
 
 
+def build_self_attention_3d() -> Builder:
+    """Batched self_attention [B,S,D] with shared 2D K [D,S] and V [S,D]."""
+
+    def _build():
+        batch, seq, dim = 2, 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_3d(q, k, v))
+        tq = _f16((batch, seq, dim))
+        tk = _f16((dim, seq))
+        tv = _f16((seq, dim))
+        outs = []
+        for b in range(batch):
+            scores = torch.matmul(tq[b].float(), tk.float())
+            attn = torch.nn.functional.softmax(scores, dim=-1)
+            outs.append(torch.matmul(attn, tv.float()))
+        ref = torch.stack(outs, dim=0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
+def build_self_attention_scaled_3d() -> Builder:
+    """Scaled self_attention_3d: softmax(Q @ K / sqrt(d)) @ V with shared K/V."""
+
+    def _build():
+        batch, seq, dim = 2, 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_3d(q, k, v, head_dim=dim))
+        tq = _f16((batch, seq, dim))
+        tk = _f16((dim, seq))
+        tv = _f16((seq, dim))
+        scale = dim ** -0.5
+        outs = []
+        for b in range(batch):
+            scores = torch.matmul(tq[b].float(), tk.float()) * scale
+            attn = torch.nn.functional.softmax(scores, dim=-1)
+            outs.append(torch.matmul(attn, tv.float()))
+        ref = torch.stack(outs, dim=0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul": build_customized_tb_matmul(),
     "customized_tb_exp": build_customized_tb_exp(),
@@ -1784,7 +1867,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_gelu": build_gemm_gelu(),
     "gemm_gelu_3d": build_gemm_gelu_3d(),
     "gemm_silu": build_gemm_silu(),
+    "gemm_silu_3d": build_gemm_silu_3d(),
     "gemm_relu": build_gemm_relu(),
+    "gemm_relu_3d": build_gemm_relu_3d(),
     "gemm_bias": build_gemm_bias(),
     "gemm_bias_relu": build_gemm_bias_relu(),
     "gemm_bias_gelu": build_gemm_bias_gelu(),
@@ -1812,6 +1897,8 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_online": build_self_attention_online(),
     "self_attention_multi_head": build_self_attention_multi_head(),
     "self_attention_batched": build_self_attention_batched(),
+    "self_attention_3d": build_self_attention_3d(),
+    "self_attention_scaled_3d": build_self_attention_scaled_3d(),
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_bias_relu": build_conv2d_bias_relu(),
     "conv2d_bias_gelu": build_conv2d_bias_gelu(),
