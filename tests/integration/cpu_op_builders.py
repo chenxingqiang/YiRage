@@ -1588,6 +1588,42 @@ def build_gemm_bias_3d_relu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_bias_3d_gelu_batch1() -> Builder:
+    """3D GEMM + bias + GELU batch=1 [1,S,K] @ [K,N] + [1,1,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_gelu(a, b, bias))
+        ta, tb = _f16((1, seq, k)), _f16((k, n))
+        tbias = _f16((1, 1, n))
+        ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="gelu")
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_3d_silu_batch1() -> Builder:
+    """3D GEMM + bias + SiLU batch=1 [1,S,K] @ [K,N] + [1,1,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_silu(a, b, bias))
+        ta, tb = _f16((1, seq, k)), _f16((k, n))
+        tbias = _f16((1, 1, n))
+        ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="silu")
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def build_gemm_bias_3d_gelu() -> Builder:
     """3D GEMM + bias + GELU [B,S,K] @ [K,N] + [1,1,N]."""
 
@@ -1805,6 +1841,23 @@ def build_rms_norm_linear_3d() -> Builder:
         w = g.new_input(dims=(k, n), dtype=yr.float16)
         g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
         tx, tw = _f16((batch, seq, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_batch1() -> Builder:
+    """3D RMSNorm + linear batch=1 [1,S,D] @ [D,N] with shared 2D weight."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
         scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
         ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
         return g, [tx, tw], ref
@@ -2108,6 +2161,28 @@ def build_self_attention_scaled_3d() -> Builder:
     return _build
 
 
+def build_self_attention_scaled_3d_batch1() -> Builder:
+    """Scaled self_attention_3d batch=1 [1,S,D] with shared 2D K/V."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_3d(q, k, v, head_dim=dim))
+        tq = _f16((1, seq, dim))
+        tk = _f16((dim, seq))
+        tv = _f16((seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq[0].float(), tk.float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).unsqueeze(0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul": build_customized_tb_matmul(),
     "customized_tb_exp": build_customized_tb_exp(),
@@ -2156,6 +2231,8 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_bias_3d_batch1": build_gemm_bias_3d_batch1(),
     "gemm_bias_3d_relu": build_gemm_bias_3d_relu(),
     "gemm_bias_3d_relu_batch1": build_gemm_bias_3d_relu_batch1(),
+    "gemm_bias_3d_gelu_batch1": build_gemm_bias_3d_gelu_batch1(),
+    "gemm_bias_3d_silu_batch1": build_gemm_bias_3d_silu_batch1(),
     "gemm_bias_3d_gelu": build_gemm_bias_3d_gelu(),
     "gemm_bias_3d_silu": build_gemm_bias_3d_silu(),
     "gated_mlp": build_gated_mlp(),
@@ -2166,6 +2243,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp_3d_gelu": build_gated_mlp_3d_gelu(),
     "rms_norm_linear": build_rms_norm_linear(),
     "rms_norm_linear_3d": build_rms_norm_linear_3d(),
+    "rms_norm_linear_3d_batch1": build_rms_norm_linear_3d_batch1(),
     "rms_norm_linear_3d_gelu": build_rms_norm_linear_3d_gelu(),
     "rms_norm_linear_3d_relu": build_rms_norm_linear_3d_relu(),
     "rms_norm_linear_3d_silu": build_rms_norm_linear_3d_silu(),
@@ -2179,6 +2257,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_batched": build_self_attention_batched(),
     "self_attention_3d": build_self_attention_3d(),
     "self_attention_scaled_3d": build_self_attention_scaled_3d(),
+    "self_attention_scaled_3d_batch1": build_self_attention_scaled_3d_batch1(),
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_bias_relu": build_conv2d_bias_relu(),
     "conv2d_bias_gelu": build_conv2d_bias_gelu(),
