@@ -48,6 +48,8 @@ def _force_kn_interpreter(monkeypatch):
         "gated_mlp_gelu",
         "rms_norm_linear",
         "rms_norm_linear_gelu",
+        "rms_norm_linear_relu",
+        "rms_norm_linear_silu",
         "self_attention",
         "self_attention_scaled",
         "self_attention_online",

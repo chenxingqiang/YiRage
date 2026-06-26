@@ -2317,6 +2317,32 @@ class KNGraph:
         """
         return self.gelu(self.rms_norm_linear(X, weight, normalized_shape))
 
+    def rms_norm_linear_relu(
+        self,
+        X: DTensor,
+        weight: DTensor,
+        normalized_shape: tuple,
+    ) -> DTensor:
+        """
+        RMSNorm + Linear + ReLU (``F.relu(RMSNorm(X) @ weight)`` aligned).
+
+        Same tensor contracts as :meth:`rms_norm_linear`.
+        """
+        return self.relu(self.rms_norm_linear(X, weight, normalized_shape))
+
+    def rms_norm_linear_silu(
+        self,
+        X: DTensor,
+        weight: DTensor,
+        normalized_shape: tuple,
+    ) -> DTensor:
+        """
+        RMSNorm + Linear + SiLU (``F.silu(RMSNorm(X) @ weight)`` aligned).
+
+        Same tensor contracts as :meth:`rms_norm_linear`.
+        """
+        return self.silu(self.rms_norm_linear(X, weight, normalized_shape))
+
     def get_owner_independent_hash(self):
         return self.cygraph.get_owner_independent_hash()
 
