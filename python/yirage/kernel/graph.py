@@ -1844,6 +1844,18 @@ class KNGraph:
         """
         return self.gelu(self.cygraph.matmul(A, B))
 
+    def gemm_silu(
+        self,
+        A: DTensor,
+        B: DTensor,
+    ) -> DTensor:
+        """
+        GEMM followed by SiLU (gated MLP gate projection fusion pattern).
+
+        Implements: ``SiLU(A @ B)`` (PyTorch ``F.silu`` aligned).
+        """
+        return self.silu(self.cygraph.matmul(A, B))
+
     def self_attention(
         self,
         Q: DTensor,
