@@ -1233,6 +1233,49 @@ def build_gated_mlp_3d() -> Builder:
     return _build
 
 
+def build_gated_mlp_3d_gelu() -> Builder:
+    """3D gated MLP [B,S,D] with GELU gate and shared 2D weights."""
+
+    def _build():
+        batch, seq, dim, d_ff = 2, 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="gelu")
+        )
+        tx = _f16((batch, seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.gelu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d() -> Builder:
+    """3D RMSNorm + linear [B,S,D] @ [D,N] with shared 2D weight."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((batch, seq, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_rms_norm_linear() -> Builder:
     """RMSNorm + linear vs rms reference matmul (QKV-style projection)."""
 
@@ -1443,7 +1486,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp_batched": build_gated_mlp_batched(),
     "gated_mlp_batched_gelu": build_gated_mlp_batched_gelu(),
     "gated_mlp_3d": build_gated_mlp_3d(),
+    "gated_mlp_3d_gelu": build_gated_mlp_3d_gelu(),
     "rms_norm_linear": build_rms_norm_linear(),
+    "rms_norm_linear_3d": build_rms_norm_linear_3d(),
     "rms_norm_linear_gelu": build_rms_norm_linear_gelu(),
     "rms_norm_linear_relu": build_rms_norm_linear_relu(),
     "rms_norm_linear_silu": build_rms_norm_linear_silu(),
