@@ -840,6 +840,21 @@ def build_kn_layer_norm() -> Builder:
     return _build
 
 
+def build_kn_layer_norm_3d() -> Builder:
+    """3D layer_norm [B,S,N] vs F.layer_norm (eps=0)."""
+
+    def _build():
+        batch, seq, n = 2, 4, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, n), dtype=yr.float16)
+        g.mark_output(g.layer_norm(x, normalized_shape=(n,), eps=0.0))
+        inp = _f16((batch, seq, n))
+        ref = torch.nn.functional.layer_norm(inp.float(), (n,), eps=0.0).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
 def build_gemm_softmax() -> Builder:
     """COMET gemm_softmax compound op vs torch matmul + F.softmax."""
 
@@ -891,6 +906,42 @@ def build_gemm_softmax_scaled_batched() -> Builder:
             scores = torch.matmul(ta[bi].float(), tb[bi].float()) * scale
             outs.append(torch.nn.functional.softmax(scores, dim=-1))
         ref = torch.stack(outs, dim=0).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_softmax_3d() -> Builder:
+    """3D GEMM + softmax [B,S,K] @ [K,N] vs matmul + F.softmax."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_softmax(a, b, dim=-1))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.softmax(c, dim=-1).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_softmax_scaled_3d() -> Builder:
+    """Scaled 3D attention scores [B,S,D] @ [D,S] vs softmax(matmul / sqrt(d))."""
+
+    def _build():
+        batch, seq, dim = 2, 8, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        b = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        g.mark_output(g.gemm_softmax_scaled(a, b, dim=-1, head_dim=dim))
+        ta = _f16((batch, seq, dim))
+        tb = _f16((dim, seq))
+        scale = dim ** -0.5
+        c = torch.matmul(ta.float(), tb.float()) * scale
+        ref = torch.nn.functional.softmax(c, dim=-1).to(torch.float16)
         return g, [ta, tb], ref
 
     return _build
@@ -1056,6 +1107,23 @@ def build_gemm_gelu() -> Builder:
         b = g.new_input(dims=(32, 16), dtype=yr.float16)
         g.mark_output(g.gemm_gelu(a, b))
         ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.gelu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_gelu_3d() -> Builder:
+    """3D GEMM + GELU [B,S,K] @ [K,N] vs matmul + F.gelu."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_gelu(a, b))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
         c = torch.matmul(ta.float(), tb.float())
         ref = torch.nn.functional.gelu(c).to(torch.float16)
         return g, [ta, tb], ref
@@ -1699,9 +1767,12 @@ CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul_add_bias": build_customized_tb_matmul_add_bias(),
     "kn_softmax": build_kn_softmax(),
     "kn_layer_norm": build_kn_layer_norm(),
+    "kn_layer_norm_3d": build_kn_layer_norm_3d(),
     "gemm_softmax": build_gemm_softmax(),
     "gemm_softmax_scaled": build_gemm_softmax_scaled(),
     "gemm_softmax_scaled_batched": build_gemm_softmax_scaled_batched(),
+    "gemm_softmax_3d": build_gemm_softmax_3d(),
+    "gemm_softmax_scaled_3d": build_gemm_softmax_scaled_3d(),
     "gemm_layernorm": build_gemm_layernorm(),
     "gemm_layernorm_gelu": build_gemm_layernorm_gelu(),
     "gemm_layernorm_relu": build_gemm_layernorm_relu(),
@@ -1711,6 +1782,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm_3d_relu": build_gemm_layernorm_3d_relu(),
     "gemm_layernorm_3d_silu": build_gemm_layernorm_3d_silu(),
     "gemm_gelu": build_gemm_gelu(),
+    "gemm_gelu_3d": build_gemm_gelu_3d(),
     "gemm_silu": build_gemm_silu(),
     "gemm_relu": build_gemm_relu(),
     "gemm_bias": build_gemm_bias(),

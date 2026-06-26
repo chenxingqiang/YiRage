@@ -455,6 +455,83 @@ def _kn_customized_tb_layer_norm_last_dim(
     return g.customized([x], tb)[0]
 
 
+def _kn_layer_norm_batched_last_dim(
+    g,
+    x,
+    *,
+    cols: int,
+    eps: float = 1e-5,
+):
+    """LayerNorm on last dim for 2D or 3D tensors (3D uses batch chunk/concat)."""
+    if x.num_dims == 2:
+        rows = x.dim(0)
+        if cols != x.dim(1):
+            raise ValueError("normalized_shape must match input last dim")
+        return _kn_customized_tb_layer_norm_last_dim(
+            g, x, rows=rows, cols=cols, eps=eps
+        )
+    if x.num_dims == 3:
+        batch, seq = x.dim(0), x.dim(1)
+        if cols != x.dim(2):
+            raise ValueError("normalized_shape must match input last dim")
+        if batch == 1:
+            return _kn_customized_tb_layer_norm_last_dim(
+                g, x, rows=seq, cols=cols, eps=eps, num_leading_dims=1
+            )
+        x_batches = g.chunk(x, batch, 0)
+        batch_outputs = [
+            _kn_customized_tb_layer_norm_last_dim(
+                g,
+                x_batches[i],
+                rows=seq,
+                cols=cols,
+                eps=eps,
+                num_leading_dims=1,
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = g.concat(out, batch_outputs[i], 0)
+        return out
+    raise NotImplementedError(
+        f"CPU layer_norm expects 2D or 3D input, got num_dims={x.num_dims}"
+    )
+
+
+def _kn_softmax_batched_last_dim(g, x, *, dim: int = -1):
+    """Stable softmax on last dim for 2D or 3D matmul outputs."""
+    if x.num_dims == 2:
+        return _kn_customized_tb_softmax_last_dim(
+            g, x, rows=x.dim(0), cols=x.dim(1), dim=dim
+        )
+    if x.num_dims == 3:
+        batch, seq, cols = x.dim(0), x.dim(1), x.dim(2)
+        if batch == 1:
+            return _kn_customized_tb_softmax_last_dim(
+                g, x, rows=seq, cols=cols, dim=dim, num_leading_dims=1
+            )
+        x_batches = g.chunk(x, batch, 0)
+        batch_outputs = [
+            _kn_customized_tb_softmax_last_dim(
+                g,
+                x_batches[i],
+                rows=seq,
+                cols=cols,
+                dim=dim,
+                num_leading_dims=1,
+            )
+            for i in range(batch)
+        ]
+        out = batch_outputs[0]
+        for i in range(1, batch):
+            out = g.concat(out, batch_outputs[i], 0)
+        return out
+    raise NotImplementedError(
+        f"CPU softmax expects 2D or 3D input, got num_dims={x.num_dims}"
+    )
+
+
 def _op_clamp_bounds(op_info: dict, *, layer: str) -> tuple:
     if "min_val" in op_info and "max_val" in op_info:
         return float(op_info["min_val"]), float(op_info["max_val"])
@@ -1809,16 +1886,16 @@ class KNGraph:
         normalized_shape: tuple,
         eps: float = 1e-5,
     ) -> DTensor:
-        """LayerNorm on last dim (``elementwise_affine=False``; PyTorch ``F.layer_norm`` without γ/β)."""
+        """LayerNorm on last dim (``elementwise_affine=False``; PyTorch ``F.layer_norm`` without γ/β).
+
+        Supports 2D ``[M,N]`` and 3D ``[B,S,N]`` inputs.
+        """
         if len(normalized_shape) != 1:
             raise NotImplementedError(
-                "CPU layer_norm currently supports 1D normalized_shape on 2D input"
+                "CPU layer_norm currently supports 1D normalized_shape"
             )
-        rows, cols = A.dim(0), A.dim(1)
-        if int(normalized_shape[0]) != cols:
-            raise ValueError("normalized_shape must match input last dim")
-        return _kn_customized_tb_layer_norm_last_dim(
-            self, A, rows=rows, cols=cols, eps=eps
+        return _kn_layer_norm_batched_last_dim(
+            self, A, cols=int(normalized_shape[0]), eps=eps
         )
 
     def customized(self, inputs: list[DTensor], bgraph: TBGraph) -> list[DTensor]:
@@ -1905,12 +1982,11 @@ class KNGraph:
 
         Implements: ``softmax(A @ B, dim)`` with numerically stable max-subtract
         (PyTorch ``F.softmax`` aligned; not naive exp/sum/div).
+
+        Supports 2D ``[M,K] @ [K,N]`` and 3D×2D ``[B,S,K] @ [K,N]`` (R37 broadcast).
         """
         C = self.cygraph.matmul(A, B)
-        rows, cols = C.dim(0), C.dim(1)
-        return _kn_customized_tb_softmax_last_dim(
-            self, C, rows=rows, cols=cols, dim=dim
-        )
+        return _kn_softmax_batched_last_dim(self, C, dim=dim)
 
     def gemm_softmax_scaled(
         self,
@@ -1926,16 +2002,15 @@ class KNGraph:
 
         Same stable TB softmax path as :meth:`gemm_softmax`; ``head_dim`` sets
         ``scale = 1 / sqrt(head_dim)`` (standard dot-product attention scores).
+
+        Supports 2D and 3D×2D matmul contracts (same as :meth:`gemm_softmax`).
         """
         C = self.cygraph.matmul(A, B)
         if head_dim is not None:
             scale = head_dim ** -0.5
         if scale is not None:
             C = self.mul_scalar(C, float(scale))
-        rows, cols = C.dim(0), C.dim(1)
-        return _kn_customized_tb_softmax_last_dim(
-            self, C, rows=rows, cols=cols, dim=dim
-        )
+        return _kn_softmax_batched_last_dim(self, C, dim=dim)
 
     def _gemm_softmax_scaled_batch1(
         self,
