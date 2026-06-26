@@ -1865,6 +1865,54 @@ def build_rms_norm_linear_3d_batch1() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_3d_gelu_batch1() -> Builder:
+    """3D RMSNorm + linear + GELU batch=1 [1,S,D] @ [D,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_gelu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="gelu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_relu_batch1() -> Builder:
+    """3D RMSNorm + linear + ReLU batch=1 [1,S,D] @ [D,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_relu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="relu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_silu_batch1() -> Builder:
+    """3D RMSNorm + linear + SiLU batch=1 [1,S,D] @ [D,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_silu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="silu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def _rms_norm_linear_3d_ref(
     tx: torch.Tensor, tw: torch.Tensor, *, activation: str | None = None
 ) -> torch.Tensor:
@@ -2136,6 +2184,27 @@ def build_self_attention_3d() -> Builder:
     return _build
 
 
+def build_self_attention_3d_batch1() -> Builder:
+    """self_attention_3d batch=1 [1,S,D] with shared 2D K/V."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_3d(q, k, v))
+        tq = _f16((1, seq, dim))
+        tk = _f16((dim, seq))
+        tv = _f16((seq, dim))
+        scores = torch.matmul(tq[0].float(), tk.float())
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).unsqueeze(0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 def build_self_attention_scaled_3d() -> Builder:
     """Scaled self_attention_3d: softmax(Q @ K / sqrt(d)) @ V with shared K/V."""
 
@@ -2244,6 +2313,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "rms_norm_linear": build_rms_norm_linear(),
     "rms_norm_linear_3d": build_rms_norm_linear_3d(),
     "rms_norm_linear_3d_batch1": build_rms_norm_linear_3d_batch1(),
+    "rms_norm_linear_3d_gelu_batch1": build_rms_norm_linear_3d_gelu_batch1(),
+    "rms_norm_linear_3d_relu_batch1": build_rms_norm_linear_3d_relu_batch1(),
+    "rms_norm_linear_3d_silu_batch1": build_rms_norm_linear_3d_silu_batch1(),
     "rms_norm_linear_3d_gelu": build_rms_norm_linear_3d_gelu(),
     "rms_norm_linear_3d_relu": build_rms_norm_linear_3d_relu(),
     "rms_norm_linear_3d_silu": build_rms_norm_linear_3d_silu(),
@@ -2256,6 +2328,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_multi_head": build_self_attention_multi_head(),
     "self_attention_batched": build_self_attention_batched(),
     "self_attention_3d": build_self_attention_3d(),
+    "self_attention_3d_batch1": build_self_attention_3d_batch1(),
     "self_attention_scaled_3d": build_self_attention_scaled_3d(),
     "self_attention_scaled_3d_batch1": build_self_attention_scaled_3d_batch1(),
     "conv2d_bias": build_conv2d_bias(),
