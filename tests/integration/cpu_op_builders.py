@@ -98,6 +98,20 @@ def build_kn_matmul_batch1() -> Builder:
     return _build
 
 
+def build_kn_matmul_batch2() -> Builder:
+    """2D KN matmul batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.matmul(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        return g, [ta, tb], torch.matmul(ta, tb)
+
+    return _build
+
+
 def build_kn_matmul_3d_2d() -> Builder:
     """KN matmul with PyTorch-style broadcast: [B,M,K] @ [K,N] -> [B,M,N]."""
 
@@ -453,8 +467,56 @@ def build_kn_conv2d_groups_batch2() -> Builder:
     return _build
 
 
+def build_conv2d_groups_batch1() -> Builder:
+    """Grouped conv2d batch=1 inference [1,C,H,W] (groups=2) NCHW."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        ref = torch.nn.functional.conv2d(
+            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 def build_conv2d_bias() -> Builder:
     """Conv2d + broadcast bias (F.conv2d with bias vector parity)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.conv2d(
+            inp_x,
+            inp_w,
+            bias=inp_b.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            dilation=(1, 1),
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_bias_batch1() -> Builder:
+    """Conv2d + bias batch=1 inference [1,C,H,W] NCHW."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -509,6 +571,35 @@ def build_conv2d_bias_batch2() -> Builder:
 
 def build_conv2d_bias_relu() -> Builder:
     """Conv2d + bias + ReLU vs F.relu(F.conv2d(...))."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_relu(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_bias_relu_batch1() -> Builder:
+    """Conv2d + bias + ReLU batch=1 inference [1,C,H,W] NCHW."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -4600,14 +4691,17 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_scaled_3d_batch1": build_self_attention_scaled_3d_batch1(),
     "self_attention_scaled_3d_batch2": build_self_attention_scaled_3d_batch2(),
     "conv2d_bias": build_conv2d_bias(),
+    "conv2d_bias_batch1": build_conv2d_bias_batch1(),
     "conv2d_bias_batch2": build_conv2d_bias_batch2(),
     "conv2d_bias_relu": build_conv2d_bias_relu(),
+    "conv2d_bias_relu_batch1": build_conv2d_bias_relu_batch1(),
     "conv2d_bias_relu_batch2": build_conv2d_bias_relu_batch2(),
     "conv2d_bias_gelu": build_conv2d_bias_gelu(),
     "conv2d_bias_gelu_batch2": build_conv2d_bias_gelu_batch2(),
     "conv2d_bias_silu": build_conv2d_bias_silu(),
     "conv2d_bias_silu_batch2": build_conv2d_bias_silu_batch2(),
     "conv2d_groups": build_kn_conv2d_groups(),
+    "conv2d_groups_batch1": build_conv2d_groups_batch1(),
     "conv2d_groups_batch2": build_kn_conv2d_groups_batch2(),
     "conv2d_bias_groups": build_conv2d_bias_groups(),
     "conv2d_bias_groups_batch2": build_conv2d_bias_groups_batch2(),
@@ -4630,6 +4724,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_separable_bias_silu": build_conv2d_separable_bias_silu(),
     "conv2d_separable_bias_silu_batch2": build_conv2d_separable_bias_silu_batch2(),
     "kn_matmul_batch1": build_kn_matmul_batch1(),
+    "kn_matmul_batch2": build_kn_matmul_batch2(),
     "kn_conv2d_batch1": build_kn_conv2d_batch1(),
     "kn_conv2d_groups_batch1": build_kn_conv2d_groups_batch1(),
 }
