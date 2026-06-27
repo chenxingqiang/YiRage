@@ -2549,6 +2549,24 @@ def build_gemm_bias_3d_relu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_bias_3d_relu_batch2() -> Builder:
+    """3D GEMM + bias + ReLU batch=2 [2,S,K] @ [K,N] + [1,1,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_relu(a, b, bias))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        tbias = _f16((1, 1, n))
+        ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="relu")
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def build_gemm_bias_3d_gelu_batch1() -> Builder:
     """3D GEMM + bias + GELU batch=1 [1,S,K] @ [K,N] + [1,1,N]."""
 
@@ -2567,6 +2585,24 @@ def build_gemm_bias_3d_gelu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_bias_3d_gelu_batch2() -> Builder:
+    """3D GEMM + bias + GELU batch=2 [2,S,K] @ [K,N] + [1,1,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_gelu(a, b, bias))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
+        tbias = _f16((1, 1, n))
+        ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="gelu")
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def build_gemm_bias_3d_silu_batch1() -> Builder:
     """3D GEMM + bias + SiLU batch=1 [1,S,K] @ [K,N] + [1,1,N]."""
 
@@ -2578,6 +2614,24 @@ def build_gemm_bias_3d_silu_batch1() -> Builder:
         bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
         g.mark_output(g.gemm_bias_silu(a, b, bias))
         ta, tb = _f16((1, seq, k)), _f16((k, n))
+        tbias = _f16((1, 1, n))
+        ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="silu")
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_3d_silu_batch2() -> Builder:
+    """3D GEMM + bias + SiLU batch=2 [2,S,K] @ [K,N] + [1,1,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_silu(a, b, bias))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
         tbias = _f16((1, 1, n))
         ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="silu")
         return g, [ta, tb, tbias], ref
@@ -3015,6 +3069,23 @@ def build_rms_norm_linear_3d_batch1() -> Builder:
         w = g.new_input(dims=(k, n), dtype=yr.float16)
         g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
         tx, tw = _f16((1, seq, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_batch2() -> Builder:
+    """3D RMSNorm + linear batch=2 [2,S,D] @ [D,N] with shared 2D weight."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((batch, seq, k)), _f16((k, n))
         scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
         ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
         return g, [tx, tw], ref
@@ -3760,8 +3831,11 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_bias_3d_batch2": build_gemm_bias_3d_batch2(),
     "gemm_bias_3d_relu": build_gemm_bias_3d_relu(),
     "gemm_bias_3d_relu_batch1": build_gemm_bias_3d_relu_batch1(),
+    "gemm_bias_3d_relu_batch2": build_gemm_bias_3d_relu_batch2(),
     "gemm_bias_3d_gelu_batch1": build_gemm_bias_3d_gelu_batch1(),
+    "gemm_bias_3d_gelu_batch2": build_gemm_bias_3d_gelu_batch2(),
     "gemm_bias_3d_silu_batch1": build_gemm_bias_3d_silu_batch1(),
+    "gemm_bias_3d_silu_batch2": build_gemm_bias_3d_silu_batch2(),
     "gemm_bias_3d_gelu": build_gemm_bias_3d_gelu(),
     "gemm_bias_3d_silu": build_gemm_bias_3d_silu(),
     "gated_mlp": build_gated_mlp(),
@@ -3782,6 +3856,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "rms_norm_linear_batch1": build_rms_norm_linear_batch1(),
     "rms_norm_linear_3d": build_rms_norm_linear_3d(),
     "rms_norm_linear_3d_batch1": build_rms_norm_linear_3d_batch1(),
+    "rms_norm_linear_3d_batch2": build_rms_norm_linear_3d_batch2(),
     "rms_norm_linear_3d_gelu_batch1": build_rms_norm_linear_3d_gelu_batch1(),
     "rms_norm_linear_3d_gelu_batch2": build_rms_norm_linear_3d_gelu_batch2(),
     "rms_norm_linear_3d_relu_batch1": build_rms_norm_linear_3d_relu_batch1(),
