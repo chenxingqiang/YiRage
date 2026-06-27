@@ -101,6 +101,10 @@ kn_ops:
     tier: supported
     layer: kn
     note: value-verify batch=2 [2,C,H,W] conv2d shape contract (R56)
+  kn_conv2d_groups_batch2_op:
+    tier: supported
+    layer: kn
+    note: value-verify batch=2 grouped conv2d [2,C,H,W] groups=2 shape contract (R59)
   kn_concat_then_matmul_op:
     tier: unsupported
     layer: layout
