@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Inventory planned value-verify count vs registry (Loop R62)."""
+"""Inventory planned value-verify count vs registry (Loop R63)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from tests.integration.cpu_inventory import planned_value_verify_count, registry
 from yirage.backends.cpu.support_matrix import cpu_layout_explore_gap_table
 
 
-def test_planned_value_verify_count_is_258():
-    assert planned_value_verify_count() == 258
+def test_planned_value_verify_count_is_262():
+    assert planned_value_verify_count() == 262
 
 
 def test_layout_explore_registry_symmetric_16_each():
