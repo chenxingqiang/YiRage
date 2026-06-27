@@ -1373,6 +1373,21 @@ def build_kn_softmax_3d_batch1() -> Builder:
     return _build
 
 
+def build_kn_softmax_3d_batch2() -> Builder:
+    """3D softmax batch=2 fast path [2,S,N] vs F.softmax."""
+
+    def _build():
+        batch, seq, n = 2, 4, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, n), dtype=yr.float16)
+        g.mark_output(g.softmax(x, dim=-1))
+        inp = _f16((batch, seq, n))
+        ref = torch.nn.functional.softmax(inp.float(), dim=-1).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
 def build_kn_rms_norm_3d_batch1() -> Builder:
     """3D RMSNorm batch=1 fast path [1,S,D]."""
 
@@ -1382,6 +1397,22 @@ def build_kn_rms_norm_3d_batch1() -> Builder:
         x = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
         g.mark_output(g.rms_norm(x, normalized_shape=(dim,)))
         inp = _f16((1, seq, dim))
+        scale = torch.rsqrt(inp.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = (inp.float() * scale).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_rms_norm_3d_batch2() -> Builder:
+    """3D RMSNorm batch=2 fast path [2,S,D]."""
+
+    def _build():
+        batch, seq, dim = 2, 4, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        g.mark_output(g.rms_norm(x, normalized_shape=(dim,)))
+        inp = _f16((batch, seq, dim))
         scale = torch.rsqrt(inp.float().pow(2).mean(-1, keepdim=True) + 1e-6)
         ref = (inp.float() * scale).to(torch.float16)
         return g, [inp], ref
@@ -1427,6 +1458,21 @@ def build_kn_layer_norm_3d_batch1() -> Builder:
         x = g.new_input(dims=(1, seq, n), dtype=yr.float16)
         g.mark_output(g.layer_norm(x, normalized_shape=(n,), eps=0.0))
         inp = _f16((1, seq, n))
+        ref = torch.nn.functional.layer_norm(inp.float(), (n,), eps=0.0).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_layer_norm_3d_batch2() -> Builder:
+    """3D layer_norm batch=2 fast path [2,S,N]."""
+
+    def _build():
+        batch, seq, n = 2, 4, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, n), dtype=yr.float16)
+        g.mark_output(g.layer_norm(x, normalized_shape=(n,), eps=0.0))
+        inp = _f16((batch, seq, n))
         ref = torch.nn.functional.layer_norm(inp.float(), (n,), eps=0.0).to(torch.float16)
         return g, [inp], ref
 
@@ -1833,6 +1879,22 @@ def build_gemm_layernorm_3d_batch1() -> Builder:
         b = g.new_input(dims=(k, n), dtype=yr.float16)
         g.mark_output(g.gemm_layernorm(a, b, normalized_shape=(n,), eps=0.0))
         ta, tb = _f16((1, seq, k)), _f16((k, n))
+        ref = _gemm_layernorm_3d_ref(ta, tb)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_3d_batch2() -> Builder:
+    """3D GEMM + LayerNorm batch=2 [2,S,K] @ [K,N]."""
+
+    def _build():
+        batch, seq, k, n = 2, 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(batch, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm(a, b, normalized_shape=(n,), eps=0.0))
+        ta, tb = _f16((batch, seq, k)), _f16((k, n))
         ref = _gemm_layernorm_3d_ref(ta, tb)
         return g, [ta, tb], ref
 
@@ -3564,11 +3626,14 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_softmax": build_kn_softmax(),
     "kn_softmax_3d": build_kn_softmax_3d(),
     "kn_softmax_3d_batch1": build_kn_softmax_3d_batch1(),
+    "kn_softmax_3d_batch2": build_kn_softmax_3d_batch2(),
     "kn_rms_norm_3d": build_kn_rms_norm_3d(),
     "kn_rms_norm_3d_batch1": build_kn_rms_norm_3d_batch1(),
+    "kn_rms_norm_3d_batch2": build_kn_rms_norm_3d_batch2(),
     "kn_layer_norm": build_kn_layer_norm(),
     "kn_layer_norm_3d": build_kn_layer_norm_3d(),
     "kn_layer_norm_3d_batch1": build_kn_layer_norm_3d_batch1(),
+    "kn_layer_norm_3d_batch2": build_kn_layer_norm_3d_batch2(),
     "gemm_softmax": build_gemm_softmax(),
     "gemm_softmax_batch1": build_gemm_softmax_batch1(),
     "gemm_softmax_scaled": build_gemm_softmax_scaled(),
@@ -3591,6 +3656,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm_silu_batch1": build_gemm_layernorm_silu_batch1(),
     "gemm_layernorm_3d": build_gemm_layernorm_3d(),
     "gemm_layernorm_3d_batch1": build_gemm_layernorm_3d_batch1(),
+    "gemm_layernorm_3d_batch2": build_gemm_layernorm_3d_batch2(),
     "gemm_layernorm_3d_gelu": build_gemm_layernorm_3d_gelu(),
     "gemm_layernorm_3d_gelu_batch1": build_gemm_layernorm_3d_gelu_batch1(),
     "gemm_layernorm_3d_relu": build_gemm_layernorm_3d_relu(),
