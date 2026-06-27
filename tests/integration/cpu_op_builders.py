@@ -2568,6 +2568,80 @@ def build_gemm_bias_silu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_bias_batch2() -> Builder:
+    """2D GEMM + bias batch=2 inference [M,K] @ [K,N] + [1,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = (torch.matmul(ta.float(), tb.float()) + tbias.float()).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_relu_batch2() -> Builder:
+    """2D GEMM + bias + ReLU batch=2 inference [M,K] @ [K,N] + [1,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_relu(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = torch.nn.functional.relu(
+            torch.matmul(ta.float(), tb.float()) + tbias.float()
+        ).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_gelu_batch2() -> Builder:
+    """2D GEMM + bias + GELU batch=2 inference [M,K] @ [K,N] + [1,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_gelu(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = torch.nn.functional.gelu(
+            torch.matmul(ta.float(), tb.float()) + tbias.float()
+        ).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_silu_batch2() -> Builder:
+    """2D GEMM + bias + SiLU batch=2 inference [M,K] @ [K,N] + [1,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_silu(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = torch.nn.functional.silu(
+            torch.matmul(ta.float(), tb.float()) + tbias.float()
+        ).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def _gemm_bias_3d_ref(
     ta: torch.Tensor,
     tb: torch.Tensor,
@@ -4168,12 +4242,16 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_relu_3d_batch2": build_gemm_relu_3d_batch2(),
     "gemm_bias": build_gemm_bias(),
     "gemm_bias_batch1": build_gemm_bias_batch1(),
+    "gemm_bias_batch2": build_gemm_bias_batch2(),
     "gemm_bias_relu_batch1": build_gemm_bias_relu_batch1(),
+    "gemm_bias_relu_batch2": build_gemm_bias_relu_batch2(),
     "gemm_bias_relu": build_gemm_bias_relu(),
     "gemm_bias_gelu": build_gemm_bias_gelu(),
     "gemm_bias_gelu_batch1": build_gemm_bias_gelu_batch1(),
+    "gemm_bias_gelu_batch2": build_gemm_bias_gelu_batch2(),
     "gemm_bias_silu": build_gemm_bias_silu(),
     "gemm_bias_silu_batch1": build_gemm_bias_silu_batch1(),
+    "gemm_bias_silu_batch2": build_gemm_bias_silu_batch2(),
     "gemm_bias_3d": build_gemm_bias_3d(),
     "gemm_bias_3d_batch1": build_gemm_bias_3d_batch1(),
     "gemm_bias_3d_batch2": build_gemm_bias_3d_batch2(),
