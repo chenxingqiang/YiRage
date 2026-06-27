@@ -1313,8 +1313,37 @@ def build_kn_unfused_rms_matmul() -> Builder:
     return _build
 
 
+def build_kn_rms_norm_batch1() -> Builder:
+    """2D KN rms_norm batch=1 inference [M,D]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 32), dtype=yr.float16)
+        g.mark_output(g.rms_norm(x, normalized_shape=(32,)))
+        inp = _f16((8, 32))
+        scale = torch.rsqrt(inp.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = (inp.float() * scale).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
 def build_kn_softmax() -> Builder:
     """KN softmax via stable TB reduction_max path (general ML, not LLM-only)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.softmax(x, dim=-1))
+        inp = _f16((8, 16))
+        ref = torch.nn.functional.softmax(inp.float(), dim=-1).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_softmax_batch1() -> Builder:
+    """2D KN softmax batch=1 inference [M,N] vs F.softmax."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -1436,6 +1465,34 @@ def build_kn_rms_norm_3d_batch2() -> Builder:
 
 def build_kn_layer_norm() -> Builder:
     """KN layer_norm (elementwise_affine=False; eps=0 matches TB sqrt(var) path)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.layer_norm(x, normalized_shape=(16,), eps=0.0))
+        inp = _f16((8, 16))
+        ref = torch.nn.functional.layer_norm(inp.float(), (16,), eps=0.0).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_layer_norm_batch1() -> Builder:
+    """2D KN layer_norm batch=1 inference [M,N] (eps=0)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.layer_norm(x, normalized_shape=(16,), eps=0.0))
+        inp = _f16((8, 16))
+        ref = torch.nn.functional.layer_norm(inp.float(), (16,), eps=0.0).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_layer_norm_batch2() -> Builder:
+    """2D KN layer_norm batch=2 inference [M,N] (eps=0)."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -4312,6 +4369,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_exp": build_customized_tb_exp(),
     "customized_tb_matmul_add_bias": build_customized_tb_matmul_add_bias(),
     "kn_softmax": build_kn_softmax(),
+    "kn_softmax_batch1": build_kn_softmax_batch1(),
     "kn_softmax_batch2": build_kn_softmax_batch2(),
     "kn_softmax_3d": build_kn_softmax_3d(),
     "kn_softmax_3d_batch1": build_kn_softmax_3d_batch1(),
@@ -4319,7 +4377,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_rms_norm_3d": build_kn_rms_norm_3d(),
     "kn_rms_norm_3d_batch1": build_kn_rms_norm_3d_batch1(),
     "kn_rms_norm_3d_batch2": build_kn_rms_norm_3d_batch2(),
+    "kn_rms_norm_batch1": build_kn_rms_norm_batch1(),
     "kn_layer_norm": build_kn_layer_norm(),
+    "kn_layer_norm_batch1": build_kn_layer_norm_batch1(),
+    "kn_layer_norm_batch2": build_kn_layer_norm_batch2(),
     "kn_layer_norm_3d": build_kn_layer_norm_3d(),
     "kn_layer_norm_3d_batch1": build_kn_layer_norm_3d_batch1(),
     "kn_layer_norm_3d_batch2": build_kn_layer_norm_3d_batch2(),
