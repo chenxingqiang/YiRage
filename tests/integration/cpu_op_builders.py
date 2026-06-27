@@ -1327,6 +1327,20 @@ def build_kn_softmax() -> Builder:
     return _build
 
 
+def build_kn_softmax_batch2() -> Builder:
+    """2D KN softmax batch=2 inference [M,N] vs F.softmax."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.softmax(x, dim=-1))
+        inp = _f16((8, 16))
+        ref = torch.nn.functional.softmax(inp.float(), dim=-1).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
 def build_kn_softmax_3d() -> Builder:
     """3D softmax [B,S,N] vs F.softmax on last dim."""
 
@@ -3692,6 +3706,25 @@ def build_rms_norm_linear_gelu_batch1() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_gelu_batch2() -> Builder:
+    """2D RMSNorm + linear + GELU batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_gelu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.nn.functional.gelu(
+            torch.matmul(tx.float() * scale, tw.float())
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_rms_norm_linear_relu() -> Builder:
     """RMSNorm + linear + ReLU vs F.relu(rms reference matmul)."""
 
@@ -3730,6 +3763,25 @@ def build_rms_norm_linear_relu_batch1() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_relu_batch2() -> Builder:
+    """2D RMSNorm + linear + ReLU batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_relu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.nn.functional.relu(
+            torch.matmul(tx.float() * scale, tw.float())
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_rms_norm_linear_silu() -> Builder:
     """RMSNorm + linear + SiLU vs F.silu(rms reference matmul)."""
 
@@ -3751,6 +3803,25 @@ def build_rms_norm_linear_silu() -> Builder:
 
 def build_rms_norm_linear_silu_batch1() -> Builder:
     """2D RMSNorm + linear + SiLU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_silu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.nn.functional.silu(
+            torch.matmul(tx.float() * scale, tw.float())
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_silu_batch2() -> Builder:
+    """2D RMSNorm + linear + SiLU batch=2 inference [M,K] @ [K,N]."""
 
     def _build():
         m, k, n = 8, 16, 32
@@ -4241,6 +4312,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_exp": build_customized_tb_exp(),
     "customized_tb_matmul_add_bias": build_customized_tb_matmul_add_bias(),
     "kn_softmax": build_kn_softmax(),
+    "kn_softmax_batch2": build_kn_softmax_batch2(),
     "kn_softmax_3d": build_kn_softmax_3d(),
     "kn_softmax_3d_batch1": build_kn_softmax_3d_batch1(),
     "kn_softmax_3d_batch2": build_kn_softmax_3d_batch2(),
@@ -4367,10 +4439,13 @@ CUSTOMIZED_OP_BUILDERS = {
     "rms_norm_linear_3d_silu": build_rms_norm_linear_3d_silu(),
     "rms_norm_linear_gelu": build_rms_norm_linear_gelu(),
     "rms_norm_linear_gelu_batch1": build_rms_norm_linear_gelu_batch1(),
+    "rms_norm_linear_gelu_batch2": build_rms_norm_linear_gelu_batch2(),
     "rms_norm_linear_relu": build_rms_norm_linear_relu(),
     "rms_norm_linear_relu_batch1": build_rms_norm_linear_relu_batch1(),
+    "rms_norm_linear_relu_batch2": build_rms_norm_linear_relu_batch2(),
     "rms_norm_linear_silu": build_rms_norm_linear_silu(),
     "rms_norm_linear_silu_batch1": build_rms_norm_linear_silu_batch1(),
+    "rms_norm_linear_silu_batch2": build_rms_norm_linear_silu_batch2(),
     "self_attention": build_self_attention(),
     "self_attention_batch1": build_self_attention_batch1(),
     "self_attention_batch2": build_self_attention_batch2(),
