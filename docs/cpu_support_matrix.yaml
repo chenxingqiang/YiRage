@@ -101,10 +101,18 @@ kn_ops:
     tier: supported
     layer: kn
     note: NCHW input, OIHW weight; F.conv2d parity; stride/padding/dilation/groups in JSON; CPU interpreter + search explore
+  kn_conv2d_batch1_op:
+    tier: supported
+    layer: kn
+    note: value-verify batch=1 [1,C,H,W] conv2d shape contract (R81)
   kn_conv2d_batch2_op:
     tier: supported
     layer: kn
     note: value-verify batch=2 [2,C,H,W] conv2d shape contract (R56)
+  kn_conv2d_groups_batch1_op:
+    tier: supported
+    layer: kn
+    note: value-verify batch=1 grouped conv2d [1,C,H,W] groups=2 shape contract (R81)
   kn_conv2d_groups_batch2_op:
     tier: supported
     layer: kn

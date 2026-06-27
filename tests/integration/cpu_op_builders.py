@@ -1807,7 +1807,9 @@ KN_OP_BUILDERS = {
     "kn_chunk_2_op": build_kn_chunk(2),
     "kn_transpose_01_op": build_kn_transpose_01(),
     "kn_conv2d_op": build_kn_conv2d(),
+    "kn_conv2d_batch1_op": build_kn_conv2d_batch1(),
     "kn_conv2d_batch2_op": build_kn_conv2d_batch2(),
+    "kn_conv2d_groups_batch1_op": build_kn_conv2d_groups_batch1(),
     "kn_conv2d_groups_batch2_op": build_kn_conv2d_groups_batch2(),
 }
 
@@ -5110,7 +5112,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_matmul_batch1": build_kn_matmul_batch1(),
     "kn_matmul_batch2": build_kn_matmul_batch2(),
     "kn_conv2d_batch1": build_kn_conv2d_batch1(),
+    "kn_conv2d_batch2": build_kn_conv2d_batch2(),
     "kn_conv2d_groups_batch1": build_kn_conv2d_groups_batch1(),
+    "kn_conv2d_groups_batch2": build_kn_conv2d_groups_batch2(),
 }
 
 FAST_PATH_BUILDERS = {
