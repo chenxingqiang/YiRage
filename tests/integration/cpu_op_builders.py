@@ -84,6 +84,20 @@ def build_kn_matmul() -> Builder:
     return _build
 
 
+def build_kn_matmul_batch1() -> Builder:
+    """2D KN matmul batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.matmul(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        return g, [ta, tb], torch.matmul(ta, tb)
+
+    return _build
+
+
 def build_kn_matmul_3d_2d() -> Builder:
     """KN matmul with PyTorch-style broadcast: [B,M,K] @ [K,N] -> [B,M,N]."""
 
@@ -336,6 +350,26 @@ def build_kn_conv2d() -> Builder:
     return _build
 
 
+def build_kn_conv2d_batch1() -> Builder:
+    """KN conv2d batch=1 shape contract [1,C,H,W] NCHW."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.conv2d(
+            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 def build_kn_conv2d_batch2() -> Builder:
     """KN conv2d batch=2 shape contract [2,C,H,W] NCHW."""
 
@@ -358,6 +392,27 @@ def build_kn_conv2d_batch2() -> Builder:
 
 def build_kn_conv2d_groups() -> Builder:
     """Grouped conv2d (groups=2) aligned with F.conv2d."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        ref = torch.nn.functional.conv2d(
+            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
+def build_kn_conv2d_groups_batch1() -> Builder:
+    """Grouped conv2d batch=1 [1,C,H,W] (groups=2) shape contract."""
 
     def _build():
         groups = 2
@@ -1315,6 +1370,21 @@ def build_kn_unfused_rms_matmul() -> Builder:
 
 def build_kn_rms_norm_batch1() -> Builder:
     """2D KN rms_norm batch=1 inference [M,D]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(8, 32), dtype=yr.float16)
+        g.mark_output(g.rms_norm(x, normalized_shape=(32,)))
+        inp = _f16((8, 32))
+        scale = torch.rsqrt(inp.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = (inp.float() * scale).to(torch.float16)
+        return g, [inp], ref
+
+    return _build
+
+
+def build_kn_rms_norm_batch2() -> Builder:
+    """2D KN rms_norm batch=2 inference [M,D]."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -4378,6 +4448,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_rms_norm_3d_batch1": build_kn_rms_norm_3d_batch1(),
     "kn_rms_norm_3d_batch2": build_kn_rms_norm_3d_batch2(),
     "kn_rms_norm_batch1": build_kn_rms_norm_batch1(),
+    "kn_rms_norm_batch2": build_kn_rms_norm_batch2(),
     "kn_layer_norm": build_kn_layer_norm(),
     "kn_layer_norm_batch1": build_kn_layer_norm_batch1(),
     "kn_layer_norm_batch2": build_kn_layer_norm_batch2(),
@@ -4558,6 +4629,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_separable_bias_gelu_batch2": build_conv2d_separable_bias_gelu_batch2(),
     "conv2d_separable_bias_silu": build_conv2d_separable_bias_silu(),
     "conv2d_separable_bias_silu_batch2": build_conv2d_separable_bias_silu_batch2(),
+    "kn_matmul_batch1": build_kn_matmul_batch1(),
+    "kn_conv2d_batch1": build_kn_conv2d_batch1(),
+    "kn_conv2d_groups_batch1": build_kn_conv2d_groups_batch1(),
 }
 
 FAST_PATH_BUILDERS = {
