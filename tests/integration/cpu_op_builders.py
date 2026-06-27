@@ -1838,8 +1838,42 @@ def build_gemm_layernorm_batch1() -> Builder:
     return _build
 
 
+def build_gemm_layernorm_batch2() -> Builder:
+    """2D GEMM + LayerNorm batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.layer_norm(c, (16,), eps=0.0).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_layernorm_gelu_batch1() -> Builder:
     """2D GEMM + LayerNorm + GELU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_gelu(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.layer_norm(c, (16,), eps=0.0)
+        ).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_gelu_batch2() -> Builder:
+    """2D GEMM + LayerNorm + GELU batch=2 inference [M,K] @ [K,N]."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -2980,6 +3014,32 @@ def build_gated_mlp_3d_batch1() -> Builder:
     return _build
 
 
+def build_gated_mlp_3d_batch2() -> Builder:
+    """3D gated MLP batch=2 [2,S,D] with shared 2D weights (SiLU gate)."""
+
+    def _build():
+        batch, seq, dim, d_ff = 2, 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(batch, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((batch, seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.silu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
 def build_gated_mlp_3d_gelu_batch1() -> Builder:
     """3D gated MLP batch=1 [1,S,D] with GELU gate and shared 2D weights."""
 
@@ -3642,6 +3702,28 @@ def build_self_attention_online_batch1() -> Builder:
     return _build
 
 
+def build_self_attention_online_batch2() -> Builder:
+    """Online rescale 2D self_attention batch=2 inference [S,D] (tile=4 on seq=8)."""
+
+    def _build():
+        seq, dim, tile = 8, 32, 4
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(
+            g.self_attention_online(q, k, v, head_dim=dim, tile=tile)
+        )
+        tq, tk, tv = _f16((seq, dim)), _f16((dim, seq)), _f16((seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq.float(), tk.float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 def build_self_attention_multi_head() -> Builder:
     """Multi-head self_attention on 3D [H,S,D] / [H,D,S] with scaled stable softmax."""
 
@@ -3959,8 +4041,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_softmax_scaled_3d_batch2": build_gemm_softmax_scaled_3d_batch2(),
     "gemm_layernorm": build_gemm_layernorm(),
     "gemm_layernorm_batch1": build_gemm_layernorm_batch1(),
+    "gemm_layernorm_batch2": build_gemm_layernorm_batch2(),
     "gemm_layernorm_gelu": build_gemm_layernorm_gelu(),
     "gemm_layernorm_gelu_batch1": build_gemm_layernorm_gelu_batch1(),
+    "gemm_layernorm_gelu_batch2": build_gemm_layernorm_gelu_batch2(),
     "gemm_layernorm_relu": build_gemm_layernorm_relu(),
     "gemm_layernorm_relu_batch1": build_gemm_layernorm_relu_batch1(),
     "gemm_layernorm_silu": build_gemm_layernorm_silu(),
@@ -4021,6 +4105,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp_3d": build_gated_mlp_3d(),
     "gated_mlp_3d_gelu": build_gated_mlp_3d_gelu(),
     "gated_mlp_3d_batch1": build_gated_mlp_3d_batch1(),
+    "gated_mlp_3d_batch2": build_gated_mlp_3d_batch2(),
     "gated_mlp_3d_gelu_batch1": build_gated_mlp_3d_gelu_batch1(),
     "gated_mlp_3d_gelu_batch2": build_gated_mlp_3d_gelu_batch2(),
     "gated_mlp_batched_batch1": build_gated_mlp_batched_batch1(),
@@ -4055,6 +4140,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_scaled_batch2": build_self_attention_scaled_batch2(),
     "self_attention_online": build_self_attention_online(),
     "self_attention_online_batch1": build_self_attention_online_batch1(),
+    "self_attention_online_batch2": build_self_attention_online_batch2(),
     "self_attention_multi_head": build_self_attention_multi_head(),
     "self_attention_multi_head_batch1": build_self_attention_multi_head_batch1(),
     "self_attention_multi_head_batch2": build_self_attention_multi_head_batch2(),

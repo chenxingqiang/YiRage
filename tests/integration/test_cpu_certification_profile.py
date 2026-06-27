@@ -30,8 +30,8 @@ def test_parse_pytest_summary_missing_returns_none():
     assert parse_pytest_summary("no summary here")["passed"] is None
 
 
-def test_planned_value_verify_still_286():
-    assert planned_value_verify_count() == 286
+def test_planned_value_verify_still_290():
+    assert planned_value_verify_count() == 290
 
 
 def test_rms_matmul_tractability_sets_env(monkeypatch):
@@ -59,7 +59,7 @@ def test_cert_profile_from_stages_includes_walkthrough_substage_elapsed():
             },
         },
     }
-    profile = cert_profile_from_stages(stages, planned_value_verify=286)
+    profile = cert_profile_from_stages(stages, planned_value_verify=290)
     assert profile["walkthrough_substage_elapsed_s"]["2. Ray µGraph search"] == 8.0
     assert profile["walkthrough_elapsed_s"] == 12.5
 
@@ -69,13 +69,13 @@ def test_cert_profile_from_stages_stage_elapsed_and_alignment():
         "value_verify_all": {
             "ok": True,
             "elapsed_s": 2.5,
-            "pytest": {"passed": 286, "skipped": 1, "failed": 0},
+            "pytest": {"passed": 290, "skipped": 1, "failed": 0},
         },
         "op_contract": {"ok": True, "elapsed_s": 1.2},
         "native_gemm": {"ok": True, "elapsed_s": 25.0},
         "superoptimize_smoke": {"ok": True, "elapsed_s": 1.5},
     }
-    profile = cert_profile_from_stages(stages, planned_value_verify=286)
+    profile = cert_profile_from_stages(stages, planned_value_verify=290)
     assert profile["value_verify_aligned"] is True
     assert profile["stages_run"] == 4
     assert profile["stages_ok"] == 4
@@ -94,7 +94,7 @@ def test_cert_profile_from_stages_includes_mlir_bench_profile():
             },
         },
     }
-    profile = cert_profile_from_stages(stages, planned_value_verify=286)
+    profile = cert_profile_from_stages(stages, planned_value_verify=290)
     assert profile["mlir_bench_profile_ok"] is True
     assert profile["mlir_bench_elapsed_s"] == 3.0
     assert profile["mlir_bench_profile"]["profile_ok"] is True
