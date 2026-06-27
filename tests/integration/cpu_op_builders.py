@@ -1051,6 +1051,35 @@ def build_conv2d_depthwise_bias_relu() -> Builder:
     return _build
 
 
+def build_conv2d_depthwise_bias_relu_batch1() -> Builder:
+    """Depthwise conv2d + bias + ReLU batch=1 inference [1,C,H,W] (groups=C)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_depthwise_bias_relu(x, w, b, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((4, 1, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                groups=4,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
 def build_conv2d_depthwise_bias_relu_batch2() -> Builder:
     """Depthwise conv2d + bias + ReLU batch=2 [2,C,H,W] (groups=C)."""
 
@@ -1138,6 +1167,35 @@ def build_conv2d_depthwise_bias_silu() -> Builder:
     return _build
 
 
+def build_conv2d_depthwise_bias_gelu_batch1() -> Builder:
+    """Depthwise conv2d + bias + GELU batch=1 inference [1,C,H,W] (groups=C)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_depthwise_bias_gelu(x, w, b, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((4, 1, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                groups=4,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
 def build_conv2d_depthwise_bias_gelu_batch2() -> Builder:
     """Depthwise conv2d + bias + GELU batch=2 [2,C,H,W] (groups=C)."""
 
@@ -1153,6 +1211,35 @@ def build_conv2d_depthwise_bias_gelu_batch2() -> Builder:
         inp_w = _f16((4, 1, 3, 3))
         inp_b = _f16((1, 4, 1, 1))
         ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                groups=4,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_depthwise_bias_silu_batch1() -> Builder:
+    """Depthwise conv2d + bias + SiLU batch=1 inference [1,C,H,W] (groups=C)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_depthwise_bias_silu(x, w, b, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((4, 1, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.silu(
             torch.nn.functional.conv2d(
                 inp_x,
                 inp_w,
@@ -1198,6 +1285,29 @@ def build_conv2d_depthwise_bias_silu_batch2() -> Builder:
 
 def build_conv2d_separable() -> Builder:
     """Depthwise + 1x1 pointwise separable conv (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable(x, dw, pw, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
+        )
+        ref = torch.nn.functional.conv2d(hidden, inp_pw)
+        return g, [inp_x, inp_dw, inp_pw], ref
+
+    return _build
+
+
+def build_conv2d_separable_batch1() -> Builder:
+    """Separable conv batch=1 inference [1,C,H,W] (depthwise + pointwise)."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -4834,12 +4944,16 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_depthwise_bias_batch1": build_conv2d_depthwise_bias_batch1(),
     "conv2d_depthwise_bias_batch2": build_conv2d_depthwise_bias_batch2(),
     "conv2d_depthwise_bias_relu": build_conv2d_depthwise_bias_relu(),
+    "conv2d_depthwise_bias_relu_batch1": build_conv2d_depthwise_bias_relu_batch1(),
     "conv2d_depthwise_bias_relu_batch2": build_conv2d_depthwise_bias_relu_batch2(),
     "conv2d_depthwise_bias_gelu": build_conv2d_depthwise_bias_gelu(),
+    "conv2d_depthwise_bias_gelu_batch1": build_conv2d_depthwise_bias_gelu_batch1(),
     "conv2d_depthwise_bias_gelu_batch2": build_conv2d_depthwise_bias_gelu_batch2(),
     "conv2d_depthwise_bias_silu": build_conv2d_depthwise_bias_silu(),
+    "conv2d_depthwise_bias_silu_batch1": build_conv2d_depthwise_bias_silu_batch1(),
     "conv2d_depthwise_bias_silu_batch2": build_conv2d_depthwise_bias_silu_batch2(),
     "conv2d_separable": build_conv2d_separable(),
+    "conv2d_separable_batch1": build_conv2d_separable_batch1(),
     "conv2d_separable_batch2": build_conv2d_separable_batch2(),
     "conv2d_separable_bias": build_conv2d_separable_bias(),
     "conv2d_separable_bias_batch2": build_conv2d_separable_bias_batch2(),
