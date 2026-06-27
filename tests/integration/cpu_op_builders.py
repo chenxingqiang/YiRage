@@ -2203,6 +2203,22 @@ def build_gemm_gelu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_gelu_batch2() -> Builder:
+    """2D GEMM + GELU batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_gelu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.gelu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_gelu_3d() -> Builder:
     """3D GEMM + GELU [B,S,K] @ [K,N] vs matmul + F.gelu."""
 
@@ -2286,6 +2302,22 @@ def build_gemm_silu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_silu_batch2() -> Builder:
+    """2D GEMM + SiLU batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_silu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.silu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_relu() -> Builder:
     """COMET-style gemm_relu compound op vs torch matmul + F.relu."""
 
@@ -2304,6 +2336,22 @@ def build_gemm_relu() -> Builder:
 
 def build_gemm_relu_batch1() -> Builder:
     """2D GEMM + ReLU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_relu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.relu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_relu_batch2() -> Builder:
+    """2D GEMM + ReLU batch=2 inference [M,K] @ [K,N]."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -3589,6 +3637,23 @@ def build_rms_norm_linear_batch1() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_batch2() -> Builder:
+    """2D RMSNorm + linear batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_rms_norm_linear_gelu() -> Builder:
     """RMSNorm + linear + GELU vs F.gelu(rms reference matmul)."""
 
@@ -4227,16 +4292,19 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm_3d_silu_batch2": build_gemm_layernorm_3d_silu_batch2(),
     "gemm_gelu": build_gemm_gelu(),
     "gemm_gelu_batch1": build_gemm_gelu_batch1(),
+    "gemm_gelu_batch2": build_gemm_gelu_batch2(),
     "gemm_gelu_3d": build_gemm_gelu_3d(),
     "gemm_gelu_3d_batch1": build_gemm_gelu_3d_batch1(),
     "gemm_gelu_3d_batch2": build_gemm_gelu_3d_batch2(),
     "gemm_silu": build_gemm_silu(),
     "gemm_silu_batch1": build_gemm_silu_batch1(),
+    "gemm_silu_batch2": build_gemm_silu_batch2(),
     "gemm_silu_3d": build_gemm_silu_3d(),
     "gemm_silu_3d_batch1": build_gemm_silu_3d_batch1(),
     "gemm_silu_3d_batch2": build_gemm_silu_3d_batch2(),
     "gemm_relu": build_gemm_relu(),
     "gemm_relu_batch1": build_gemm_relu_batch1(),
+    "gemm_relu_batch2": build_gemm_relu_batch2(),
     "gemm_relu_3d": build_gemm_relu_3d(),
     "gemm_relu_3d_batch1": build_gemm_relu_3d_batch1(),
     "gemm_relu_3d_batch2": build_gemm_relu_3d_batch2(),
@@ -4284,6 +4352,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp_batched_gelu_batch2": build_gated_mlp_batched_gelu_batch2(),
     "rms_norm_linear": build_rms_norm_linear(),
     "rms_norm_linear_batch1": build_rms_norm_linear_batch1(),
+    "rms_norm_linear_batch2": build_rms_norm_linear_batch2(),
     "rms_norm_linear_3d": build_rms_norm_linear_3d(),
     "rms_norm_linear_3d_batch1": build_rms_norm_linear_3d_batch1(),
     "rms_norm_linear_3d_batch2": build_rms_norm_linear_3d_batch2(),
