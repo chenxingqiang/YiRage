@@ -665,6 +665,102 @@ def build_conv2d_relu_batch1() -> Builder:
     return _build
 
 
+def build_conv2d_relu_batch2() -> Builder:
+    """Conv2d + ReLU batch=2 inference [2,C,H,W] (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.relu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+            )
+        )
+        inp_x = _f16((2, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.conv2d(
+                inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
+def build_conv2d_gelu_batch1() -> Builder:
+    """Conv2d + GELU batch=1 inference [1,C,H,W] (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.gelu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+            )
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
+def build_conv2d_gelu_batch2() -> Builder:
+    """Conv2d + GELU batch=2 inference [2,C,H,W] (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.gelu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+            )
+        )
+        inp_x = _f16((2, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
+def build_conv2d_silu_batch1() -> Builder:
+    """Conv2d + SiLU batch=1 inference [1,C,H,W] (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.silu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+            )
+        )
+        inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.silu(
+            torch.nn.functional.conv2d(
+                inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 def build_conv2d_bias_relu() -> Builder:
     """Conv2d + bias + ReLU vs F.relu(F.conv2d(...))."""
 
@@ -5169,6 +5265,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_gelu": build_conv2d_gelu(),
     "conv2d_silu": build_conv2d_silu(),
     "conv2d_relu_batch1": build_conv2d_relu_batch1(),
+    "conv2d_relu_batch2": build_conv2d_relu_batch2(),
+    "conv2d_gelu_batch1": build_conv2d_gelu_batch1(),
+    "conv2d_gelu_batch2": build_conv2d_gelu_batch2(),
+    "conv2d_silu_batch1": build_conv2d_silu_batch1(),
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_bias_batch1": build_conv2d_bias_batch1(),
     "conv2d_bias_batch2": build_conv2d_bias_batch2(),
