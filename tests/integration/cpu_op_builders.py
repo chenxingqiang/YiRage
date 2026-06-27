@@ -1908,8 +1908,44 @@ def build_gemm_layernorm_relu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_layernorm_relu_batch2() -> Builder:
+    """2D GEMM + LayerNorm + ReLU batch=2 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_relu(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.layer_norm(c, (16,), eps=0.0)
+        ).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_layernorm_silu_batch1() -> Builder:
     """2D GEMM + LayerNorm + SiLU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_silu(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.silu(
+            torch.nn.functional.layer_norm(c, (16,), eps=0.0)
+        ).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_silu_batch2() -> Builder:
+    """2D GEMM + LayerNorm + SiLU batch=2 inference [M,K] @ [K,N]."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -2843,8 +2879,60 @@ def build_gated_mlp_batch1() -> Builder:
     return _build
 
 
+def build_gated_mlp_batch2() -> Builder:
+    """Gated MLP batch=2 inference [S,D] SiLU gate (2D dual-sequence contract)."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.silu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
 def build_gated_mlp_gelu_batch1() -> Builder:
     """Gated MLP batch=1 inference [S,D] GELU gate (2D single-sequence contract)."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="gelu")
+        )
+        tx = _f16((seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.gelu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_gated_mlp_gelu_batch2() -> Builder:
+    """Gated MLP batch=2 inference [S,D] GELU gate (2D dual-sequence contract)."""
 
     def _build():
         seq, dim, d_ff = 4, 8, 16
@@ -4047,8 +4135,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm_gelu_batch2": build_gemm_layernorm_gelu_batch2(),
     "gemm_layernorm_relu": build_gemm_layernorm_relu(),
     "gemm_layernorm_relu_batch1": build_gemm_layernorm_relu_batch1(),
+    "gemm_layernorm_relu_batch2": build_gemm_layernorm_relu_batch2(),
     "gemm_layernorm_silu": build_gemm_layernorm_silu(),
     "gemm_layernorm_silu_batch1": build_gemm_layernorm_silu_batch1(),
+    "gemm_layernorm_silu_batch2": build_gemm_layernorm_silu_batch2(),
     "gemm_layernorm_3d": build_gemm_layernorm_3d(),
     "gemm_layernorm_3d_batch1": build_gemm_layernorm_3d_batch1(),
     "gemm_layernorm_3d_batch2": build_gemm_layernorm_3d_batch2(),
@@ -4099,7 +4189,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "gated_mlp": build_gated_mlp(),
     "gated_mlp_gelu": build_gated_mlp_gelu(),
     "gated_mlp_batch1": build_gated_mlp_batch1(),
+    "gated_mlp_batch2": build_gated_mlp_batch2(),
     "gated_mlp_gelu_batch1": build_gated_mlp_gelu_batch1(),
+    "gated_mlp_gelu_batch2": build_gated_mlp_gelu_batch2(),
     "gated_mlp_batched": build_gated_mlp_batched(),
     "gated_mlp_batched_gelu": build_gated_mlp_batched_gelu(),
     "gated_mlp_3d": build_gated_mlp_3d(),
