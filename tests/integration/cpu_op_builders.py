@@ -761,6 +761,30 @@ def build_conv2d_silu_batch1() -> Builder:
     return _build
 
 
+def build_conv2d_silu_batch2() -> Builder:
+    """Conv2d + SiLU batch=2 inference [2,C,H,W] (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.silu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+            )
+        )
+        inp_x = _f16((2, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.silu(
+            torch.nn.functional.conv2d(
+                inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 def build_conv2d_bias_relu() -> Builder:
     """Conv2d + bias + ReLU vs F.relu(F.conv2d(...))."""
 
@@ -2016,6 +2040,66 @@ def build_kn_unfused_rms_matmul() -> Builder:
         normed = g.rms_norm(x, normalized_shape=(k,))
         g.mark_output(g.matmul(normed, w))
         tx, tw = _f16((m, k)), _f16((k, n))
+        ref = torch.matmul(
+            tx.float() * torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6),
+            tw.float(),
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_kn_unfused_rms_matmul_batch1() -> Builder:
+    """Rms_norm + matmul batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 16, 64, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        normed = g.rms_norm(x, normalized_shape=(k,))
+        g.mark_output(g.matmul(normed, w))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        ref = torch.matmul(
+            tx.float() * torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6),
+            tw.float(),
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_kn_unfused_rms_matmul_batch2() -> Builder:
+    """Rms_norm + matmul batch=2 inference [M,K] @ [K,N] (naming contract)."""
+
+    def _build():
+        m, k, n = 16, 64, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        normed = g.rms_norm(x, normalized_shape=(k,))
+        g.mark_output(g.matmul(normed, w))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        ref = torch.matmul(
+            tx.float() * torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6),
+            tw.float(),
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_kn_unfused_rms_matmul_batched_batch1() -> Builder:
+    """Rms_norm + matmul batch=1 broadcast [1,M,K] @ [K,N] -> [1,M,N]."""
+
+    def _build():
+        m, k, n = 16, 64, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        normed = g.rms_norm(x, normalized_shape=(k,))
+        g.mark_output(g.matmul(normed, w))
+        tx, tw = _f16((1, m, k)), _f16((k, n))
         ref = torch.matmul(
             tx.float() * torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6),
             tw.float(),
@@ -5108,6 +5192,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_rms_norm_batch1": build_kn_rms_norm_batch1(),
     "kn_rms_norm_batch2": build_kn_rms_norm_batch2(),
     "kn_unfused_rms_matmul": build_kn_unfused_rms_matmul(),
+    "kn_unfused_rms_matmul_batch1": build_kn_unfused_rms_matmul_batch1(),
+    "kn_unfused_rms_matmul_batch2": build_kn_unfused_rms_matmul_batch2(),
+    "kn_unfused_rms_matmul_batched_batch1": build_kn_unfused_rms_matmul_batched_batch1(),
     "kn_layer_norm": build_kn_layer_norm(),
     "kn_layer_norm_batch1": build_kn_layer_norm_batch1(),
     "kn_layer_norm_batch2": build_kn_layer_norm_batch2(),
@@ -5269,6 +5356,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_gelu_batch1": build_conv2d_gelu_batch1(),
     "conv2d_gelu_batch2": build_conv2d_gelu_batch2(),
     "conv2d_silu_batch1": build_conv2d_silu_batch1(),
+    "conv2d_silu_batch2": build_conv2d_silu_batch2(),
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_bias_batch1": build_conv2d_bias_batch1(),
     "conv2d_bias_batch2": build_conv2d_bias_batch2(),
