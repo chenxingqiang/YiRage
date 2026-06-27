@@ -1632,6 +1632,146 @@ def build_conv2d_separable_bias_silu_batch2() -> Builder:
     return _build
 
 
+def build_conv2d_separable_bias_batch1() -> Builder:
+    """Separable conv + biases batch=1 inference [1,C,H,W]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        db = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        pb = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_bias(
+                x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        inp_db = _f16((1, 4, 1, 1))
+        inp_pb = _f16((1, 8, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x,
+            inp_dw,
+            bias=inp_db.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            groups=4,
+        )
+        mid = torch.nn.functional.conv2d(hidden, inp_pw)
+        ref = mid + inp_pb
+        return g, [inp_x, inp_dw, inp_pw, inp_db, inp_pb], ref
+
+    return _build
+
+
+def build_conv2d_separable_bias_relu_batch1() -> Builder:
+    """Separable conv + biases + ReLU batch=1 inference [1,C,H,W]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        db = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        pb = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_bias_relu(
+                x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        inp_db = _f16((1, 4, 1, 1))
+        inp_pb = _f16((1, 8, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x,
+            inp_dw,
+            bias=inp_db.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            groups=4,
+        )
+        mid = torch.nn.functional.conv2d(hidden, inp_pw)
+        ref = torch.nn.functional.relu(mid + inp_pb)
+        return g, [inp_x, inp_dw, inp_pw, inp_db, inp_pb], ref
+
+    return _build
+
+
+def build_conv2d_separable_bias_gelu_batch1() -> Builder:
+    """Separable conv + biases + GELU batch=1 inference [1,C,H,W]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        db = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        pb = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_bias_gelu(
+                x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        inp_db = _f16((1, 4, 1, 1))
+        inp_pb = _f16((1, 8, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x,
+            inp_dw,
+            bias=inp_db.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            groups=4,
+        )
+        mid = torch.nn.functional.conv2d(hidden, inp_pw)
+        ref = torch.nn.functional.gelu(mid + inp_pb)
+        return g, [inp_x, inp_dw, inp_pw, inp_db, inp_pb], ref
+
+    return _build
+
+
+def build_conv2d_separable_bias_silu_batch1() -> Builder:
+    """Separable conv + biases + SiLU batch=1 inference [1,C,H,W]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        db = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        pb = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_bias_silu(
+                x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        inp_db = _f16((1, 4, 1, 1))
+        inp_pb = _f16((1, 8, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x,
+            inp_dw,
+            bias=inp_db.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            groups=4,
+        )
+        mid = torch.nn.functional.conv2d(hidden, inp_pw)
+        ref = torch.nn.functional.silu(mid + inp_pb)
+        return g, [inp_x, inp_dw, inp_pw, inp_db, inp_pb], ref
+
+    return _build
+
+
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_matmul_3d_2d_op": build_kn_matmul_3d_2d(),
@@ -4956,12 +5096,16 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_separable_batch1": build_conv2d_separable_batch1(),
     "conv2d_separable_batch2": build_conv2d_separable_batch2(),
     "conv2d_separable_bias": build_conv2d_separable_bias(),
+    "conv2d_separable_bias_batch1": build_conv2d_separable_bias_batch1(),
     "conv2d_separable_bias_batch2": build_conv2d_separable_bias_batch2(),
     "conv2d_separable_bias_relu": build_conv2d_separable_bias_relu(),
+    "conv2d_separable_bias_relu_batch1": build_conv2d_separable_bias_relu_batch1(),
     "conv2d_separable_bias_relu_batch2": build_conv2d_separable_bias_relu_batch2(),
     "conv2d_separable_bias_gelu": build_conv2d_separable_bias_gelu(),
+    "conv2d_separable_bias_gelu_batch1": build_conv2d_separable_bias_gelu_batch1(),
     "conv2d_separable_bias_gelu_batch2": build_conv2d_separable_bias_gelu_batch2(),
     "conv2d_separable_bias_silu": build_conv2d_separable_bias_silu(),
+    "conv2d_separable_bias_silu_batch1": build_conv2d_separable_bias_silu_batch1(),
     "conv2d_separable_bias_silu_batch2": build_conv2d_separable_bias_silu_batch2(),
     "kn_matmul_batch1": build_kn_matmul_batch1(),
     "kn_matmul_batch2": build_kn_matmul_batch2(),
