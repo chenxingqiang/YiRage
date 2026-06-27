@@ -446,6 +446,35 @@ def build_conv2d_bias_relu() -> Builder:
     return _build
 
 
+def build_conv2d_bias_relu_batch2() -> Builder:
+    """Conv2d + bias + ReLU batch=2 inference [2,C,H,W] NCHW."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_relu(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((2, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
 def build_conv2d_bias_gelu() -> Builder:
     """Conv2d + bias + GELU vs F.gelu(F.conv2d(...))."""
 
@@ -458,6 +487,35 @@ def build_conv2d_bias_gelu() -> Builder:
             g.conv2d_bias_gelu(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_bias_gelu_batch2() -> Builder:
+    """Conv2d + bias + GELU batch=2 inference [2,C,H,W] NCHW."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_gelu(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((2, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
         inp_b = _f16((1, 4, 1, 1))
         ref = torch.nn.functional.gelu(
@@ -1239,6 +1297,40 @@ def build_gemm_layernorm_silu() -> Builder:
         ta, tb = _f16((8, 32)), _f16((32, 16))
         c = torch.matmul(ta.float(), tb.float())
         ref = torch.nn.functional.silu(
+            torch.nn.functional.layer_norm(c, (16,), eps=0.0)
+        ).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_batch1() -> Builder:
+    """2D GEMM + LayerNorm batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.layer_norm(c, (16,), eps=0.0).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_layernorm_gelu_batch1() -> Builder:
+    """2D GEMM + LayerNorm + GELU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_layernorm_gelu(a, b, normalized_shape=(16,), eps=0.0))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.gelu(
             torch.nn.functional.layer_norm(c, (16,), eps=0.0)
         ).to(torch.float16)
         return g, [ta, tb], ref
@@ -2842,7 +2934,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_softmax_scaled_3d": build_gemm_softmax_scaled_3d(),
     "gemm_softmax_scaled_3d_batch1": build_gemm_softmax_scaled_3d_batch1(),
     "gemm_layernorm": build_gemm_layernorm(),
+    "gemm_layernorm_batch1": build_gemm_layernorm_batch1(),
     "gemm_layernorm_gelu": build_gemm_layernorm_gelu(),
+    "gemm_layernorm_gelu_batch1": build_gemm_layernorm_gelu_batch1(),
     "gemm_layernorm_relu": build_gemm_layernorm_relu(),
     "gemm_layernorm_silu": build_gemm_layernorm_silu(),
     "gemm_layernorm_3d": build_gemm_layernorm_3d(),
@@ -2926,7 +3020,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_bias_batch2": build_conv2d_bias_batch2(),
     "conv2d_bias_relu": build_conv2d_bias_relu(),
+    "conv2d_bias_relu_batch2": build_conv2d_bias_relu_batch2(),
     "conv2d_bias_gelu": build_conv2d_bias_gelu(),
+    "conv2d_bias_gelu_batch2": build_conv2d_bias_gelu_batch2(),
     "conv2d_bias_silu": build_conv2d_bias_silu(),
     "conv2d_groups": build_kn_conv2d_groups(),
     "conv2d_bias_groups": build_conv2d_bias_groups(),
