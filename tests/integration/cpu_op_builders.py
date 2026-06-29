@@ -322,6 +322,26 @@ def build_kn_conv2d() -> Builder:
     return _build
 
 
+def build_kn_conv2d_batch2() -> Builder:
+    """KN conv2d batch=2 shape contract [2,C,H,W] NCHW."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((2, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        ref = torch.nn.functional.conv2d(
+            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1)
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 def build_kn_conv2d_groups() -> Builder:
     """Grouped conv2d (groups=2) aligned with F.conv2d."""
 
@@ -355,6 +375,33 @@ def build_conv2d_bias() -> Builder:
             g.conv2d_bias(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
+        inp_w = _f16((4, 3, 3, 3))
+        inp_b = _f16((1, 4, 1, 1))
+        ref = torch.nn.functional.conv2d(
+            inp_x,
+            inp_w,
+            bias=inp_b.reshape(-1),
+            stride=(1, 1),
+            padding=(1, 1),
+            dilation=(1, 1),
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_bias_batch2() -> Builder:
+    """Conv2d + bias batch=2 inference [2,C,H,W] NCHW."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias(x, w, b, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
+        )
+        inp_x = _f16((2, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
         inp_b = _f16((1, 4, 1, 1))
         ref = torch.nn.functional.conv2d(
@@ -805,6 +852,7 @@ KN_OP_BUILDERS = {
     "kn_chunk_2_op": build_kn_chunk(2),
     "kn_transpose_01_op": build_kn_transpose_01(),
     "kn_conv2d_op": build_kn_conv2d(),
+    "kn_conv2d_batch2_op": build_kn_conv2d_batch2(),
 }
 
 def build_kn_unfused_rms_matmul() -> Builder:
@@ -1670,6 +1718,25 @@ def build_gemm_bias_silu() -> Builder:
     return _build
 
 
+def build_gemm_bias_silu_batch1() -> Builder:
+    """2D GEMM + bias + SiLU batch=1 inference [M,K] @ [K,N] + [1,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_silu(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = torch.nn.functional.silu(
+            torch.matmul(ta.float(), tb.float()) + tbias.float()
+        ).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def _gemm_bias_3d_ref(
     ta: torch.Tensor,
     tb: torch.Tensor,
@@ -2425,6 +2492,25 @@ def build_rms_norm_linear_silu() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_silu_batch1() -> Builder:
+    """2D RMSNorm + linear + SiLU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_silu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.nn.functional.silu(
+            torch.matmul(tx.float() * scale, tw.float())
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_self_attention() -> Builder:
     """COMET self_attention: softmax(Q @ K) @ V with stable TB softmax (K transposed)."""
 
@@ -2786,6 +2872,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_bias_gelu": build_gemm_bias_gelu(),
     "gemm_bias_gelu_batch1": build_gemm_bias_gelu_batch1(),
     "gemm_bias_silu": build_gemm_bias_silu(),
+    "gemm_bias_silu_batch1": build_gemm_bias_silu_batch1(),
     "gemm_bias_3d": build_gemm_bias_3d(),
     "gemm_bias_3d_batch1": build_gemm_bias_3d_batch1(),
     "gemm_bias_3d_relu": build_gemm_bias_3d_relu(),
@@ -2821,6 +2908,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "rms_norm_linear_relu": build_rms_norm_linear_relu(),
     "rms_norm_linear_relu_batch1": build_rms_norm_linear_relu_batch1(),
     "rms_norm_linear_silu": build_rms_norm_linear_silu(),
+    "rms_norm_linear_silu_batch1": build_rms_norm_linear_silu_batch1(),
     "self_attention": build_self_attention(),
     "self_attention_batch1": build_self_attention_batch1(),
     "self_attention_scaled": build_self_attention_scaled(),
@@ -2836,6 +2924,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "self_attention_scaled_3d": build_self_attention_scaled_3d(),
     "self_attention_scaled_3d_batch1": build_self_attention_scaled_3d_batch1(),
     "conv2d_bias": build_conv2d_bias(),
+    "conv2d_bias_batch2": build_conv2d_bias_batch2(),
     "conv2d_bias_relu": build_conv2d_bias_relu(),
     "conv2d_bias_gelu": build_conv2d_bias_gelu(),
     "conv2d_bias_silu": build_conv2d_bias_silu(),
