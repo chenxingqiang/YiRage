@@ -98,6 +98,20 @@ def build_kn_matmul_3d_2d() -> Builder:
     return _build
 
 
+def build_kn_matmul_3d_2d_batch1() -> Builder:
+    """KN matmul batch=1 broadcast: [1,M,K] @ [K,N] -> [1,M,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(1, 4, 8), dtype=yr.float16)
+        b = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.matmul(a, b))
+        ta, tb = _f16((1, 4, 8)), _f16((8, 16))
+        return g, [ta, tb], torch.matmul(ta, tb)
+
+    return _build
+
+
 def build_kn_rms_norm() -> Builder:
     def _build():
         g = yr.new_kernel_graph()
@@ -760,6 +774,7 @@ def build_conv2d_separable_bias_silu() -> Builder:
 KN_OP_BUILDERS = {
     "kn_matmul_op": build_kn_matmul(),
     "kn_matmul_3d_2d_op": build_kn_matmul_3d_2d(),
+    "kn_matmul_3d_2d_batch1_op": build_kn_matmul_3d_2d_batch1(),
     "kn_rms_norm_op": build_kn_rms_norm(),
     "kn_exp_op": build_kn_unary("exp"),
     "kn_square_op": build_kn_unary("square"),
@@ -948,8 +963,42 @@ def build_gemm_softmax() -> Builder:
     return _build
 
 
+def build_gemm_softmax_batch1() -> Builder:
+    """2D GEMM + softmax batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_softmax(a, b, dim=-1))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.softmax(c, dim=-1).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_softmax_scaled() -> Builder:
     """Scaled gemm_softmax vs softmax(matmul / sqrt(d)) (attention scores)."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        b = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        g.mark_output(g.gemm_softmax_scaled(a, b, dim=-1, head_dim=dim))
+        ta, tb = _f16((seq, dim)), _f16((dim, seq))
+        scale = dim ** -0.5
+        scores = torch.matmul(ta.float(), tb.float()) * scale
+        ref = torch.nn.functional.softmax(scores, dim=-1).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_softmax_scaled_batch1() -> Builder:
+    """2D scaled GEMM + softmax batch=1 inference [S,D] @ [D,S]."""
 
     def _build():
         seq, dim = 8, 32
@@ -983,6 +1032,25 @@ def build_gemm_softmax_scaled_batched() -> Builder:
             scores = torch.matmul(ta[bi].float(), tb[bi].float()) * scale
             outs.append(torch.nn.functional.softmax(scores, dim=-1))
         ref = torch.stack(outs, dim=0).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_softmax_scaled_batched_batch1() -> Builder:
+    """Batched scaled gemm_softmax batch=1 [1,S,D] / [1,D,S]."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        b = g.new_input(dims=(1, dim, seq), dtype=yr.float16)
+        g.mark_output(g.gemm_softmax_scaled_batched(a, b, dim=-1, head_dim=dim))
+        ta = _f16((1, seq, dim))
+        tb = _f16((1, dim, seq))
+        scale = dim ** -0.5
+        scores = torch.matmul(ta[0].float(), tb[0].float()) * scale
+        ref = torch.nn.functional.softmax(scores, dim=-1).unsqueeze(0).to(torch.float16)
         return g, [ta, tb], ref
 
     return _build
@@ -1291,6 +1359,22 @@ def build_gemm_gelu() -> Builder:
     return _build
 
 
+def build_gemm_gelu_batch1() -> Builder:
+    """2D GEMM + GELU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_gelu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.gelu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_gelu_3d() -> Builder:
     """3D GEMM + GELU [B,S,K] @ [K,N] vs matmul + F.gelu."""
 
@@ -1341,8 +1425,40 @@ def build_gemm_silu() -> Builder:
     return _build
 
 
+def build_gemm_silu_batch1() -> Builder:
+    """2D GEMM + SiLU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_silu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.silu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
 def build_gemm_relu() -> Builder:
     """COMET-style gemm_relu compound op vs torch matmul + F.relu."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_relu(a, b))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        c = torch.matmul(ta.float(), tb.float())
+        ref = torch.nn.functional.relu(c).to(torch.float16)
+        return g, [ta, tb], ref
+
+    return _build
+
+
+def build_gemm_relu_batch1() -> Builder:
+    """2D GEMM + ReLU batch=1 inference [M,K] @ [K,N]."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -1442,6 +1558,42 @@ def build_gemm_bias() -> Builder:
     return _build
 
 
+def build_gemm_bias_batch1() -> Builder:
+    """2D GEMM + bias batch=1 inference [M,K] @ [K,N] + [1,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = (torch.matmul(ta.float(), tb.float()) + tbias.float()).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_relu_batch1() -> Builder:
+    """2D GEMM + bias + ReLU batch=1 inference [M,K] @ [K,N] + [1,N]."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_relu(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = torch.nn.functional.relu(
+            torch.matmul(ta.float(), tb.float()) + tbias.float()
+        ).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def build_gemm_bias_relu() -> Builder:
     """GEMM + bias + ReLU vs F.relu(matmul + bias)."""
 
@@ -1463,6 +1615,25 @@ def build_gemm_bias_relu() -> Builder:
 
 def build_gemm_bias_gelu() -> Builder:
     """GEMM + bias + GELU vs F.gelu(matmul + bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(8, 32), dtype=yr.float16)
+        b = g.new_input(dims=(32, 16), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 16), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_gelu(a, b, bias))
+        ta, tb = _f16((8, 32)), _f16((32, 16))
+        tbias = _f16((1, 16))
+        ref = torch.nn.functional.gelu(
+            torch.matmul(ta.float(), tb.float()) + tbias.float()
+        ).to(torch.float16)
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_gelu_batch1() -> Builder:
+    """2D GEMM + bias + GELU batch=1 inference [M,K] @ [K,N] + [1,N]."""
 
     def _build():
         g = yr.new_kernel_graph()
@@ -1588,6 +1759,42 @@ def build_gemm_bias_3d_relu_batch1() -> Builder:
     return _build
 
 
+def build_gemm_bias_3d_gelu_batch1() -> Builder:
+    """3D GEMM + bias + GELU batch=1 [1,S,K] @ [K,N] + [1,1,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_gelu(a, b, bias))
+        ta, tb = _f16((1, seq, k)), _f16((k, n))
+        tbias = _f16((1, 1, n))
+        ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="gelu")
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
+def build_gemm_bias_3d_silu_batch1() -> Builder:
+    """3D GEMM + bias + SiLU batch=1 [1,S,K] @ [K,N] + [1,1,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        b = g.new_input(dims=(k, n), dtype=yr.float16)
+        bias = g.new_input(dims=(1, 1, n), dtype=yr.float16)
+        g.mark_output(g.gemm_bias_silu(a, b, bias))
+        ta, tb = _f16((1, seq, k)), _f16((k, n))
+        tbias = _f16((1, 1, n))
+        ref = _gemm_bias_3d_ref(ta, tb, tbias, activation="silu")
+        return g, [ta, tb, tbias], ref
+
+    return _build
+
+
 def build_gemm_bias_3d_gelu() -> Builder:
     """3D GEMM + bias + GELU [B,S,K] @ [K,N] + [1,1,N]."""
 
@@ -1652,6 +1859,58 @@ def build_gated_mlp() -> Builder:
 
 def build_gated_mlp_gelu() -> Builder:
     """Gated MLP with GELU gate activation on 2D [S,D] vs PyTorch reference."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="gelu")
+        )
+        tx = _f16((seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.gelu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_gated_mlp_batch1() -> Builder:
+    """Gated MLP batch=1 inference [S,D] SiLU gate (2D single-sequence contract)."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.silu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_gated_mlp_gelu_batch1() -> Builder:
+    """Gated MLP batch=1 inference [S,D] GELU gate (2D single-sequence contract)."""
 
     def _build():
         seq, dim, d_ff = 4, 8, 16
@@ -1795,6 +2054,104 @@ def build_gated_mlp_3d_gelu() -> Builder:
     return _build
 
 
+def build_gated_mlp_3d_batch1() -> Builder:
+    """3D gated MLP batch=1 [1,S,D] with shared 2D weights (SiLU gate)."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((1, seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.silu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_gated_mlp_3d_gelu_batch1() -> Builder:
+    """3D gated MLP batch=1 [1,S,D] with GELU gate and shared 2D weights."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp(x, w_gate, w_up, w_down, activation="gelu")
+        )
+        tx = _f16((1, seq, dim))
+        twg = _f16((dim, d_ff))
+        twu = _f16((dim, d_ff))
+        twd = _f16((d_ff, dim))
+        gate = torch.nn.functional.gelu(torch.matmul(tx.float(), twg.float()))
+        up = torch.matmul(tx.float(), twu.float())
+        inter = gate * up
+        ref = torch.matmul(inter, twd.float()).to(torch.float16)
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_gated_mlp_batched_batch1() -> Builder:
+    """3D gated MLP batch=1 [1,S,D] with shared [1,D,D_ff] weights (SiLU gate)."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(1, d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp_batched(x, w_gate, w_up, w_down, activation="silu")
+        )
+        tx = _f16((1, seq, dim))
+        twg = _f16((1, dim, d_ff))
+        twu = _f16((1, dim, d_ff))
+        twd = _f16((1, d_ff, dim))
+        ref = _gated_mlp_batched_ref(tx, twg, twu, twd, activation="silu")
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
+def build_gated_mlp_batched_gelu_batch1() -> Builder:
+    """3D gated MLP batch=1 [1,S,D] with shared [1,D,D_ff] weights (GELU gate)."""
+
+    def _build():
+        seq, dim, d_ff = 4, 8, 16
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        w_gate = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_up = g.new_input(dims=(1, dim, d_ff), dtype=yr.float16)
+        w_down = g.new_input(dims=(1, d_ff, dim), dtype=yr.float16)
+        g.mark_output(
+            g.gated_mlp_batched(x, w_gate, w_up, w_down, activation="gelu")
+        )
+        tx = _f16((1, seq, dim))
+        twg = _f16((1, dim, d_ff))
+        twu = _f16((1, dim, d_ff))
+        twd = _f16((1, d_ff, dim))
+        ref = _gated_mlp_batched_ref(tx, twg, twu, twd, activation="gelu")
+        return g, [tx, twg, twu, twd], ref
+
+    return _build
+
+
 def build_rms_norm_linear_3d() -> Builder:
     """3D RMSNorm + linear [B,S,D] @ [D,N] with shared 2D weight."""
 
@@ -1807,6 +2164,71 @@ def build_rms_norm_linear_3d() -> Builder:
         tx, tw = _f16((batch, seq, k)), _f16((k, n))
         scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
         ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_batch1() -> Builder:
+    """3D RMSNorm + linear batch=1 [1,S,D] @ [D,N] with shared 2D weight."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_gelu_batch1() -> Builder:
+    """3D RMSNorm + linear + GELU batch=1 [1,S,D] @ [D,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_gelu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="gelu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_relu_batch1() -> Builder:
+    """3D RMSNorm + linear + ReLU batch=1 [1,S,D] @ [D,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_relu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="relu")
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_3d_silu_batch1() -> Builder:
+    """3D RMSNorm + linear + SiLU batch=1 [1,S,D] @ [D,N]."""
+
+    def _build():
+        seq, k, n = 4, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, seq, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_silu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((1, seq, k)), _f16((k, n))
+        ref = _rms_norm_linear_3d_ref(tx, tw, activation="silu")
         return g, [tx, tw], ref
 
     return _build
@@ -1891,6 +2313,23 @@ def build_rms_norm_linear() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_batch1() -> Builder:
+    """2D RMSNorm + linear batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.matmul(tx.float() * scale, tw.float()).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_rms_norm_linear_gelu() -> Builder:
     """RMSNorm + linear + GELU vs F.gelu(rms reference matmul)."""
 
@@ -1910,8 +2349,46 @@ def build_rms_norm_linear_gelu() -> Builder:
     return _build
 
 
+def build_rms_norm_linear_gelu_batch1() -> Builder:
+    """2D RMSNorm + linear + GELU batch=1 inference [M,K] @ [K,N]."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_gelu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.nn.functional.gelu(
+            torch.matmul(tx.float() * scale, tw.float())
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
 def build_rms_norm_linear_relu() -> Builder:
     """RMSNorm + linear + ReLU vs F.relu(rms reference matmul)."""
+
+    def _build():
+        m, k, n = 8, 16, 32
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(m, k), dtype=yr.float16)
+        w = g.new_input(dims=(k, n), dtype=yr.float16)
+        g.mark_output(g.rms_norm_linear_relu(x, w, normalized_shape=(k,)))
+        tx, tw = _f16((m, k)), _f16((k, n))
+        scale = torch.rsqrt(tx.float().pow(2).mean(-1, keepdim=True) + 1e-6)
+        ref = torch.nn.functional.relu(
+            torch.matmul(tx.float() * scale, tw.float())
+        ).to(torch.float16)
+        return g, [tx, tw], ref
+
+    return _build
+
+
+def build_rms_norm_linear_relu_batch1() -> Builder:
+    """2D RMSNorm + linear + ReLU batch=1 inference [M,K] @ [K,N]."""
 
     def _build():
         m, k, n = 8, 16, 32
@@ -1967,6 +2444,25 @@ def build_self_attention() -> Builder:
     return _build
 
 
+def build_self_attention_batch1() -> Builder:
+    """2D self_attention batch=1 inference [S,D] / [D,S] / [S,D] (unscaled)."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention(q, k, v))
+        tq, tk, tv = _f16((seq, dim)), _f16((dim, seq)), _f16((seq, dim))
+        scores = torch.matmul(tq.float(), tk.float())
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 def build_self_attention_scaled() -> Builder:
     """Scaled self_attention: softmax(Q @ K / sqrt(d)) @ V (standard dot-product attention)."""
 
@@ -1987,8 +2483,50 @@ def build_self_attention_scaled() -> Builder:
     return _build
 
 
+def build_self_attention_scaled_batch1() -> Builder:
+    """Scaled 2D self_attention batch=1 inference [S,D] / [D,S] / [S,D]."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention(q, k, v, head_dim=dim))
+        tq, tk, tv = _f16((seq, dim)), _f16((dim, seq)), _f16((seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq.float(), tk.float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 def build_self_attention_online() -> Builder:
     """Online rescale self_attention (tile=4 on seq=8) vs scaled stable reference."""
+
+    def _build():
+        seq, dim, tile = 8, 32, 4
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(
+            g.self_attention_online(q, k, v, head_dim=dim, tile=tile)
+        )
+        tq, tk, tv = _f16((seq, dim)), _f16((dim, seq)), _f16((seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq.float(), tk.float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
+def build_self_attention_online_batch1() -> Builder:
+    """Online rescale 2D self_attention batch=1 inference [S,D] (tile=4 on seq=8)."""
 
     def _build():
         seq, dim, tile = 8, 32, 4
@@ -2034,6 +2572,28 @@ def build_self_attention_multi_head() -> Builder:
     return _build
 
 
+def build_self_attention_multi_head_batch1() -> Builder:
+    """Multi-head self_attention batch=1 (H=1) [1,S,D] / [1,D,S] / [1,S,D]."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(1, dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_multi_head(q, k, v, head_dim=dim))
+        tq = _f16((1, seq, dim))
+        tk = _f16((1, dim, seq))
+        tv = _f16((1, seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq[0].float(), tk[0].float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv[0].float()).unsqueeze(0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 def build_self_attention_batched() -> Builder:
     """Batched scaled self_attention on 3D [B,S,D] / [B,D,S]."""
 
@@ -2059,6 +2619,28 @@ def build_self_attention_batched() -> Builder:
     return _build
 
 
+def build_self_attention_batched_batch1() -> Builder:
+    """Batched scaled self_attention batch=1 [1,S,D] / [1,D,S] / [1,S,D]."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(1, dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_batched(q, k, v, head_dim=dim))
+        tq = _f16((1, seq, dim))
+        tk = _f16((1, dim, seq))
+        tv = _f16((1, seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq[0].float(), tk[0].float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv[0].float()).unsqueeze(0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 def build_self_attention_3d() -> Builder:
     """Batched self_attention [B,S,D] with shared 2D K [D,S] and V [S,D]."""
 
@@ -2078,6 +2660,27 @@ def build_self_attention_3d() -> Builder:
             attn = torch.nn.functional.softmax(scores, dim=-1)
             outs.append(torch.matmul(attn, tv.float()))
         ref = torch.stack(outs, dim=0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
+def build_self_attention_3d_batch1() -> Builder:
+    """self_attention_3d batch=1 [1,S,D] with shared 2D K/V."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_3d(q, k, v))
+        tq = _f16((1, seq, dim))
+        tk = _f16((dim, seq))
+        tv = _f16((seq, dim))
+        scores = torch.matmul(tq[0].float(), tk.float())
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).unsqueeze(0).to(torch.float16)
         return g, [tq, tk, tv], ref
 
     return _build
@@ -2108,6 +2711,28 @@ def build_self_attention_scaled_3d() -> Builder:
     return _build
 
 
+def build_self_attention_scaled_3d_batch1() -> Builder:
+    """Scaled self_attention_3d batch=1 [1,S,D] with shared 2D K/V."""
+
+    def _build():
+        seq, dim = 8, 32
+        g = yr.new_kernel_graph()
+        q = g.new_input(dims=(1, seq, dim), dtype=yr.float16)
+        k = g.new_input(dims=(dim, seq), dtype=yr.float16)
+        v = g.new_input(dims=(seq, dim), dtype=yr.float16)
+        g.mark_output(g.self_attention_3d(q, k, v, head_dim=dim))
+        tq = _f16((1, seq, dim))
+        tk = _f16((dim, seq))
+        tv = _f16((seq, dim))
+        scale = dim ** -0.5
+        scores = torch.matmul(tq[0].float(), tk.float()) * scale
+        attn = torch.nn.functional.softmax(scores, dim=-1)
+        ref = torch.matmul(attn, tv.float()).unsqueeze(0).to(torch.float16)
+        return g, [tq, tk, tv], ref
+
+    return _build
+
+
 CUSTOMIZED_OP_BUILDERS = {
     "customized_tb_matmul": build_customized_tb_matmul(),
     "customized_tb_exp": build_customized_tb_exp(),
@@ -2121,8 +2746,11 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_layer_norm_3d": build_kn_layer_norm_3d(),
     "kn_layer_norm_3d_batch1": build_kn_layer_norm_3d_batch1(),
     "gemm_softmax": build_gemm_softmax(),
+    "gemm_softmax_batch1": build_gemm_softmax_batch1(),
     "gemm_softmax_scaled": build_gemm_softmax_scaled(),
+    "gemm_softmax_scaled_batch1": build_gemm_softmax_scaled_batch1(),
     "gemm_softmax_scaled_batched": build_gemm_softmax_scaled_batched(),
+    "gemm_softmax_scaled_batched_batch1": build_gemm_softmax_scaled_batched_batch1(),
     "gemm_softmax_3d": build_gemm_softmax_3d(),
     "gemm_softmax_3d_batch1": build_gemm_softmax_3d_batch1(),
     "gemm_softmax_scaled_3d": build_gemm_softmax_scaled_3d(),
@@ -2140,45 +2768,73 @@ CUSTOMIZED_OP_BUILDERS = {
     "gemm_layernorm_3d_silu": build_gemm_layernorm_3d_silu(),
     "gemm_layernorm_3d_silu_batch1": build_gemm_layernorm_3d_silu_batch1(),
     "gemm_gelu": build_gemm_gelu(),
+    "gemm_gelu_batch1": build_gemm_gelu_batch1(),
     "gemm_gelu_3d": build_gemm_gelu_3d(),
     "gemm_gelu_3d_batch1": build_gemm_gelu_3d_batch1(),
     "gemm_silu": build_gemm_silu(),
+    "gemm_silu_batch1": build_gemm_silu_batch1(),
     "gemm_silu_3d": build_gemm_silu_3d(),
     "gemm_silu_3d_batch1": build_gemm_silu_3d_batch1(),
     "gemm_relu": build_gemm_relu(),
+    "gemm_relu_batch1": build_gemm_relu_batch1(),
     "gemm_relu_3d": build_gemm_relu_3d(),
     "gemm_relu_3d_batch1": build_gemm_relu_3d_batch1(),
     "gemm_bias": build_gemm_bias(),
+    "gemm_bias_batch1": build_gemm_bias_batch1(),
+    "gemm_bias_relu_batch1": build_gemm_bias_relu_batch1(),
     "gemm_bias_relu": build_gemm_bias_relu(),
     "gemm_bias_gelu": build_gemm_bias_gelu(),
+    "gemm_bias_gelu_batch1": build_gemm_bias_gelu_batch1(),
     "gemm_bias_silu": build_gemm_bias_silu(),
     "gemm_bias_3d": build_gemm_bias_3d(),
     "gemm_bias_3d_batch1": build_gemm_bias_3d_batch1(),
     "gemm_bias_3d_relu": build_gemm_bias_3d_relu(),
     "gemm_bias_3d_relu_batch1": build_gemm_bias_3d_relu_batch1(),
+    "gemm_bias_3d_gelu_batch1": build_gemm_bias_3d_gelu_batch1(),
+    "gemm_bias_3d_silu_batch1": build_gemm_bias_3d_silu_batch1(),
     "gemm_bias_3d_gelu": build_gemm_bias_3d_gelu(),
     "gemm_bias_3d_silu": build_gemm_bias_3d_silu(),
     "gated_mlp": build_gated_mlp(),
     "gated_mlp_gelu": build_gated_mlp_gelu(),
+    "gated_mlp_batch1": build_gated_mlp_batch1(),
+    "gated_mlp_gelu_batch1": build_gated_mlp_gelu_batch1(),
     "gated_mlp_batched": build_gated_mlp_batched(),
     "gated_mlp_batched_gelu": build_gated_mlp_batched_gelu(),
     "gated_mlp_3d": build_gated_mlp_3d(),
     "gated_mlp_3d_gelu": build_gated_mlp_3d_gelu(),
+    "gated_mlp_3d_batch1": build_gated_mlp_3d_batch1(),
+    "gated_mlp_3d_gelu_batch1": build_gated_mlp_3d_gelu_batch1(),
+    "gated_mlp_batched_batch1": build_gated_mlp_batched_batch1(),
+    "gated_mlp_batched_gelu_batch1": build_gated_mlp_batched_gelu_batch1(),
     "rms_norm_linear": build_rms_norm_linear(),
+    "rms_norm_linear_batch1": build_rms_norm_linear_batch1(),
     "rms_norm_linear_3d": build_rms_norm_linear_3d(),
+    "rms_norm_linear_3d_batch1": build_rms_norm_linear_3d_batch1(),
+    "rms_norm_linear_3d_gelu_batch1": build_rms_norm_linear_3d_gelu_batch1(),
+    "rms_norm_linear_3d_relu_batch1": build_rms_norm_linear_3d_relu_batch1(),
+    "rms_norm_linear_3d_silu_batch1": build_rms_norm_linear_3d_silu_batch1(),
     "rms_norm_linear_3d_gelu": build_rms_norm_linear_3d_gelu(),
     "rms_norm_linear_3d_relu": build_rms_norm_linear_3d_relu(),
     "rms_norm_linear_3d_silu": build_rms_norm_linear_3d_silu(),
     "rms_norm_linear_gelu": build_rms_norm_linear_gelu(),
+    "rms_norm_linear_gelu_batch1": build_rms_norm_linear_gelu_batch1(),
     "rms_norm_linear_relu": build_rms_norm_linear_relu(),
+    "rms_norm_linear_relu_batch1": build_rms_norm_linear_relu_batch1(),
     "rms_norm_linear_silu": build_rms_norm_linear_silu(),
     "self_attention": build_self_attention(),
+    "self_attention_batch1": build_self_attention_batch1(),
     "self_attention_scaled": build_self_attention_scaled(),
+    "self_attention_scaled_batch1": build_self_attention_scaled_batch1(),
     "self_attention_online": build_self_attention_online(),
+    "self_attention_online_batch1": build_self_attention_online_batch1(),
     "self_attention_multi_head": build_self_attention_multi_head(),
+    "self_attention_multi_head_batch1": build_self_attention_multi_head_batch1(),
     "self_attention_batched": build_self_attention_batched(),
+    "self_attention_batched_batch1": build_self_attention_batched_batch1(),
     "self_attention_3d": build_self_attention_3d(),
+    "self_attention_3d_batch1": build_self_attention_3d_batch1(),
     "self_attention_scaled_3d": build_self_attention_scaled_3d(),
+    "self_attention_scaled_3d_batch1": build_self_attention_scaled_3d_batch1(),
     "conv2d_bias": build_conv2d_bias(),
     "conv2d_bias_relu": build_conv2d_bias_relu(),
     "conv2d_bias_gelu": build_conv2d_bias_gelu(),

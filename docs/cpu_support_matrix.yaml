@@ -20,6 +20,10 @@ kn_ops:
     tier: fast_path
     layer: kn
     note: value-verify shape contract for [B,M,K]@[K,N] broadcast matmul (kn_matmul_op)
+  kn_matmul_3d_2d_batch1_op:
+    tier: fast_path
+    layer: kn
+    note: value-verify batch=1 [1,M,K]@[K,N] broadcast matmul (R51)
   kn_rms_norm_op: { tier: supported, layer: kn }
   kn_exp_op: { tier: supported, layer: kn }
   kn_square_op: { tier: supported, layer: kn }
