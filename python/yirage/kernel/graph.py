@@ -2202,6 +2202,10 @@ class KNGraph:
         Typical MobileNet-style block:
         ``conv2d(conv2d(x, dw, groups=C_in), pw)`` with ``dw`` shape ``[C_in, 1, kH, kW]``
         and ``pw`` shape ``[C_out, C_in, 1, 1]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_fast``,
+            ``conv2d_separable_op_fast``, ``kn_conv2d_separable_fast``.
         """
         if input.num_dims != 4:
             raise ValueError("conv2d_separable expects 4D NCHW input")
@@ -2234,6 +2238,11 @@ class KNGraph:
         Separable conv2d + ReLU without bias.
 
         Same tensor contracts as :meth:`conv2d_separable`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_relu_fast``,
+            ``kn_conv2d_separable_relu_fast``,
+            ``kn_conv2d_separable_relu_batch1_fast``.
         """
         return self.relu(
             self.conv2d_separable(
@@ -2259,6 +2268,11 @@ class KNGraph:
         Separable conv2d + GELU without bias.
 
         Same tensor contracts as :meth:`conv2d_separable`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_gelu_fast``,
+            ``kn_conv2d_separable_gelu_fast``,
+            ``kn_conv2d_separable_gelu_batch1_fast``.
         """
         return self.gelu(
             self.conv2d_separable(
@@ -2284,6 +2298,10 @@ class KNGraph:
         Separable conv2d + SiLU without bias.
 
         Same tensor contracts as :meth:`conv2d_separable`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_silu_fast``,
+            ``kn_conv2d_separable_silu_fast``.
         """
         return self.silu(
             self.conv2d_separable(
