@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Smoke tests for no-bias fused conv2d Graph APIs (Loop R94)."""
+"""Smoke tests for fused conv2d Graph APIs (Loop R94+)."""
 
 from __future__ import annotations
 
@@ -98,6 +98,47 @@ def test_conv2d_separable_builds_graph(yirage_core):
     dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
     pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
     out = g.conv2d_separable(x, dw, pw, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
+def test_graph_exposes_conv2d_bias_fused_methods(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    for name in (
+        "conv2d_bias",
+        "conv2d_bias_relu",
+        "conv2d_bias_gelu",
+        "conv2d_bias_silu",
+    ):
+        assert hasattr(g, name), f"KNGraph missing bias fused API {name}"
+
+
+@pytest.mark.cpu
+def test_conv2d_bias_fused_matches_add_chain(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+    fused = g.conv2d_bias(x, w, b, stride=(1, 1), padding=(1, 1))
+    chain = g.add(g.conv2d(x, w, stride=(1, 1), padding=(1, 1)), b)
+    assert fused is not None
+    assert chain is not None
+
+
+@pytest.mark.cpu
+def test_conv2d_bias_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+    out = g.conv2d_bias_relu(x, w, b, stride=(1, 1), padding=(1, 1))
     g.mark_output(out)
     assert g.cygraph is not None
 
