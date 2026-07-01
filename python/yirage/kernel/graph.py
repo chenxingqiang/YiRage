@@ -2015,14 +2015,12 @@ class KNGraph:
         """
         if input.num_dims != 4:
             raise ValueError("conv2d_separable expects 4D NCHW input")
-        in_c = input.dim(1)
-        hidden = self.conv2d(
+        hidden = self.conv2d_depthwise(
             input,
             depthwise_weight,
             stride=stride,
             padding=padding,
             dilation=dilation,
-            groups=in_c,
         )
         return self.conv2d(
             hidden,
