@@ -1910,6 +1910,10 @@ class KNGraph:
         Depthwise conv2d with bias (``groups = in_channels``).
 
         Expects weight ``[C, 1, kH, kW]`` and input ``[N, C, H, W]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_fast``,
+            ``conv2d_depthwise_bias_relu_fast``.
         """
         if input.num_dims != 4 or weight.num_dims != 4:
             raise ValueError("conv2d_depthwise_bias expects 4D input and weight")
