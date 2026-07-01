@@ -6814,6 +6814,10 @@ FAST_PATH_BUILDERS = {
     "kn_conv2d_groups_batch2_op_fast": build_kn_conv2d_groups_batch2(),
     "conv2d_op_fast": build_kn_conv2d(),
     "conv2d_groups_op_fast": build_kn_conv2d_groups(),
+    "conv2d_batch1_op_fast": build_kn_conv2d_batch1(),
+    "conv2d_batch2_op_fast": build_kn_conv2d_batch2(),
+    "conv2d_groups_batch1_op_fast": build_kn_conv2d_groups_batch1(),
+    "conv2d_groups_batch2_op_fast": build_kn_conv2d_groups_batch2(),
 }
 
 
