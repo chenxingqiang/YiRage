@@ -1480,6 +1480,81 @@ class KNGraph:
         g = int(groups)
         return self.cygraph.conv2d(input, weight, sh, sw, ph, pw, dh, dw, g)
 
+    def conv2d_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + ReLU (``F.relu(F.conv2d(...))`` aligned, no bias).
+
+        Same tensor contracts as :meth:`conv2d`.
+        """
+        return self.relu(
+            self.conv2d(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + GELU (``F.gelu(F.conv2d(...))`` aligned, no bias).
+
+        Same tensor contracts as :meth:`conv2d`.
+        """
+        return self.gelu(
+            self.conv2d(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + SiLU (``F.silu(F.conv2d(...))`` aligned, no bias).
+
+        Same tensor contracts as :meth:`conv2d`.
+        """
+        return self.silu(
+            self.conv2d(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
     def conv2d_bias(
         self,
         input: DTensor,
@@ -1596,6 +1671,105 @@ class KNGraph:
                 padding=padding,
                 dilation=dilation,
                 groups=groups,
+            )
+        )
+
+    def conv2d_depthwise(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d without bias (``groups = in_channels``).
+
+        Expects weight ``[C, 1, kH, kW]`` and input ``[N, C, H, W]``.
+        """
+        if input.num_dims != 4 or weight.num_dims != 4:
+            raise ValueError("conv2d_depthwise expects 4D input and weight")
+        in_c = input.dim(1)
+        if weight.dim(0) != in_c or weight.dim(1) != 1:
+            raise ValueError(
+                f"depthwise weight must be [C, 1, kH, kW], got "
+                f"[{weight.dim(0)}, {weight.dim(1)}, ...]"
+            )
+        return self.conv2d(
+            input,
+            weight,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=in_c,
+        )
+
+    def conv2d_depthwise_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d + ReLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_depthwise`.
+        """
+        return self.relu(
+            self.conv2d_depthwise(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_depthwise_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d + GELU without bias.
+
+        Same tensor contracts as :meth:`conv2d_depthwise`.
+        """
+        return self.gelu(
+            self.conv2d_depthwise(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_depthwise_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d + SiLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_depthwise`.
+        """
+        return self.silu(
+            self.conv2d_depthwise(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
             )
         )
 
@@ -1740,6 +1914,81 @@ class KNGraph:
             padding=(0, 0),
             dilation=(1, 1),
             groups=1,
+        )
+
+    def conv2d_separable_relu(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d + ReLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_separable`.
+        """
+        return self.relu(
+            self.conv2d_separable(
+                input,
+                depthwise_weight,
+                pointwise_weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_separable_gelu(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d + GELU without bias.
+
+        Same tensor contracts as :meth:`conv2d_separable`.
+        """
+        return self.gelu(
+            self.conv2d_separable(
+                input,
+                depthwise_weight,
+                pointwise_weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_separable_silu(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d + SiLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_separable`.
+        """
+        return self.silu(
+            self.conv2d_separable(
+                input,
+                depthwise_weight,
+                pointwise_weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
         )
 
     def conv2d_separable_bias(

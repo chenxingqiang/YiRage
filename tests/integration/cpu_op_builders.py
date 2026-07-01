@@ -497,15 +497,13 @@ def build_conv2d_groups_relu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_relu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((1, 4, 8, 8))
@@ -534,15 +532,13 @@ def build_conv2d_groups_gelu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_gelu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((1, 4, 8, 8))
@@ -571,15 +567,13 @@ def build_conv2d_groups_silu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_silu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((1, 4, 8, 8))
@@ -608,15 +602,13 @@ def build_conv2d_groups_relu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_relu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((1, 4, 8, 8))
@@ -645,15 +637,13 @@ def build_conv2d_groups_relu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_relu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((2, 4, 8, 8))
@@ -682,15 +672,13 @@ def build_conv2d_groups_gelu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_gelu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((1, 4, 8, 8))
@@ -719,15 +707,13 @@ def build_conv2d_groups_gelu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_gelu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((2, 4, 8, 8))
@@ -756,15 +742,13 @@ def build_conv2d_groups_silu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_silu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((1, 4, 8, 8))
@@ -793,15 +777,13 @@ def build_conv2d_groups_silu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(
-                    x,
-                    w,
-                    stride=(1, 1),
-                    padding=(1, 1),
-                    dilation=(1, 1),
-                    groups=groups,
-                )
+            g.conv2d_silu(
+                x,
+                w,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
             )
         )
         inp_x = _f16((2, 4, 8, 8))
@@ -910,9 +892,7 @@ def build_conv2d_relu() -> Builder:
         x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_relu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -934,9 +914,7 @@ def build_conv2d_gelu() -> Builder:
         x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_gelu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -958,9 +936,7 @@ def build_conv2d_silu() -> Builder:
         x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_silu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -982,9 +958,7 @@ def build_conv2d_relu_batch1() -> Builder:
         x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_relu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -1006,9 +980,7 @@ def build_conv2d_relu_batch2() -> Builder:
         x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_relu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((2, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -1030,9 +1002,7 @@ def build_conv2d_gelu_batch1() -> Builder:
         x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_gelu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -1054,9 +1024,7 @@ def build_conv2d_gelu_batch2() -> Builder:
         x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_gelu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((2, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -1078,9 +1046,7 @@ def build_conv2d_silu_batch1() -> Builder:
         x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_silu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -1102,9 +1068,7 @@ def build_conv2d_silu_batch2() -> Builder:
         x = g.new_input(dims=(2, 3, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-            )
+            g.conv2d_silu(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((2, 3, 8, 8))
         inp_w = _f16((4, 3, 3, 3))
@@ -1574,9 +1538,7 @@ def build_conv2d_depthwise_relu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_relu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1603,9 +1565,7 @@ def build_conv2d_depthwise_gelu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_gelu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1632,9 +1592,7 @@ def build_conv2d_depthwise_silu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_silu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1661,9 +1619,7 @@ def build_conv2d_depthwise_relu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_relu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1690,9 +1646,7 @@ def build_conv2d_depthwise_gelu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_gelu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1719,9 +1673,7 @@ def build_conv2d_depthwise_silu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_silu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1748,9 +1700,7 @@ def build_conv2d_depthwise_relu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_relu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((2, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1777,9 +1727,7 @@ def build_conv2d_depthwise_gelu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.gelu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_gelu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((2, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1806,9 +1754,7 @@ def build_conv2d_depthwise_silu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.silu(
-                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
-            )
+            g.conv2d_depthwise_silu(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((2, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -2246,9 +2192,7 @@ def build_conv2d_separable_relu() -> Builder:
         dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.relu(
-                g.conv2d_separable(x, dw, pw, stride=(1, 1), padding=(1, 1))
-            )
+            g.conv2d_separable_relu(x, dw, pw, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_dw = _f16((4, 1, 3, 3))
@@ -2257,6 +2201,98 @@ def build_conv2d_separable_relu() -> Builder:
             inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
         )
         ref = torch.nn.functional.relu(torch.nn.functional.conv2d(hidden, inp_pw))
+        return g, [inp_x, inp_dw, inp_pw], ref
+
+    return _build
+
+
+def build_conv2d_separable_gelu() -> Builder:
+    """Separable conv + GELU (no bias) vs F.gelu(separable reference)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_gelu(x, dw, pw, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
+        )
+        ref = torch.nn.functional.gelu(torch.nn.functional.conv2d(hidden, inp_pw))
+        return g, [inp_x, inp_dw, inp_pw], ref
+
+    return _build
+
+
+def build_conv2d_separable_silu() -> Builder:
+    """Separable conv + SiLU (no bias) vs F.silu(separable reference)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_silu(x, dw, pw, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
+        )
+        ref = torch.nn.functional.silu(torch.nn.functional.conv2d(hidden, inp_pw))
+        return g, [inp_x, inp_dw, inp_pw], ref
+
+    return _build
+
+
+def build_conv2d_separable_relu_batch1() -> Builder:
+    """Separable conv + ReLU batch=1 [1,C,H,W] (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_relu(x, dw, pw, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
+        )
+        ref = torch.nn.functional.relu(torch.nn.functional.conv2d(hidden, inp_pw))
+        return g, [inp_x, inp_dw, inp_pw], ref
+
+    return _build
+
+
+def build_conv2d_separable_gelu_batch1() -> Builder:
+    """Separable conv + GELU batch=1 [1,C,H,W] (no bias)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_separable_gelu(x, dw, pw, stride=(1, 1), padding=(1, 1))
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
+        )
+        ref = torch.nn.functional.gelu(torch.nn.functional.conv2d(hidden, inp_pw))
         return g, [inp_x, inp_dw, inp_pw], ref
 
     return _build
@@ -6146,6 +6182,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_depthwise_bias_silu_batch2": build_conv2d_depthwise_bias_silu_batch2(),
     "conv2d_separable": build_conv2d_separable(),
     "conv2d_separable_relu": build_conv2d_separable_relu(),
+    "conv2d_separable_gelu": build_conv2d_separable_gelu(),
+    "conv2d_separable_silu": build_conv2d_separable_silu(),
+    "conv2d_separable_relu_batch1": build_conv2d_separable_relu_batch1(),
+    "conv2d_separable_gelu_batch1": build_conv2d_separable_gelu_batch1(),
     "conv2d_separable_batch1": build_conv2d_separable_batch1(),
     "conv2d_separable_batch2": build_conv2d_separable_batch2(),
     "conv2d_separable_bias": build_conv2d_separable_bias(),
