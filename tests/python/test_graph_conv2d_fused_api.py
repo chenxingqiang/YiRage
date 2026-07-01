@@ -209,6 +209,22 @@ def test_conv2d_depthwise_fused_builds_graph(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_depthwise_activation_batch1_fused_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+    relu_out = g.conv2d_depthwise_relu(x, w, stride=(1, 1), padding=(1, 1))
+    gelu_out = g.conv2d_depthwise_gelu(x, w, stride=(1, 1), padding=(1, 1))
+    silu_out = g.conv2d_depthwise_silu(x, w, stride=(1, 1), padding=(1, 1))
+    g.mark_output(relu_out)
+    g.mark_output(gelu_out)
+    g.mark_output(silu_out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
 def test_conv2d_separable_gelu_fused_builds_graph(yirage_core):
     import yirage as yr
 
