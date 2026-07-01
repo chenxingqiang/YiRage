@@ -222,9 +222,28 @@ def cpu_rms_matmul(
 ) -> torch.Tensor:
     """Fused rms_norm + matmul.
 
+    Supports ``[M,K] @ [K,N]`` and batched ``[B,M,K] @ [K,N] -> [B,M,N]``.
+
     P2 (``YIRAGE_CPU_RMS_MATMUL_NATIVE=auto``): OpenMP + cblas for large shapes.
     Otherwise P1 deferred-scale via PyTorch/MKL.
     """
+    if x.dim() == 3 and w.dim() == 2:
+        b, m, k = x.shape
+        k2, n = w.shape
+        if k != k2:
+            return cpu_rms_matmul_torch(x, w, epsilon=epsilon, num_threads=num_threads)
+        flat = x.reshape(b * m, k)
+        if should_use_native_rms_matmul(b * m, k, n):
+            out = _cpu_rms_matmul_native(
+                flat, w, epsilon=epsilon, num_threads=num_threads
+            )
+        else:
+            out = cpu_rms_matmul_torch(
+                flat, w, epsilon=epsilon, num_threads=num_threads
+            )
+        return out.reshape(b, m, n)
+    if x.dim() != 2 or w.dim() != 2:
+        return cpu_rms_matmul_torch(x, w, epsilon=epsilon, num_threads=num_threads)
     m, k = x.shape
     n = w.shape[1]
     if should_use_native_rms_matmul(m, k, n):

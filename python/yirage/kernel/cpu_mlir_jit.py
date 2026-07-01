@@ -112,6 +112,29 @@ def rms_matmul_shapes_from_cygraph(cygraph) -> Optional[Tuple[int, int, int]]:
     return m, k, n
 
 
+def rms_matmul_batched_shapes_from_cygraph(
+    cygraph,
+) -> Optional[Tuple[int, int, int, int]]:
+    """Return (B, M, K, N) for ``[B,M,K] @ [K,N]`` rms_norm+matmul, or None."""
+    inputs = cygraph.get_input_dtensors()
+    if len(inputs) != 2:
+        return None
+    shape0, _ = _tensor_shape_dtype(cygraph, inputs[0])
+    shape1, _ = _tensor_shape_dtype(cygraph, inputs[1])
+    if len(shape0) != 3 or len(shape1) != 2:
+        return None
+    b, m, k = shape0
+    k2, n = shape1
+    if k != k2:
+        return None
+    return b, m, k, n
+
+
+def _unfused_rms_matmul_compute_ops(cygraph) -> list[str]:
+    types = [o["op_type"] for o in cygraph.get_graph_structure()]
+    return [t for t in types if t not in ("kn_input_op", "kn_output_op")]
+
+
 def _customized_bgraph(cygraph) -> Optional[Dict[str, Any]]:
     for op in cygraph.get_graph_structure():
         if op.get("op_type") == "kn_customized_op":
@@ -141,6 +164,10 @@ def extract_rms_matmul_tiling(cygraph) -> Optional[RmsMatmulTiling]:
 
 def is_rms_matmul_mugraph(cygraph) -> bool:
     """True when cygraph is unfused or fused rms_norm+matmul."""
+    if rms_matmul_batched_shapes_from_cygraph(cygraph) is not None:
+        ops = {o.get("op_type") for o in cygraph.get_graph_structure()}
+        if "kn_matmul_op" in ops and "kn_rms_norm_op" in ops:
+            return True
     if rms_matmul_shapes_from_cygraph(cygraph) is not None:
         ops = {o.get("op_type") for o in cygraph.get_graph_structure()}
         if "kn_matmul_op" in ops and (
@@ -407,6 +434,13 @@ def is_production_matmul_chain_mugraph(cygraph) -> bool:
 
 def is_production_rms_matmul_mugraph(cygraph) -> bool:
     """True when graph is semantically ``rms_norm(x) @ w`` (unfused or fused customized)."""
+    if rms_matmul_batched_shapes_from_cygraph(cygraph) is not None:
+        if not is_rms_matmul_mugraph(cygraph):
+            return False
+        return _unfused_rms_matmul_compute_ops(cygraph) == [
+            "kn_rms_norm_op",
+            "kn_matmul_op",
+        ]
     if rms_matmul_shapes_from_cygraph(cygraph) is None:
         return False
     if not is_rms_matmul_mugraph(cygraph):
