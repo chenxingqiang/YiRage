@@ -6792,6 +6792,10 @@ FAST_PATH_BUILDERS = {
     "conv2d_depthwise_bias_batch2_fast": build_conv2d_depthwise_bias_batch2(),
     "conv2d_depthwise_bias_silu_fast": build_conv2d_depthwise_bias_silu(),
     "conv2d_depthwise_bias_relu_batch1_fast": build_conv2d_depthwise_bias_relu_batch1(),
+    "conv2d_depthwise_bias_relu_batch2_fast": build_conv2d_depthwise_bias_relu_batch2(),
+    "conv2d_depthwise_bias_gelu_batch1_fast": build_conv2d_depthwise_bias_gelu_batch1(),
+    "conv2d_depthwise_bias_gelu_batch2_fast": build_conv2d_depthwise_bias_gelu_batch2(),
+    "conv2d_depthwise_bias_silu_batch1_fast": build_conv2d_depthwise_bias_silu_batch1(),
 }
 
 
