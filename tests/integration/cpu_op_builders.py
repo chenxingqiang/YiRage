@@ -413,7 +413,7 @@ def build_kn_conv2d_groups() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+            g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((8, 2, 3, 3))
@@ -434,7 +434,7 @@ def build_kn_conv2d_groups_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+            g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((8, 2, 3, 3))
@@ -455,7 +455,7 @@ def build_kn_conv2d_groups_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+            g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((2, 4, 8, 8))
         inp_w = _f16((8, 2, 3, 3))
@@ -476,7 +476,7 @@ def build_conv2d_groups_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+            g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((8, 2, 3, 3))
@@ -1814,7 +1814,7 @@ def build_conv2d_groups_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+            g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
         )
         inp_x = _f16((2, 4, 8, 8))
         inp_w = _f16((8, 2, 3, 3))
@@ -6800,6 +6800,10 @@ FAST_PATH_BUILDERS = {
     "conv2d_groups_relu_fast": build_conv2d_groups_relu(),
     "conv2d_groups_gelu_fast": build_conv2d_groups_gelu(),
     "conv2d_groups_silu_fast": build_conv2d_groups_silu(),
+    "conv2d_groups_fast": build_kn_conv2d_groups(),
+    "conv2d_groups_batch1_fast": build_conv2d_groups_batch1(),
+    "conv2d_groups_batch2_fast": build_conv2d_groups_batch2(),
+    "conv2d_groups_relu_batch1_fast": build_conv2d_groups_relu_batch1(),
 }
 
 

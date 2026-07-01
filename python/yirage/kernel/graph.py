@@ -1564,6 +1564,98 @@ class KNGraph:
             )
         )
 
+    def conv2d_groups(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d without bias (``F.conv2d(..., groups=G)`` aligned).
+
+        Default ``groups=2`` documents the common grouped CV block; override when needed.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_groups_fast``,
+            ``conv2d_groups_relu_fast``.
+        """
+        if int(groups) < 2:
+            raise ValueError("conv2d_groups expects groups >= 2")
+        return self.conv2d(
+            input,
+            weight,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+        )
+
+    def conv2d_groups_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """Grouped conv2d + ReLU without bias (default ``groups=2``)."""
+        return self.relu(
+            self.conv2d_groups(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_groups_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """Grouped conv2d + GELU without bias (default ``groups=2``)."""
+        return self.gelu(
+            self.conv2d_groups(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_groups_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """Grouped conv2d + SiLU without bias (default ``groups=2``)."""
+        return self.silu(
+            self.conv2d_groups(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
     def conv2d_bias(
         self,
         input: DTensor,
