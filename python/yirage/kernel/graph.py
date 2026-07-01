@@ -1482,7 +1482,12 @@ class KNGraph:
         dilation=(1, 1),
         groups: int = 1,
     ) -> DTensor:
-        """2D convolution (NCHW input, OIHW weight; aligned with ``F.conv2d``)."""
+        """2D convolution (NCHW input, OIHW weight; aligned with ``F.conv2d``).
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_fast``, ``conv2d_op_fast``,
+            ``kn_conv2d_op_fast``, ``kn_conv2d_fast``.
+        """
         sh, sw = int(stride[0]), int(stride[1])
         ph, pw = int(padding[0]), int(padding[1])
         dh, dw = int(dilation[0]), int(dilation[1])
@@ -1702,7 +1707,8 @@ class KNGraph:
             NCHW output with bias added.
 
         See Also:
-            CPU FAST_PATH registry: ``conv2d_bias_fast``, ``conv2d_bias_relu_fast``.
+            CPU FAST_PATH registry: ``conv2d_bias_fast``, ``conv2d_bias_relu_fast``,
+            ``conv2d_bias_op_fast``, ``conv2d_bias_groups_op_fast``.
         """
         out = self.conv2d(
             input,

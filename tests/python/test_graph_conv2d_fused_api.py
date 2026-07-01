@@ -43,6 +43,31 @@ def test_graph_exposes_no_bias_fused_conv2d_methods(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_op_alias_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+    out = g.conv2d(x, w, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
+def test_conv2d_bias_op_alias_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 3, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(4, 3, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+    out = g.conv2d_bias(x, w, b, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
 def test_conv2d_relu_fused_matches_unary_chain(yirage_core):
     import yirage as yr
 
