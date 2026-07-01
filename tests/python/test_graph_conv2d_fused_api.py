@@ -396,6 +396,31 @@ def test_conv2d_separable_bias_builds_graph(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_separable_bias_activation_fused_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+    pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+    db = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+    pb = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+    relu_out = g.conv2d_separable_bias_relu(
+        x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+    )
+    gelu_out = g.conv2d_separable_bias_gelu(
+        x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+    )
+    silu_out = g.conv2d_separable_bias_silu(
+        x, dw, pw, db, pb, stride=(1, 1), padding=(1, 1)
+    )
+    g.mark_output(relu_out)
+    g.mark_output(gelu_out)
+    g.mark_output(silu_out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
 def test_graph_exposes_depthwise_bias_fused_methods(yirage_core):
     import yirage as yr
 
