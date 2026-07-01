@@ -30,8 +30,8 @@ def test_parse_pytest_summary_missing_returns_none():
     assert parse_pytest_summary("no summary here")["passed"] is None
 
 
-def test_planned_value_verify_still_522():
-    assert planned_value_verify_count() == 522
+def test_planned_value_verify_still_526():
+    assert planned_value_verify_count() == 526
 
 
 def test_rms_matmul_tractability_sets_env(monkeypatch):
