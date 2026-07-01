@@ -1838,7 +1838,8 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_bias_groups_fast``,
-            ``conv2d_bias_groups_relu_fast``.
+            ``kn_conv2d_bias_groups_fast``, ``conv2d_bias_groups_op_fast``,
+            ``kn_conv2d_bias_groups_batch2_op_fast``.
         """
         if int(groups) < 2:
             raise ValueError("conv2d_bias_groups expects groups >= 2")
@@ -1866,6 +1867,12 @@ class KNGraph:
         Grouped conv2d + bias + ReLU (default ``groups=2``).
 
         Same tensor contracts as :meth:`conv2d_bias_groups`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_relu_fast``,
+            ``kn_conv2d_bias_groups_relu_fast``,
+            ``kn_conv2d_bias_groups_relu_batch1_fast``,
+            ``kn_conv2d_bias_groups_relu_batch2_fast``.
         """
         return self.relu(
             self.conv2d_bias_groups(
@@ -1893,6 +1900,12 @@ class KNGraph:
         Grouped conv2d + bias + GELU (default ``groups=2``).
 
         Same tensor contracts as :meth:`conv2d_bias_groups`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_gelu_fast``,
+            ``kn_conv2d_bias_groups_gelu_fast``,
+            ``kn_conv2d_bias_groups_gelu_batch1_fast``,
+            ``kn_conv2d_bias_groups_gelu_batch2_fast``.
         """
         return self.gelu(
             self.conv2d_bias_groups(
@@ -1920,6 +1933,12 @@ class KNGraph:
         Grouped conv2d + bias + SiLU (default ``groups=2``).
 
         Same tensor contracts as :meth:`conv2d_bias_groups`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_silu_fast``,
+            ``kn_conv2d_bias_groups_silu_fast``,
+            ``kn_conv2d_bias_groups_silu_batch1_fast``,
+            ``kn_conv2d_bias_groups_silu_batch2_fast``.
         """
         return self.silu(
             self.conv2d_bias_groups(
