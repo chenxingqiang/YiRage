@@ -1700,6 +1700,10 @@ class KNGraph:
         Grouped conv2d + bias (``F.conv2d(..., bias=..., groups=G)`` aligned).
 
         Default ``groups=2`` documents the common grouped CV block; override when needed.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_fast``,
+            ``conv2d_bias_groups_relu_fast``.
         """
         if int(groups) < 2:
             raise ValueError("conv2d_bias_groups expects groups >= 2")
