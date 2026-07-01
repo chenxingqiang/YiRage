@@ -2076,6 +2076,7 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_depthwise_bias_fast``,
+            ``conv2d_depthwise_bias_op_fast``, ``kn_conv2d_depthwise_bias_fast``,
             ``conv2d_depthwise_bias_relu_fast``.
         """
         if input.num_dims != 4 or weight.num_dims != 4:
@@ -2109,6 +2110,11 @@ class KNGraph:
         Depthwise conv2d + bias + ReLU (MobileNet-style depthwise block).
 
         Same tensor contracts as :meth:`conv2d_depthwise_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_relu_fast``,
+            ``kn_conv2d_depthwise_bias_relu_fast``,
+            ``kn_conv2d_depthwise_bias_relu_batch1_fast``.
         """
         return self.relu(
             self.conv2d_depthwise_bias(
@@ -2134,6 +2140,11 @@ class KNGraph:
         Depthwise conv2d + bias + GELU (MobileNet-style depthwise block).
 
         Same tensor contracts as :meth:`conv2d_depthwise_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_gelu_fast``,
+            ``kn_conv2d_depthwise_bias_gelu_fast``,
+            ``kn_conv2d_depthwise_bias_gelu_batch1_fast``.
         """
         return self.gelu(
             self.conv2d_depthwise_bias(
@@ -2159,6 +2170,11 @@ class KNGraph:
         Depthwise conv2d + bias + SiLU (MobileNet-style depthwise block).
 
         Same tensor contracts as :meth:`conv2d_depthwise_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_silu_fast``,
+            ``kn_conv2d_depthwise_bias_silu_fast``,
+            ``kn_conv2d_depthwise_bias_silu_batch1_fast``.
         """
         return self.silu(
             self.conv2d_depthwise_bias(
