@@ -1683,6 +1683,114 @@ class KNGraph:
             )
         )
 
+    def conv2d_bias_groups(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias (``F.conv2d(..., bias=..., groups=G)`` aligned).
+
+        Default ``groups=2`` documents the common grouped CV block; override when needed.
+        """
+        if int(groups) < 2:
+            raise ValueError("conv2d_bias_groups expects groups >= 2")
+        return self.conv2d_bias(
+            input,
+            weight,
+            bias,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+        )
+
+    def conv2d_bias_groups_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias + ReLU (default ``groups=2``).
+
+        Same tensor contracts as :meth:`conv2d_bias_groups`.
+        """
+        return self.relu(
+            self.conv2d_bias_groups(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_bias_groups_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias + GELU (default ``groups=2``).
+
+        Same tensor contracts as :meth:`conv2d_bias_groups`.
+        """
+        return self.gelu(
+            self.conv2d_bias_groups(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_bias_groups_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias + SiLU (default ``groups=2``).
+
+        Same tensor contracts as :meth:`conv2d_bias_groups`.
+        """
+        return self.silu(
+            self.conv2d_bias_groups(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
     def conv2d_depthwise(
         self,
         input: DTensor,

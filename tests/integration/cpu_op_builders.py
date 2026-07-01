@@ -1353,7 +1353,7 @@ def build_conv2d_bias_groups() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias(
+            g.conv2d_bias_groups(
                 x,
                 w,
                 b,
@@ -1390,7 +1390,7 @@ def build_conv2d_bias_groups_batch1() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias(
+            g.conv2d_bias_groups(
                 x,
                 w,
                 b,
@@ -1427,7 +1427,7 @@ def build_conv2d_bias_groups_batch2() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias(
+            g.conv2d_bias_groups(
                 x,
                 w,
                 b,
@@ -1464,7 +1464,7 @@ def build_conv2d_bias_groups_relu() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_relu(
+            g.conv2d_bias_groups_relu(
                 x,
                 w,
                 b,
@@ -1503,7 +1503,7 @@ def build_conv2d_bias_groups_gelu() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_gelu(
+            g.conv2d_bias_groups_gelu(
                 x,
                 w,
                 b,
@@ -1542,7 +1542,7 @@ def build_conv2d_bias_groups_silu() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_silu(
+            g.conv2d_bias_groups_silu(
                 x,
                 w,
                 b,
@@ -1581,7 +1581,7 @@ def build_conv2d_bias_groups_relu_batch1() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_relu(
+            g.conv2d_bias_groups_relu(
                 x,
                 w,
                 b,
@@ -1620,7 +1620,7 @@ def build_conv2d_bias_groups_gelu_batch1() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_gelu(
+            g.conv2d_bias_groups_gelu(
                 x,
                 w,
                 b,
@@ -1659,7 +1659,7 @@ def build_conv2d_bias_groups_silu_batch1() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_silu(
+            g.conv2d_bias_groups_silu(
                 x,
                 w,
                 b,
@@ -1698,7 +1698,7 @@ def build_conv2d_bias_groups_relu_batch2() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_relu(
+            g.conv2d_bias_groups_relu(
                 x,
                 w,
                 b,
@@ -1737,7 +1737,7 @@ def build_conv2d_bias_groups_gelu_batch2() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_gelu(
+            g.conv2d_bias_groups_gelu(
                 x,
                 w,
                 b,
@@ -1776,7 +1776,7 @@ def build_conv2d_bias_groups_silu_batch2() -> Builder:
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_bias_silu(
+            g.conv2d_bias_groups_silu(
                 x,
                 w,
                 b,
@@ -6716,6 +6716,10 @@ FAST_PATH_BUILDERS = {
     "kn_unfused_rms_matmul_batched_fast": build_kn_unfused_rms_matmul_batched(),
     "kn_unfused_rms_matmul_batched_batch1_fast": build_kn_unfused_rms_matmul_batched_batch1(),
     "kn_unfused_rms_matmul_batched_batch2_fast": build_kn_unfused_rms_matmul_batched_batch2(),
+    "conv2d_bias_groups_relu_fast": build_conv2d_bias_groups_relu(),
+    "conv2d_bias_groups_gelu_fast": build_conv2d_bias_groups_gelu(),
+    "conv2d_bias_groups_silu_fast": build_conv2d_bias_groups_silu(),
+    "conv2d_bias_groups_relu_batch1_fast": build_conv2d_bias_groups_relu_batch1(),
 }
 
 
