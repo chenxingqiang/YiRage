@@ -1454,6 +1454,162 @@ def build_conv2d_bias_groups_batch2() -> Builder:
     return _build
 
 
+def build_conv2d_bias_groups_relu() -> Builder:
+    """Grouped conv2d + bias + ReLU (groups=2) vs F.relu(F.conv2d(..., bias=...))."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_relu(
+                x,
+                w,
+                b,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        inp_b = _f16((1, 8, 1, 1))
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_bias_groups_gelu() -> Builder:
+    """Grouped conv2d + bias + GELU (groups=2) vs F.gelu(F.conv2d(..., bias=...))."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_gelu(
+                x,
+                w,
+                b,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        inp_b = _f16((1, 8, 1, 1))
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_bias_groups_silu() -> Builder:
+    """Grouped conv2d + bias + SiLU (groups=2) vs F.silu(F.conv2d(..., bias=...))."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_silu(
+                x,
+                w,
+                b,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        inp_b = _f16((1, 8, 1, 1))
+        ref = torch.nn.functional.silu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_bias_groups_relu_batch1() -> Builder:
+    """Grouped conv2d + bias + ReLU batch=1 [1,C,H,W] (groups=2)."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_relu(
+                x,
+                w,
+                b,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        inp_b = _f16((1, 8, 1, 1))
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
 def build_conv2d_depthwise() -> Builder:
     """Depthwise conv2d (groups=C, no bias) vs F.conv2d(..., groups=C)."""
 
@@ -6248,6 +6404,10 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_bias_groups": build_conv2d_bias_groups(),
     "conv2d_bias_groups_batch1": build_conv2d_bias_groups_batch1(),
     "conv2d_bias_groups_batch2": build_conv2d_bias_groups_batch2(),
+    "conv2d_bias_groups_relu": build_conv2d_bias_groups_relu(),
+    "conv2d_bias_groups_gelu": build_conv2d_bias_groups_gelu(),
+    "conv2d_bias_groups_silu": build_conv2d_bias_groups_silu(),
+    "conv2d_bias_groups_relu_batch1": build_conv2d_bias_groups_relu_batch1(),
     "conv2d_depthwise": build_conv2d_depthwise(),
     "conv2d_depthwise_batch1": build_conv2d_depthwise_batch1(),
     "conv2d_depthwise_batch2": build_conv2d_depthwise_batch2(),
