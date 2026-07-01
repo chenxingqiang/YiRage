@@ -518,10 +518,11 @@ make test-cpu-demos
 - **Loop R127（YiRage main，groups batch builder 对齐 + KN batch2 FAST_PATH，PR #123）**：闸门：图级/正确性（``build_conv2d_groups_batch*`` 委托 ``build_kn_conv2d_groups_batch*`` + KN batch2 激活 FAST_PATH + unit smoke）。``kn_conv2d_groups_{relu,gelu,silu}_batch2_fast``；``kn_conv2d_op_fast``；``graph.py`` doc + ``test_graph_conv2d_fused_api``。验证：**518 passed**。
 - **Loop R128（YiRage main，plain conv2d KN 激活 + groups op FAST_PATH，PR 待合并）**：闸门：图级/正确性（``kn_conv2d_{relu,gelu,silu}_fast`` + ``kn_conv2d_groups_op_fast``）。FAST_PATH + parity。验证：**522 passed**。
 - **Loop R129（YiRage main，KN conv2d batch1 激活/op FAST_PATH，PR 待合并）**：闸门：图级/正确性（``kn_conv2d_{relu,gelu,silu}_batch1_fast`` + ``kn_conv2d_batch1_op_fast``）。FAST_PATH + parity。验证：**526 passed**。
+- **Loop R130（YiRage main，KN conv2d batch2 激活/op + graph doc，PR 待合并）**：闸门：图级/正确性（``kn_conv2d_{relu,gelu,silu}_batch2_fast`` + ``kn_conv2d_batch2_op_fast`` + ``graph.py`` See Also + unit smoke）。FAST_PATH + parity。验证：**530 passed**。
 - **Loop 节奏（2026-06，用户确认：混合 C）**：**2 轮验证 + 1 轮实现** 交替，避免纯 registry 命名闭合凑 passed。
   - **验证轮**：registry + parity + inventory 闸门；闸门类型「图级/正确性 / 命名闭合」；**不改** `graph.py`/C++/search，除非发现静默错误。
   - **实现轮**：须动生产栈（`graph.py`、Cython/C++、matrix tier、search explore、fast path）；PR 描述必填「四轮自问」+ bench/cert 证据。
-  - **下一批**：**R130 实现**候选（KN conv2d batch2 激活/op + groups op batch FAST_PATH + graph doc）。
+  - **下一批**：**R131–R132 验证**候选（``kn_conv2d_groups_batch{1,2}_op_fast`` + plain conv2d ``conv2d_*`` CUSTOMIZED 别名闭合）。
 - **Loop R16（2026-06-09，CPU concat_matmul 搜索变换，PR #69 → `7484e59`）**：闸门：图级融合（LoRA 类 concat+matmul 模式）。`get_cpu_search_config()` 调用 `enable_concat_matmul_transformation()`；matrix 注明 `tb_concat_then_matmul_op` 为搜索宏。验证：value verify **63 passed**；cert **29 passed**（~927s）。
 - **Loop R17（2026-06-09，KN chunk CPU，PR #70 → `07075eb`）**：闸门：layout 层（`torch.chunk`，对齐 TB concat）。Cython `chunk()` + `graph.py` 解释器；matrix 三档 `supported` + builders。验证：value verify **66 passed**；cert **32 passed**（~927s）。
 - **Loop R18（2026-06-09，KN concat CPU，PR #71 → `66cbba9`）**：闸门：layout 层（`torch.cat`）。新增 `KNConcatOp` + Cython/解释器（含 `kn_concat_first_op_id` 别名）；matrix 三档 `supported`。验证：value verify **69 passed**；cert **35 passed**（~927s）。
