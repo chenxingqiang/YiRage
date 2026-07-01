@@ -6882,6 +6882,10 @@ FAST_PATH_BUILDERS = {
     "kn_conv2d_separable_relu_batch1_fast": build_conv2d_separable_relu_batch1(),
     "kn_conv2d_separable_gelu_batch1_fast": build_conv2d_separable_gelu_batch1(),
     "conv2d_separable_op_fast": build_conv2d_separable(),
+    "kn_conv2d_separable_silu_batch1_fast": build_conv2d_separable_silu_batch1(),
+    "conv2d_separable_batch1_op_fast": build_conv2d_separable_batch1(),
+    "kn_conv2d_separable_batch2_fast": build_conv2d_separable_batch2(),
+    "kn_conv2d_separable_relu_batch2_fast": build_conv2d_separable_relu_batch2(),
 }
 
 
