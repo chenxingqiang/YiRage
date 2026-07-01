@@ -1766,6 +1766,80 @@ def build_conv2d_bias_groups_gelu_batch2() -> Builder:
     return _build
 
 
+def build_conv2d_bias_groups_silu_batch2() -> Builder:
+    """Grouped conv2d + bias + SiLU batch=2 [2,C,H,W] (groups=2)."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d_bias_silu(
+                x,
+                w,
+                b,
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        inp_x = _f16((2, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        inp_b = _f16((1, 8, 1, 1))
+        ref = torch.nn.functional.silu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                bias=inp_b.reshape(-1),
+                stride=(1, 1),
+                padding=(1, 1),
+                dilation=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w, inp_b], ref
+
+    return _build
+
+
+def build_conv2d_groups_batch2() -> Builder:
+    """Grouped conv2d batch=2 inference [2,C,H,W] (groups=2) NCHW naming contract."""
+
+    def _build():
+        groups = 2
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups)
+        )
+        inp_x = _f16((2, 4, 8, 8))
+        inp_w = _f16((8, 2, 3, 3))
+        ref = torch.nn.functional.conv2d(
+            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
+def build_kn_matmul_batched_3d_2d() -> Builder:
+    """KN batched matmul naming: [B,M,K] @ [K,N] broadcast (B=2)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        a = g.new_input(dims=(2, 4, 8), dtype=yr.float16)
+        b = g.new_input(dims=(8, 16), dtype=yr.float16)
+        g.mark_output(g.matmul(a, b))
+        ta, tb = _f16((2, 4, 8)), _f16((8, 16))
+        return g, [ta, tb], torch.matmul(ta, tb)
+
+    return _build
+
+
 def build_conv2d_depthwise() -> Builder:
     """Depthwise conv2d (groups=C, no bias) vs F.conv2d(..., groups=C)."""
 
@@ -3159,6 +3233,7 @@ KN_OP_BUILDERS = {
     "kn_conv2d_op": build_kn_conv2d(),
     "kn_conv2d_batch1_op": build_kn_conv2d_batch1(),
     "kn_conv2d_batch2_op": build_kn_conv2d_batch2(),
+    "kn_conv2d_groups_op": build_kn_conv2d_groups(),
     "kn_conv2d_groups_batch1_op": build_kn_conv2d_groups_batch1(),
     "kn_conv2d_groups_batch2_op": build_kn_conv2d_groups_batch2(),
 }
@@ -6547,7 +6622,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_bias_silu_batch2": build_conv2d_bias_silu_batch2(),
     "conv2d_groups": build_kn_conv2d_groups(),
     "conv2d_groups_batch1": build_conv2d_groups_batch1(),
-    "conv2d_groups_batch2": build_kn_conv2d_groups_batch2(),
+    "conv2d_groups_batch2": build_conv2d_groups_batch2(),
     "conv2d_groups_relu": build_conv2d_groups_relu(),
     "conv2d_groups_gelu": build_conv2d_groups_gelu(),
     "conv2d_groups_silu": build_conv2d_groups_silu(),
@@ -6568,6 +6643,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_bias_groups_silu_batch1": build_conv2d_bias_groups_silu_batch1(),
     "conv2d_bias_groups_relu_batch2": build_conv2d_bias_groups_relu_batch2(),
     "conv2d_bias_groups_gelu_batch2": build_conv2d_bias_groups_gelu_batch2(),
+    "conv2d_bias_groups_silu_batch2": build_conv2d_bias_groups_silu_batch2(),
     "conv2d_depthwise": build_conv2d_depthwise(),
     "conv2d_depthwise_batch1": build_conv2d_depthwise_batch1(),
     "conv2d_depthwise_batch2": build_conv2d_depthwise_batch2(),
@@ -6622,6 +6698,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "kn_matmul_3d_2d": build_kn_matmul_3d_2d(),
     "kn_matmul_3d_2d_batch1": build_kn_matmul_3d_2d_batch1(),
     "kn_matmul_3d_2d_batch2": build_kn_matmul_3d_2d_batch2(),
+    "kn_matmul_batched_3d_2d": build_kn_matmul_batched_3d_2d(),
     "kn_transpose_01": build_kn_transpose_01(),
     "kn_conv2d": build_kn_conv2d(),
     "kn_conv2d_batch1": build_kn_conv2d_batch1(),
@@ -6635,6 +6712,7 @@ FAST_PATH_BUILDERS = {
     "kn_matmul_op_fast": build_kn_matmul(),
     "kn_unfused_rms_matmul": build_kn_unfused_rms_matmul(),
     "kn_unfused_rms_matmul_batch1_fast": build_kn_unfused_rms_matmul_batch1(),
+    "kn_unfused_rms_matmul_batch2_fast": build_kn_unfused_rms_matmul_batch2(),
     "kn_unfused_rms_matmul_batched_fast": build_kn_unfused_rms_matmul_batched(),
     "kn_unfused_rms_matmul_batched_batch1_fast": build_kn_unfused_rms_matmul_batched_batch1(),
     "kn_unfused_rms_matmul_batched_batch2_fast": build_kn_unfused_rms_matmul_batched_batch2(),
