@@ -1586,6 +1586,9 @@ class KNGraph:
 
         Returns:
             NCHW output with bias added.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_fast``, ``conv2d_bias_relu_fast``.
         """
         out = self.conv2d(
             input,
