@@ -6894,6 +6894,10 @@ FAST_PATH_BUILDERS = {
     "kn_conv2d_separable_bias_gelu_fast": build_conv2d_separable_bias_gelu(),
     "kn_conv2d_separable_bias_silu_fast": build_conv2d_separable_bias_silu(),
     "conv2d_separable_bias_op_fast": build_conv2d_separable_bias(),
+    "kn_conv2d_separable_bias_relu_batch1_fast": build_conv2d_separable_bias_relu_batch1(),
+    "kn_conv2d_separable_bias_gelu_batch1_fast": build_conv2d_separable_bias_gelu_batch1(),
+    "kn_conv2d_separable_bias_silu_batch1_fast": build_conv2d_separable_bias_silu_batch1(),
+    "conv2d_separable_bias_batch1_op_fast": build_conv2d_separable_bias_batch1(),
 }
 
 
