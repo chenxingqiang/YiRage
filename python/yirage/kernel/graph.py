@@ -1580,7 +1580,8 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_groups_fast``,
-            ``conv2d_groups_relu_fast``, ``kn_conv2d_groups_batch2_fast``.
+            ``kn_conv2d_groups_fast``, ``kn_conv2d_groups_batch1_fast``,
+            ``kn_conv2d_groups_batch2_fast``.
         """
         if int(groups) < 2:
             raise ValueError("conv2d_groups expects groups >= 2")
@@ -1602,7 +1603,13 @@ class KNGraph:
         dilation=(1, 1),
         groups: int = 2,
     ) -> DTensor:
-        """Grouped conv2d + ReLU without bias (default ``groups=2``)."""
+        """Grouped conv2d + ReLU without bias (default ``groups=2``).
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_groups_relu_fast``,
+            ``kn_conv2d_groups_relu_fast``, ``kn_conv2d_groups_relu_batch1_fast``,
+            ``kn_conv2d_groups_relu_batch2_fast``.
+        """
         return self.relu(
             self.conv2d_groups(
                 input,

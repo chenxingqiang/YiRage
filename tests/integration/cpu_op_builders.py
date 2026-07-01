@@ -468,24 +468,9 @@ def build_kn_conv2d_groups_batch2() -> Builder:
 
 
 def build_conv2d_groups_batch1() -> Builder:
-    """Grouped conv2d batch=1 inference [1,C,H,W] (groups=2) NCHW."""
+    """Grouped conv2d batch=1 inference [1,C,H,W] (groups=2) NCHW naming contract."""
 
-    def _build():
-        groups = 2
-        g = yr.new_kernel_graph()
-        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
-        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
-        g.mark_output(
-            g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-        )
-        inp_x = _f16((1, 4, 8, 8))
-        inp_w = _f16((8, 2, 3, 3))
-        ref = torch.nn.functional.conv2d(
-            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups
-        )
-        return g, [inp_x, inp_w], ref
-
-    return _build
+    return build_kn_conv2d_groups_batch1()
 
 
 def build_conv2d_groups_relu() -> Builder:
@@ -1808,22 +1793,7 @@ def build_conv2d_bias_groups_silu_batch2() -> Builder:
 def build_conv2d_groups_batch2() -> Builder:
     """Grouped conv2d batch=2 inference [2,C,H,W] (groups=2) NCHW naming contract."""
 
-    def _build():
-        groups = 2
-        g = yr.new_kernel_graph()
-        x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
-        w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
-        g.mark_output(
-            g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1))
-        )
-        inp_x = _f16((2, 4, 8, 8))
-        inp_w = _f16((8, 2, 3, 3))
-        ref = torch.nn.functional.conv2d(
-            inp_x, inp_w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=groups
-        )
-        return g, [inp_x, inp_w], ref
-
-    return _build
+    return build_kn_conv2d_groups_batch2()
 
 
 def build_kn_matmul_batched_3d_2d() -> Builder:
@@ -6824,6 +6794,10 @@ FAST_PATH_BUILDERS = {
     "kn_conv2d_groups_relu_batch1_fast": build_conv2d_groups_relu_batch1(),
     "kn_conv2d_groups_gelu_batch1_fast": build_conv2d_groups_gelu_batch1(),
     "kn_conv2d_groups_silu_batch1_fast": build_conv2d_groups_silu_batch1(),
+    "kn_conv2d_groups_relu_batch2_fast": build_conv2d_groups_relu_batch2(),
+    "kn_conv2d_groups_gelu_batch2_fast": build_conv2d_groups_gelu_batch2(),
+    "kn_conv2d_groups_silu_batch2_fast": build_conv2d_groups_silu_batch2(),
+    "kn_conv2d_op_fast": build_kn_conv2d(),
 }
 
 
