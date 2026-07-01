@@ -6838,6 +6838,10 @@ FAST_PATH_BUILDERS = {
     "kn_conv2d_bias_groups_relu_fast": build_conv2d_bias_groups_relu(),
     "kn_conv2d_bias_groups_gelu_fast": build_conv2d_bias_groups_gelu(),
     "kn_conv2d_bias_groups_silu_fast": build_conv2d_bias_groups_silu(),
+    "kn_conv2d_bias_groups_relu_batch1_fast": build_conv2d_bias_groups_relu_batch1(),
+    "kn_conv2d_bias_groups_gelu_batch1_fast": build_conv2d_bias_groups_gelu_batch1(),
+    "kn_conv2d_bias_groups_silu_batch1_fast": build_conv2d_bias_groups_silu_batch1(),
+    "kn_conv2d_bias_groups_batch1_op_fast": build_conv2d_bias_groups_batch1(),
 }
 
 
