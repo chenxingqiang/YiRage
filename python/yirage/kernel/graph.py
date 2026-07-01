@@ -1153,6 +1153,15 @@ def _is_unfused_rms_matmul_mugraph(cygraph) -> bool:
     )
 
 
+def _is_unfused_rms_matmul_batched_mugraph(cygraph) -> bool:
+    """True for kn_rms_norm → kn_matmul on ``[B,M,K] @ [K,N]`` without fused customized."""
+    from .cpu_mlir_jit import rms_matmul_batched_shapes_from_cygraph
+
+    if rms_matmul_batched_shapes_from_cygraph(cygraph) is None:
+        return False
+    return _is_unfused_rms_matmul_mugraph(cygraph)
+
+
 def _has_fused_customized_op(cygraph) -> bool:
     return any(
         o.get("op_type") == "kn_customized_op"

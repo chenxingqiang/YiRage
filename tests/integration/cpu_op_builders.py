@@ -6474,6 +6474,10 @@ CUSTOMIZED_OP_BUILDERS = {
 FAST_PATH_BUILDERS = {
     "kn_matmul_op_fast": build_kn_matmul(),
     "kn_unfused_rms_matmul": build_kn_unfused_rms_matmul(),
+    "kn_unfused_rms_matmul_batch1_fast": build_kn_unfused_rms_matmul_batch1(),
+    "kn_unfused_rms_matmul_batched_fast": build_kn_unfused_rms_matmul_batched(),
+    "kn_unfused_rms_matmul_batched_batch1_fast": build_kn_unfused_rms_matmul_batched_batch1(),
+    "kn_unfused_rms_matmul_batched_batch2_fast": build_kn_unfused_rms_matmul_batched_batch2(),
 }
 
 
