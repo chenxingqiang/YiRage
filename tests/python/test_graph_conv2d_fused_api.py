@@ -85,6 +85,23 @@ def test_conv2d_bias_activation_batch2_fused_builds_graph(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_bias_groups_activation_batch2_fused_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+    relu_out = g.conv2d_bias_groups_relu(x, w, b, stride=(1, 1), padding=(1, 1))
+    gelu_out = g.conv2d_bias_groups_gelu(x, w, b, stride=(1, 1), padding=(1, 1))
+    silu_out = g.conv2d_bias_groups_silu(x, w, b, stride=(1, 1), padding=(1, 1))
+    g.mark_output(relu_out)
+    g.mark_output(gelu_out)
+    g.mark_output(silu_out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
 def test_conv2d_relu_fused_matches_unary_chain(yirage_core):
     import yirage as yr
 
