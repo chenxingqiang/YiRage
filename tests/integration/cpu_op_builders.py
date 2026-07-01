@@ -6822,6 +6822,10 @@ FAST_PATH_BUILDERS = {
     "conv2d_bias_batch1_op_fast": build_conv2d_bias_batch1(),
     "conv2d_bias_batch2_op_fast": build_conv2d_bias_batch2(),
     "conv2d_bias_groups_op_fast": build_conv2d_bias_groups(),
+    "kn_conv2d_bias_fast": build_conv2d_bias(),
+    "kn_conv2d_bias_relu_fast": build_conv2d_bias_relu(),
+    "kn_conv2d_bias_gelu_fast": build_conv2d_bias_gelu(),
+    "kn_conv2d_bias_silu_fast": build_conv2d_bias_silu(),
 }
 
 
