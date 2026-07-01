@@ -534,8 +534,8 @@ make test-cpu-demos
 - **Loop R143（YiRage main，depthwise batch2 KN + batch1 op FAST_PATH，PR #139）**：闸门：图级/正确性（``kn_conv2d_depthwise_{relu,gelu,silu}_batch2_fast`` + ``conv2d_depthwise_batch1_op_fast``）。FAST_PATH + parity。验证：**582 passed**。
 - **Loop R144（YiRage main，KN depthwise_bias 激活 FAST_PATH，PR #140）**：闸门：图级/正确性（``kn_conv2d_depthwise_bias_{,relu,gelu,silu}_fast``）。FAST_PATH + parity。验证：**586 passed**。
 - **Loop R145（YiRage main，depthwise_bias batch1 KN 激活/op + graph doc，PR #141）**：闸门：图级/正确性（``kn_conv2d_depthwise_bias_{relu,gelu,silu}_batch1_fast`` + ``conv2d_depthwise_bias_op_fast`` + ``graph.py`` depthwise_bias 激活 See Also + unit smoke）。FAST_PATH + parity。验证：**590 passed**。
-- **Loop R146（YiRage main，KN depthwise_bias batch2 激活 FAST_PATH，PR 待合并）**：闸门：图级/正确性（``kn_conv2d_depthwise_bias_{,relu,gelu,silu}_batch2_fast``）。FAST_PATH + parity。验证：**594 passed**。
-- **Loop R147（YiRage main，depthwise batch2 op + KN separable base FAST_PATH，PR 待合并）**：闸门：图级/正确性（``conv2d_depthwise_batch2_op_fast`` + ``kn_conv2d_separable_{,relu,gelu}_fast``）。FAST_PATH + parity。验证：**598 passed**。
+- **Loop R146（YiRage main，KN depthwise_bias batch2 激活 FAST_PATH，PR #142）**：闸门：图级/正确性（``kn_conv2d_depthwise_bias_{,relu,gelu,silu}_batch2_fast``）。FAST_PATH + parity。验证：**594 passed**。
+- **Loop R147（YiRage main，depthwise batch2 op + KN separable base FAST_PATH，PR #143）**：闸门：图级/正确性（``conv2d_depthwise_batch2_op_fast`` + ``kn_conv2d_separable_{,relu,gelu}_fast``）。FAST_PATH + parity。验证：**598 passed**。
 - **Loop 节奏（2026-06，用户确认：混合 C）**：**2 轮验证 + 1 轮实现** 交替，避免纯 registry 命名闭合凑 passed。
   - **验证轮**：registry + parity + inventory 闸门；闸门类型「图级/正确性 / 命名闭合」；**不改** `graph.py`/C++/search，除非发现静默错误。
   - **实现轮**：须动生产栈（`graph.py`、Cython/C++、matrix tier、search explore、fast path）；PR 描述必填「四轮自问」+ bench/cert 证据。
