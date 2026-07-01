@@ -74,3 +74,30 @@ def test_conv2d_separable_gelu_fused_builds_graph(yirage_core):
     out = g.conv2d_separable_gelu(x, dw, pw, stride=(1, 1), padding=(1, 1))
     g.mark_output(out)
     assert g.cygraph is not None
+
+
+@pytest.mark.cpu
+def test_graph_exposes_bias_groups_fused_methods(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    for name in (
+        "conv2d_bias_groups",
+        "conv2d_bias_groups_relu",
+        "conv2d_bias_groups_gelu",
+        "conv2d_bias_groups_silu",
+    ):
+        assert hasattr(g, name), f"KNGraph missing grouped bias fused API {name}"
+
+
+@pytest.mark.cpu
+def test_conv2d_bias_groups_relu_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+    out = g.conv2d_bias_groups_relu(x, w, b, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
