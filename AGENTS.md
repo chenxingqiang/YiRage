@@ -499,8 +499,8 @@ make test-cpu-demos
 - **Loop R108（YiRage main，separable silu batch2 + plain conv2d FAST_PATH，PR #104）**：闸门：图级/正确性（``conv2d_separable_silu_batch2_fast`` + 无 bias ``conv2d_relu/gelu/silu_fast``）。builders + parity。验证：**442 passed**。
 - **Loop R109（YiRage main，conv2d_bias FAST_PATH + unit smoke，PR #105）**：闸门：图级/正确性（``conv2d_bias`` FAST_PATH 四档 + fused API smoke）。``conv2d_bias_fast``；``conv2d_bias_batch1_fast``；``conv2d_bias_batch2_fast``；``conv2d_bias_relu_fast``；``graph.py`` doc + ``test_graph_conv2d_fused_api``。验证：**446 passed**。
 - **Loop R110（YiRage main，conv2d_bias 激活 FAST_PATH 余量，PR #106）**：闸门：图级/正确性（``conv2d_bias_gelu/silu_fast`` + ``conv2d_bias_relu_batch1/batch2_fast``）。FAST_PATH + parity。验证：**450 passed**。
-- **Loop R111（YiRage main，plain conv2d batch FAST_PATH，PR 待合并）**：闸门：图级/正确性（无 bias ``conv2d_relu/gelu/silu_batch1_fast`` + ``conv2d_relu_batch2_fast``）。FAST_PATH + parity。验证：**454 passed**。
-- **Loop R112（YiRage main，conv2d_bias_groups base FAST_PATH + unit smoke，PR 待合并）**：闸门：图级/正确性（``conv2d_bias_groups`` base/batch FAST_PATH + ``conv2d_bias_gelu_batch1_fast`` + fused API smoke）。``conv2d_bias_groups_fast``；``conv2d_bias_groups_batch1_fast``；``conv2d_bias_groups_batch2_fast``；``graph.py`` doc + ``test_graph_conv2d_fused_api``。验证：**458 passed**。
+- **Loop R111（YiRage main，plain conv2d batch FAST_PATH，PR #107）**：闸门：图级/正确性（无 bias ``conv2d_relu/gelu/silu_batch1_fast`` + ``conv2d_relu_batch2_fast``）。FAST_PATH + parity。验证：**454 passed**。
+- **Loop R112（YiRage main，conv2d_bias_groups base FAST_PATH + unit smoke，PR #108）**：闸门：图级/正确性（``conv2d_bias_groups`` base/batch FAST_PATH + ``conv2d_bias_gelu_batch1_fast`` + fused API smoke）。``conv2d_bias_groups_fast``；``conv2d_bias_groups_batch1_fast``；``conv2d_bias_groups_batch2_fast``；``graph.py`` doc + ``test_graph_conv2d_fused_api``。验证：**458 passed**。
 - **Loop 节奏（2026-06，用户确认：混合 C）**：**2 轮验证 + 1 轮实现** 交替，避免纯 registry 命名闭合凑 passed。
   - **验证轮**：registry + parity + inventory 闸门；闸门类型「图级/正确性 / 命名闭合」；**不改** `graph.py`/C++/search，除非发现静默错误。
   - **实现轮**：须动生产栈（`graph.py`、Cython/C++、matrix tier、search explore、fast path）；PR 描述必填「四轮自问」+ bench/cert 证据。
