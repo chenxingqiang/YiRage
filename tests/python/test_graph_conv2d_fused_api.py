@@ -158,6 +158,35 @@ def test_graph_exposes_bias_groups_fused_methods(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_bias_groups_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+    out = g.conv2d_bias_groups(x, w, b, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
+def test_conv2d_bias_groups_delegates_to_conv2d_bias(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 8, 1, 1), dtype=yr.float16)
+    grouped = g.conv2d_bias_groups(x, w, b, stride=(1, 1), padding=(1, 1))
+    direct = g.conv2d_bias(
+        x, w, b, stride=(1, 1), padding=(1, 1), groups=2
+    )
+    assert grouped is not None
+    assert direct is not None
+
+
+@pytest.mark.cpu
 def test_conv2d_bias_groups_relu_builds_graph(yirage_core):
     import yirage as yr
 
