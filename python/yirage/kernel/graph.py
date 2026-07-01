@@ -2124,10 +2124,14 @@ class KNGraph:
         padding=(0, 0),
         dilation=(1, 1),
     ) -> DTensor:
-        """Separable conv2d with per-stage NCHW broadcast biases ``[1, C, 1, 1]``."""
+        """Separable conv2d with per-stage NCHW broadcast biases ``[1, C, 1, 1]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_fast``,
+            ``conv2d_separable_bias_relu_fast``.
+        """
         if input.num_dims != 4:
             raise ValueError("conv2d_separable_bias expects 4D NCHW input")
-        in_c = input.dim(1)
         hidden = self.conv2d_depthwise_bias(
             input,
             depthwise_weight,
