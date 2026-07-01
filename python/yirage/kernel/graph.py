@@ -1739,6 +1739,11 @@ class KNGraph:
         Conv2d + bias + ReLU (``F.relu(F.conv2d(..., bias=...))`` aligned).
 
         Same tensor contracts as :meth:`conv2d_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_relu_fast``,
+            ``kn_conv2d_bias_relu_fast``, ``kn_conv2d_bias_relu_batch1_fast``,
+            ``kn_conv2d_bias_relu_batch2_fast``.
         """
         return self.relu(
             self.conv2d_bias(
@@ -1766,6 +1771,11 @@ class KNGraph:
         Conv2d + bias + GELU (``F.gelu(F.conv2d(..., bias=...))`` aligned).
 
         Same tensor contracts as :meth:`conv2d_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_gelu_fast``,
+            ``kn_conv2d_bias_gelu_fast``, ``kn_conv2d_bias_gelu_batch1_fast``,
+            ``kn_conv2d_bias_gelu_batch2_fast``.
         """
         return self.gelu(
             self.conv2d_bias(
@@ -1793,6 +1803,11 @@ class KNGraph:
         Conv2d + bias + SiLU (``F.silu(F.conv2d(..., bias=...))`` aligned).
 
         Same tensor contracts as :meth:`conv2d_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_silu_fast``,
+            ``kn_conv2d_bias_silu_fast``, ``kn_conv2d_bias_silu_batch1_fast``,
+            ``kn_conv2d_bias_silu_batch2_fast``.
         """
         return self.silu(
             self.conv2d_bias(
