@@ -6798,6 +6798,10 @@ FAST_PATH_BUILDERS = {
     "kn_conv2d_groups_gelu_batch2_fast": build_conv2d_groups_gelu_batch2(),
     "kn_conv2d_groups_silu_batch2_fast": build_conv2d_groups_silu_batch2(),
     "kn_conv2d_op_fast": build_kn_conv2d(),
+    "kn_conv2d_relu_fast": build_conv2d_relu(),
+    "kn_conv2d_gelu_fast": build_conv2d_gelu(),
+    "kn_conv2d_silu_fast": build_conv2d_silu(),
+    "kn_conv2d_groups_op_fast": build_kn_conv2d_groups(),
 }
 
 
