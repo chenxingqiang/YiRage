@@ -489,11 +489,12 @@ make test-cpu-demos
 - **Loop R98（YiRage main，grouped bias 激活 batch 命名，PR #94）**：闸门：图级/正确性（闭合 groups=2 bias 激活 batch1/batch2 余量）。``conv2d_bias_groups_gelu_batch1``；``conv2d_bias_groups_silu_batch1``；``conv2d_bias_groups_relu_batch2``；``conv2d_bias_groups_gelu_batch2``；builders + parity。验证：**402 passed**。
 - **Loop R99（YiRage main，bias silu batch2 + KN/registry 闭合，PR #95）**：闸门：图级/正确性（``conv2d_bias_groups_silu_batch2``、``kn_conv2d_groups_op``、``kn_unfused_rms_matmul_batch2_fast``、``kn_matmul_batched_3d_2d``）。builders + parity。验证：**406 passed**。
 - **Loop R100（YiRage main，grouped bias fused Graph API，PR #96）**：闸门：图级/正确性（``conv2d_bias_groups*`` fused API + FAST_PATH 四档 + builders 迁移）。``conv2d_bias_groups_relu_fast``；``conv2d_bias_groups_gelu_fast``；``conv2d_bias_groups_silu_fast``；``conv2d_bias_groups_relu_batch1_fast``；``graph.py`` + unit smoke。验证：**410 passed**。
-- **Loop R101（YiRage main，grouped bias FAST_PATH batch 闭合，PR 待合并）**：闸门：图级/正确性（闭合 groups=2 bias 激活 FAST_PATH batch1/batch2 余量）。``conv2d_bias_groups_gelu_batch1_fast``；``conv2d_bias_groups_silu_batch1_fast``；``conv2d_bias_groups_relu_batch2_fast``；``conv2d_bias_groups_gelu_batch2_fast``；FAST_PATH + parity。验证：**414 passed**。
+- **Loop R101（YiRage main，grouped bias FAST_PATH batch 闭合，PR #97）**：闸门：图级/正确性（闭合 groups=2 bias 激活 FAST_PATH batch1/batch2 余量）。``conv2d_bias_groups_gelu_batch1_fast``；``conv2d_bias_groups_silu_batch1_fast``；``conv2d_bias_groups_relu_batch2_fast``；``conv2d_bias_groups_gelu_batch2_fast``；FAST_PATH + parity。验证：**414 passed**。
+- **Loop R102（YiRage main，bias silu batch2 + depthwise FAST_PATH，PR 待合并）**：闸门：图级/正确性（``conv2d_bias_groups_silu_batch2_fast`` + plain depthwise ReLU/GELU/SiLU FAST_PATH）。builders + parity。验证：**418 passed**。
 - **Loop 节奏（2026-06，用户确认：混合 C）**：**2 轮验证 + 1 轮实现** 交替，避免纯 registry 命名闭合凑 passed。
   - **验证轮**：registry + parity + inventory 闸门；闸门类型「图级/正确性 / 命名闭合」；**不改** `graph.py`/C++/search，除非发现静默错误。
   - **实现轮**：须动生产栈（`graph.py`、Cython/C++、matrix tier、search explore、fast path）；PR 描述必填「四轮自问」+ bench/cert 证据。
-  - **下一批**：R102 验证；**R103 实现**候选（plain depthwise ``conv2d_depthwise()`` 迁移）。
+  - **下一批**：**R103 实现**候选（plain depthwise ``conv2d_depthwise()`` 迁移 + batch FAST_PATH）。
 - **Loop R16（2026-06-09，CPU concat_matmul 搜索变换，PR #69 → `7484e59`）**：闸门：图级融合（LoRA 类 concat+matmul 模式）。`get_cpu_search_config()` 调用 `enable_concat_matmul_transformation()`；matrix 注明 `tb_concat_then_matmul_op` 为搜索宏。验证：value verify **63 passed**；cert **29 passed**（~927s）。
 - **Loop R17（2026-06-09，KN chunk CPU，PR #70 → `07075eb`）**：闸门：layout 层（`torch.chunk`，对齐 TB concat）。Cython `chunk()` + `graph.py` 解释器；matrix 三档 `supported` + builders。验证：value verify **66 passed**；cert **32 passed**（~927s）。
 - **Loop R18（2026-06-09，KN concat CPU，PR #71 → `66cbba9`）**：闸门：layout 层（`torch.cat`）。新增 `KNConcatOp` + Cython/解释器（含 `kn_concat_first_op_id` 别名）；matrix 三档 `supported`。验证：value verify **69 passed**；cert **35 passed**（~927s）。
