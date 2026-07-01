@@ -2329,6 +2329,7 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_separable_bias_fast``,
+            ``conv2d_separable_bias_op_fast``, ``kn_conv2d_separable_bias_fast``,
             ``conv2d_separable_bias_relu_fast``.
         """
         if input.num_dims != 4:
@@ -2370,6 +2371,10 @@ class KNGraph:
         Separable conv2d + biases + ReLU (fused MobileNet block output).
 
         Same tensor contracts as :meth:`conv2d_separable_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_relu_fast``,
+            ``kn_conv2d_separable_bias_relu_fast``.
         """
         return self.relu(
             self.conv2d_separable_bias(
@@ -2399,6 +2404,10 @@ class KNGraph:
         Separable conv2d + biases + GELU (fused MobileNet block output).
 
         Same tensor contracts as :meth:`conv2d_separable_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_gelu_fast``,
+            ``kn_conv2d_separable_bias_gelu_fast``.
         """
         return self.gelu(
             self.conv2d_separable_bias(
@@ -2428,6 +2437,10 @@ class KNGraph:
         Separable conv2d + biases + SiLU (fused MobileNet block output).
 
         Same tensor contracts as :meth:`conv2d_separable_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_silu_fast``,
+            ``kn_conv2d_separable_bias_silu_fast``.
         """
         return self.silu(
             self.conv2d_separable_bias(
