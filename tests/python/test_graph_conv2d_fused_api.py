@@ -422,6 +422,29 @@ def test_conv2d_depthwise_bias_delegates_to_conv2d_bias(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_depthwise_bias_activation_batch1_fused_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+    b = g.new_input(dims=(1, 4, 1, 1), dtype=yr.float16)
+    relu_out = g.conv2d_depthwise_bias_relu(
+        x, w, b, stride=(1, 1), padding=(1, 1)
+    )
+    gelu_out = g.conv2d_depthwise_bias_gelu(
+        x, w, b, stride=(1, 1), padding=(1, 1)
+    )
+    silu_out = g.conv2d_depthwise_bias_silu(
+        x, w, b, stride=(1, 1), padding=(1, 1)
+    )
+    g.mark_output(relu_out)
+    g.mark_output(gelu_out)
+    g.mark_output(silu_out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
 def test_conv2d_bias_groups_relu_builds_graph(yirage_core):
     import yirage as yr
 
