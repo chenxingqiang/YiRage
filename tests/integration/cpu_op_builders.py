@@ -497,7 +497,7 @@ def build_conv2d_groups_relu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_relu(
+            g.conv2d_groups_relu(
                 x,
                 w,
                 stride=(1, 1),
@@ -532,7 +532,7 @@ def build_conv2d_groups_gelu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_gelu(
+            g.conv2d_groups_gelu(
                 x,
                 w,
                 stride=(1, 1),
@@ -567,7 +567,7 @@ def build_conv2d_groups_silu() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_silu(
+            g.conv2d_groups_silu(
                 x,
                 w,
                 stride=(1, 1),
@@ -602,7 +602,7 @@ def build_conv2d_groups_relu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_relu(
+            g.conv2d_groups_relu(
                 x,
                 w,
                 stride=(1, 1),
@@ -637,7 +637,7 @@ def build_conv2d_groups_relu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_relu(
+            g.conv2d_groups_relu(
                 x,
                 w,
                 stride=(1, 1),
@@ -672,7 +672,7 @@ def build_conv2d_groups_gelu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_gelu(
+            g.conv2d_groups_gelu(
                 x,
                 w,
                 stride=(1, 1),
@@ -707,7 +707,7 @@ def build_conv2d_groups_gelu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_gelu(
+            g.conv2d_groups_gelu(
                 x,
                 w,
                 stride=(1, 1),
@@ -742,7 +742,7 @@ def build_conv2d_groups_silu_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_silu(
+            g.conv2d_groups_silu(
                 x,
                 w,
                 stride=(1, 1),
@@ -777,7 +777,7 @@ def build_conv2d_groups_silu_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d_silu(
+            g.conv2d_groups_silu(
                 x,
                 w,
                 stride=(1, 1),
@@ -6812,6 +6812,10 @@ FAST_PATH_BUILDERS = {
     "conv2d_fast": build_kn_conv2d(),
     "conv2d_batch1_fast": build_kn_conv2d_batch1(),
     "conv2d_batch2_fast": build_kn_conv2d_batch2(),
+    "kn_conv2d_fast": build_kn_conv2d(),
+    "kn_conv2d_batch1_fast": build_kn_conv2d_batch1(),
+    "kn_conv2d_batch2_fast": build_kn_conv2d_batch2(),
+    "kn_conv2d_groups_batch2_fast": build_kn_conv2d_groups_batch2(),
 }
 
 

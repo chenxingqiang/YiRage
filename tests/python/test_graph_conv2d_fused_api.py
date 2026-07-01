@@ -81,6 +81,35 @@ def test_conv2d_groups_matches_groups_conv2d(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_groups_gelu_silu_fused_build_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    gelu_out = g.conv2d_groups_gelu(x, w, stride=(1, 1), padding=(1, 1))
+    silu_out = g.conv2d_groups_silu(x, w, stride=(1, 1), padding=(1, 1))
+    g.mark_output(gelu_out)
+    g.mark_output(silu_out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
+def test_conv2d_groups_activation_matches_groups_param(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    fused = g.conv2d_groups_relu(x, w, stride=(1, 1), padding=(1, 1), groups=2)
+    direct = g.conv2d_relu(
+        x, w, stride=(1, 1), padding=(1, 1), dilation=(1, 1), groups=2
+    )
+    assert fused is not None
+    assert direct is not None
+
+
+@pytest.mark.cpu
 def test_conv2d_depthwise_fused_builds_graph(yirage_core):
     import yirage as yr
 

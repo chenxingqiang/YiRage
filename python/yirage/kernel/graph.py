@@ -1580,7 +1580,7 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_groups_fast``,
-            ``conv2d_groups_relu_fast``.
+            ``conv2d_groups_relu_fast``, ``kn_conv2d_groups_batch2_fast``.
         """
         if int(groups) < 2:
             raise ValueError("conv2d_groups expects groups >= 2")
