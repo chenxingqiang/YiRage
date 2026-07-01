@@ -8,8 +8,8 @@ from tests.integration.cpu_inventory import planned_value_verify_count, registry
 from yirage.backends.cpu.support_matrix import cpu_layout_explore_gap_table
 
 
-def test_planned_value_verify_count_is_578():
-    assert planned_value_verify_count() == 578
+def test_planned_value_verify_count_is_582():
+    assert planned_value_verify_count() == 582
 
 
 def test_layout_explore_registry_symmetric_16_each():
