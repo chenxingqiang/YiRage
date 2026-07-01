@@ -1849,7 +1849,7 @@ def build_conv2d_depthwise() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
+            g.conv2d_depthwise(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1874,7 +1874,7 @@ def build_conv2d_depthwise_batch1() -> Builder:
         x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
+            g.conv2d_depthwise(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((1, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -1899,7 +1899,7 @@ def build_conv2d_depthwise_batch2() -> Builder:
         x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
         w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
         g.mark_output(
-            g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
+            g.conv2d_depthwise(x, w, stride=(1, 1), padding=(1, 1))
         )
         inp_x = _f16((2, 4, 8, 8))
         inp_w = _f16((4, 1, 3, 3))
@@ -6728,6 +6728,10 @@ FAST_PATH_BUILDERS = {
     "conv2d_depthwise_relu_fast": build_conv2d_depthwise_relu(),
     "conv2d_depthwise_gelu_fast": build_conv2d_depthwise_gelu(),
     "conv2d_depthwise_silu_fast": build_conv2d_depthwise_silu(),
+    "conv2d_depthwise_fast": build_conv2d_depthwise(),
+    "conv2d_depthwise_batch1_fast": build_conv2d_depthwise_batch1(),
+    "conv2d_depthwise_batch2_fast": build_conv2d_depthwise_batch2(),
+    "conv2d_depthwise_relu_batch1_fast": build_conv2d_depthwise_relu_batch1(),
 }
 
 
