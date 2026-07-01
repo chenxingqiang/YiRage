@@ -67,6 +67,61 @@ def test_unfused_rms_matmul_mugraph_detection():
     assert not _has_fused_customized_op(g.cygraph)
 
 
+def test_unfused_rms_matmul_batched_mugraph_detection():
+    import yirage as yr
+    from yirage.kernel.cpu_mlir_jit import (
+        is_production_rms_matmul_mugraph,
+        rms_matmul_batched_shapes_from_cygraph,
+    )
+    from yirage.kernel.graph import _is_unfused_rms_matmul_batched_mugraph
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(2, 8, 32), dtype=yr.float16)
+    w = g.new_input(dims=(32, 64), dtype=yr.float16)
+    normed = g.rms_norm(x, normalized_shape=(32,))
+    g.mark_output(g.matmul(normed, w))
+    assert rms_matmul_batched_shapes_from_cygraph(g.cygraph) == (2, 8, 32, 64)
+    assert _is_unfused_rms_matmul_batched_mugraph(g.cygraph)
+    assert is_production_rms_matmul_mugraph(g.cygraph)
+
+
+def test_cpu_rms_matmul_batched_3d_matches_torch():
+    from yirage.kernel.cpu_native import cpu_rms_matmul
+
+    x = torch.randn(2, 8, 32, dtype=torch.float16)
+    w = torch.randn(32, 64, dtype=torch.float16)
+    ref = torch.matmul(
+        x.float() * torch.rsqrt(x.float().pow(2).mean(-1, keepdim=True) + 1e-6),
+        w.float(),
+    ).to(torch.float16)
+    out = cpu_rms_matmul(x, w)
+    assert out.shape == (2, 8, 64)
+    assert torch.allclose(out, ref, rtol=0.01, atol=0.08)
+
+
+def test_batched_rms_matmul_cpu_call_uses_fast_path():
+    import yirage as yr
+    from yirage.kernel.graph import KNGraph
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(2, 8, 32), dtype=yr.float16)
+    w = g.new_input(dims=(32, 64), dtype=yr.float16)
+    normed = g.rms_norm(x, normalized_shape=(32,))
+    g.mark_output(g.matmul(normed, w))
+    kg = KNGraph(g.cygraph, backend="cpu")
+
+    ref_x = torch.randn(2, 8, 32, dtype=torch.float16)
+    ref_w = torch.randn(32, 64, dtype=torch.float16)
+    ref = torch.matmul(
+        ref_x.float()
+        * torch.rsqrt(ref_x.float().pow(2).mean(-1, keepdim=True) + 1e-6),
+        ref_w.float(),
+    ).to(torch.float16)
+    out = kg(inputs=[ref_x, ref_w])[0]
+    assert out.shape == (2, 8, 64)
+    assert torch.allclose(out, ref, rtol=0.01, atol=0.08)
+
+
 def test_cpu_call_skips_jit_without_experimental_flag():
     """P0: YIRAGE_CPU_MLIR_JIT=1 alone must not route cpu_call through LLVM JIT."""
     import os

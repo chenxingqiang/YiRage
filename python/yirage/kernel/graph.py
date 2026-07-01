@@ -1153,6 +1153,15 @@ def _is_unfused_rms_matmul_mugraph(cygraph) -> bool:
     )
 
 
+def _is_unfused_rms_matmul_batched_mugraph(cygraph) -> bool:
+    """True for kn_rms_norm → kn_matmul on ``[B,M,K] @ [K,N]`` without fused customized."""
+    from .cpu_mlir_jit import rms_matmul_batched_shapes_from_cygraph
+
+    if rms_matmul_batched_shapes_from_cygraph(cygraph) is None:
+        return False
+    return _is_unfused_rms_matmul_mugraph(cygraph)
+
+
 def _has_fused_customized_op(cygraph) -> bool:
     return any(
         o.get("op_type") == "kn_customized_op"
@@ -1473,12 +1482,206 @@ class KNGraph:
         dilation=(1, 1),
         groups: int = 1,
     ) -> DTensor:
-        """2D convolution (NCHW input, OIHW weight; aligned with ``F.conv2d``)."""
+        """2D convolution (NCHW input, OIHW weight; aligned with ``F.conv2d``).
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_fast``, ``conv2d_op_fast``,
+            ``kn_conv2d_op_fast``, ``kn_conv2d_fast``.
+        """
         sh, sw = int(stride[0]), int(stride[1])
         ph, pw = int(padding[0]), int(padding[1])
         dh, dw = int(dilation[0]), int(dilation[1])
         g = int(groups)
         return self.cygraph.conv2d(input, weight, sh, sw, ph, pw, dh, dw, g)
+
+    def conv2d_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + ReLU (``F.relu(F.conv2d(...))`` aligned, no bias).
+
+        Same tensor contracts as :meth:`conv2d`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_relu_fast``,
+            ``kn_conv2d_relu_fast``, ``kn_conv2d_relu_batch1_fast``,
+            ``kn_conv2d_relu_batch2_fast``.
+        """
+        return self.relu(
+            self.conv2d(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + GELU (``F.gelu(F.conv2d(...))`` aligned, no bias).
+
+        Same tensor contracts as :meth:`conv2d`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_gelu_fast``,
+            ``kn_conv2d_gelu_fast``, ``kn_conv2d_gelu_batch1_fast``,
+            ``kn_conv2d_gelu_batch2_fast``.
+        """
+        return self.gelu(
+            self.conv2d(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 1,
+    ) -> DTensor:
+        """
+        Conv2d + SiLU (``F.silu(F.conv2d(...))`` aligned, no bias).
+
+        Same tensor contracts as :meth:`conv2d`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_silu_fast``,
+            ``kn_conv2d_silu_fast``, ``kn_conv2d_silu_batch1_fast``,
+            ``kn_conv2d_silu_batch2_fast``.
+        """
+        return self.silu(
+            self.conv2d(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_groups(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d without bias (``F.conv2d(..., groups=G)`` aligned).
+
+        Default ``groups=2`` documents the common grouped CV block; override when needed.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_groups_fast``,
+            ``kn_conv2d_groups_fast``, ``kn_conv2d_groups_batch1_fast``,
+            ``kn_conv2d_groups_batch2_fast``.
+        """
+        if int(groups) < 2:
+            raise ValueError("conv2d_groups expects groups >= 2")
+        return self.conv2d(
+            input,
+            weight,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+        )
+
+    def conv2d_groups_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """Grouped conv2d + ReLU without bias (default ``groups=2``).
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_groups_relu_fast``,
+            ``kn_conv2d_groups_relu_fast``, ``kn_conv2d_groups_relu_batch1_fast``,
+            ``kn_conv2d_groups_relu_batch2_fast``.
+        """
+        return self.relu(
+            self.conv2d_groups(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_groups_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """Grouped conv2d + GELU without bias (default ``groups=2``)."""
+        return self.gelu(
+            self.conv2d_groups(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_groups_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """Grouped conv2d + SiLU without bias (default ``groups=2``)."""
+        return self.silu(
+            self.conv2d_groups(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
 
     def conv2d_bias(
         self,
@@ -1502,6 +1705,10 @@ class KNGraph:
 
         Returns:
             NCHW output with bias added.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_fast``, ``conv2d_bias_relu_fast``,
+            ``conv2d_bias_op_fast``, ``conv2d_bias_groups_op_fast``.
         """
         out = self.conv2d(
             input,
@@ -1532,6 +1739,11 @@ class KNGraph:
         Conv2d + bias + ReLU (``F.relu(F.conv2d(..., bias=...))`` aligned).
 
         Same tensor contracts as :meth:`conv2d_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_relu_fast``,
+            ``kn_conv2d_bias_relu_fast``, ``kn_conv2d_bias_relu_batch1_fast``,
+            ``kn_conv2d_bias_relu_batch2_fast``.
         """
         return self.relu(
             self.conv2d_bias(
@@ -1559,6 +1771,11 @@ class KNGraph:
         Conv2d + bias + GELU (``F.gelu(F.conv2d(..., bias=...))`` aligned).
 
         Same tensor contracts as :meth:`conv2d_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_gelu_fast``,
+            ``kn_conv2d_bias_gelu_fast``, ``kn_conv2d_bias_gelu_batch1_fast``,
+            ``kn_conv2d_bias_gelu_batch2_fast``.
         """
         return self.gelu(
             self.conv2d_bias(
@@ -1586,6 +1803,11 @@ class KNGraph:
         Conv2d + bias + SiLU (``F.silu(F.conv2d(..., bias=...))`` aligned).
 
         Same tensor contracts as :meth:`conv2d_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_silu_fast``,
+            ``kn_conv2d_bias_silu_fast``, ``kn_conv2d_bias_silu_batch1_fast``,
+            ``kn_conv2d_bias_silu_batch2_fast``.
         """
         return self.silu(
             self.conv2d_bias(
@@ -1596,6 +1818,245 @@ class KNGraph:
                 padding=padding,
                 dilation=dilation,
                 groups=groups,
+            )
+        )
+
+    def conv2d_bias_groups(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias (``F.conv2d(..., bias=..., groups=G)`` aligned).
+
+        Default ``groups=2`` documents the common grouped CV block; override when needed.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_fast``,
+            ``kn_conv2d_bias_groups_fast``, ``conv2d_bias_groups_op_fast``,
+            ``kn_conv2d_bias_groups_batch2_op_fast``.
+        """
+        if int(groups) < 2:
+            raise ValueError("conv2d_bias_groups expects groups >= 2")
+        return self.conv2d_bias(
+            input,
+            weight,
+            bias,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+        )
+
+    def conv2d_bias_groups_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias + ReLU (default ``groups=2``).
+
+        Same tensor contracts as :meth:`conv2d_bias_groups`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_relu_fast``,
+            ``kn_conv2d_bias_groups_relu_fast``,
+            ``kn_conv2d_bias_groups_relu_batch1_fast``,
+            ``kn_conv2d_bias_groups_relu_batch2_fast``.
+        """
+        return self.relu(
+            self.conv2d_bias_groups(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_bias_groups_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias + GELU (default ``groups=2``).
+
+        Same tensor contracts as :meth:`conv2d_bias_groups`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_gelu_fast``,
+            ``kn_conv2d_bias_groups_gelu_fast``,
+            ``kn_conv2d_bias_groups_gelu_batch1_fast``,
+            ``kn_conv2d_bias_groups_gelu_batch2_fast``.
+        """
+        return self.gelu(
+            self.conv2d_bias_groups(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_bias_groups_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        bias: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+        groups: int = 2,
+    ) -> DTensor:
+        """
+        Grouped conv2d + bias + SiLU (default ``groups=2``).
+
+        Same tensor contracts as :meth:`conv2d_bias_groups`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_bias_groups_silu_fast``,
+            ``kn_conv2d_bias_groups_silu_fast``,
+            ``kn_conv2d_bias_groups_silu_batch1_fast``,
+            ``kn_conv2d_bias_groups_silu_batch2_fast``.
+        """
+        return self.silu(
+            self.conv2d_bias_groups(
+                input,
+                weight,
+                bias,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+            )
+        )
+
+    def conv2d_depthwise(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d without bias (``groups = in_channels``).
+
+        Expects weight ``[C, 1, kH, kW]`` and input ``[N, C, H, W]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_fast``,
+            ``kn_conv2d_depthwise_fast``, ``conv2d_depthwise_op_fast``.
+        """
+        if input.num_dims != 4 or weight.num_dims != 4:
+            raise ValueError("conv2d_depthwise expects 4D input and weight")
+        in_c = input.dim(1)
+        if weight.dim(0) != in_c or weight.dim(1) != 1:
+            raise ValueError(
+                f"depthwise weight must be [C, 1, kH, kW], got "
+                f"[{weight.dim(0)}, {weight.dim(1)}, ...]"
+            )
+        return self.conv2d(
+            input,
+            weight,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=in_c,
+        )
+
+    def conv2d_depthwise_relu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d + ReLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_depthwise`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_relu_fast``,
+            ``kn_conv2d_depthwise_relu_fast``,
+            ``kn_conv2d_depthwise_relu_batch1_fast``.
+        """
+        return self.relu(
+            self.conv2d_depthwise(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_depthwise_gelu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d + GELU without bias.
+
+        Same tensor contracts as :meth:`conv2d_depthwise`.
+        """
+        return self.gelu(
+            self.conv2d_depthwise(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_depthwise_silu(
+        self,
+        input: DTensor,
+        weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Depthwise conv2d + SiLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_depthwise`.
+        """
+        return self.silu(
+            self.conv2d_depthwise(
+                input,
+                weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
             )
         )
 
@@ -1612,6 +2073,11 @@ class KNGraph:
         Depthwise conv2d with bias (``groups = in_channels``).
 
         Expects weight ``[C, 1, kH, kW]`` and input ``[N, C, H, W]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_fast``,
+            ``conv2d_depthwise_bias_op_fast``, ``kn_conv2d_depthwise_bias_fast``,
+            ``conv2d_depthwise_bias_relu_fast``.
         """
         if input.num_dims != 4 or weight.num_dims != 4:
             raise ValueError("conv2d_depthwise_bias expects 4D input and weight")
@@ -1644,6 +2110,11 @@ class KNGraph:
         Depthwise conv2d + bias + ReLU (MobileNet-style depthwise block).
 
         Same tensor contracts as :meth:`conv2d_depthwise_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_relu_fast``,
+            ``kn_conv2d_depthwise_bias_relu_fast``,
+            ``kn_conv2d_depthwise_bias_relu_batch1_fast``.
         """
         return self.relu(
             self.conv2d_depthwise_bias(
@@ -1669,6 +2140,11 @@ class KNGraph:
         Depthwise conv2d + bias + GELU (MobileNet-style depthwise block).
 
         Same tensor contracts as :meth:`conv2d_depthwise_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_gelu_fast``,
+            ``kn_conv2d_depthwise_bias_gelu_fast``,
+            ``kn_conv2d_depthwise_bias_gelu_batch1_fast``.
         """
         return self.gelu(
             self.conv2d_depthwise_bias(
@@ -1694,6 +2170,11 @@ class KNGraph:
         Depthwise conv2d + bias + SiLU (MobileNet-style depthwise block).
 
         Same tensor contracts as :meth:`conv2d_depthwise_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_bias_silu_fast``,
+            ``kn_conv2d_depthwise_bias_silu_fast``,
+            ``kn_conv2d_depthwise_bias_silu_batch1_fast``.
         """
         return self.silu(
             self.conv2d_depthwise_bias(
@@ -1721,17 +2202,19 @@ class KNGraph:
         Typical MobileNet-style block:
         ``conv2d(conv2d(x, dw, groups=C_in), pw)`` with ``dw`` shape ``[C_in, 1, kH, kW]``
         and ``pw`` shape ``[C_out, C_in, 1, 1]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_fast``,
+            ``conv2d_separable_op_fast``, ``kn_conv2d_separable_fast``.
         """
         if input.num_dims != 4:
             raise ValueError("conv2d_separable expects 4D NCHW input")
-        in_c = input.dim(1)
-        hidden = self.conv2d(
+        hidden = self.conv2d_depthwise(
             input,
             depthwise_weight,
             stride=stride,
             padding=padding,
             dilation=dilation,
-            groups=in_c,
         )
         return self.conv2d(
             hidden,
@@ -1740,6 +2223,95 @@ class KNGraph:
             padding=(0, 0),
             dilation=(1, 1),
             groups=1,
+        )
+
+    def conv2d_separable_relu(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d + ReLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_separable`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_relu_fast``,
+            ``kn_conv2d_separable_relu_fast``,
+            ``kn_conv2d_separable_relu_batch1_fast``.
+        """
+        return self.relu(
+            self.conv2d_separable(
+                input,
+                depthwise_weight,
+                pointwise_weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_separable_gelu(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d + GELU without bias.
+
+        Same tensor contracts as :meth:`conv2d_separable`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_gelu_fast``,
+            ``kn_conv2d_separable_gelu_fast``,
+            ``kn_conv2d_separable_gelu_batch1_fast``.
+        """
+        return self.gelu(
+            self.conv2d_separable(
+                input,
+                depthwise_weight,
+                pointwise_weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
+        )
+
+    def conv2d_separable_silu(
+        self,
+        input: DTensor,
+        depthwise_weight: DTensor,
+        pointwise_weight: DTensor,
+        stride=(1, 1),
+        padding=(0, 0),
+        dilation=(1, 1),
+    ) -> DTensor:
+        """
+        Separable conv2d + SiLU without bias.
+
+        Same tensor contracts as :meth:`conv2d_separable`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_silu_fast``,
+            ``kn_conv2d_separable_silu_fast``.
+        """
+        return self.silu(
+            self.conv2d_separable(
+                input,
+                depthwise_weight,
+                pointwise_weight,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+            )
         )
 
     def conv2d_separable_bias(
@@ -1753,10 +2325,15 @@ class KNGraph:
         padding=(0, 0),
         dilation=(1, 1),
     ) -> DTensor:
-        """Separable conv2d with per-stage NCHW broadcast biases ``[1, C, 1, 1]``."""
+        """Separable conv2d with per-stage NCHW broadcast biases ``[1, C, 1, 1]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_fast``,
+            ``conv2d_separable_bias_op_fast``, ``kn_conv2d_separable_bias_fast``,
+            ``conv2d_separable_bias_relu_fast``.
+        """
         if input.num_dims != 4:
             raise ValueError("conv2d_separable_bias expects 4D NCHW input")
-        in_c = input.dim(1)
         hidden = self.conv2d_depthwise_bias(
             input,
             depthwise_weight,
@@ -1794,6 +2371,10 @@ class KNGraph:
         Separable conv2d + biases + ReLU (fused MobileNet block output).
 
         Same tensor contracts as :meth:`conv2d_separable_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_relu_fast``,
+            ``kn_conv2d_separable_bias_relu_fast``.
         """
         return self.relu(
             self.conv2d_separable_bias(
@@ -1823,6 +2404,10 @@ class KNGraph:
         Separable conv2d + biases + GELU (fused MobileNet block output).
 
         Same tensor contracts as :meth:`conv2d_separable_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_gelu_fast``,
+            ``kn_conv2d_separable_bias_gelu_fast``.
         """
         return self.gelu(
             self.conv2d_separable_bias(
@@ -1852,6 +2437,10 @@ class KNGraph:
         Separable conv2d + biases + SiLU (fused MobileNet block output).
 
         Same tensor contracts as :meth:`conv2d_separable_bias`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_separable_bias_silu_fast``,
+            ``kn_conv2d_separable_bias_silu_fast``.
         """
         return self.silu(
             self.conv2d_separable_bias(
