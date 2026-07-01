@@ -1964,6 +1964,10 @@ class KNGraph:
         Depthwise conv2d without bias (``groups = in_channels``).
 
         Expects weight ``[C, 1, kH, kW]`` and input ``[N, C, H, W]``.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_fast``,
+            ``kn_conv2d_depthwise_fast``, ``conv2d_depthwise_op_fast``.
         """
         if input.num_dims != 4 or weight.num_dims != 4:
             raise ValueError("conv2d_depthwise expects 4D input and weight")
@@ -1994,6 +1998,11 @@ class KNGraph:
         Depthwise conv2d + ReLU without bias.
 
         Same tensor contracts as :meth:`conv2d_depthwise`.
+
+        See Also:
+            CPU FAST_PATH registry: ``conv2d_depthwise_relu_fast``,
+            ``kn_conv2d_depthwise_relu_fast``,
+            ``kn_conv2d_depthwise_relu_batch1_fast``.
         """
         return self.relu(
             self.conv2d_depthwise(
