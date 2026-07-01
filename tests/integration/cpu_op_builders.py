@@ -6732,6 +6732,10 @@ FAST_PATH_BUILDERS = {
     "conv2d_depthwise_batch1_fast": build_conv2d_depthwise_batch1(),
     "conv2d_depthwise_batch2_fast": build_conv2d_depthwise_batch2(),
     "conv2d_depthwise_relu_batch1_fast": build_conv2d_depthwise_relu_batch1(),
+    "conv2d_depthwise_gelu_batch1_fast": build_conv2d_depthwise_gelu_batch1(),
+    "conv2d_depthwise_silu_batch1_fast": build_conv2d_depthwise_silu_batch1(),
+    "conv2d_depthwise_relu_batch2_fast": build_conv2d_depthwise_relu_batch2(),
+    "conv2d_depthwise_gelu_batch2_fast": build_conv2d_depthwise_gelu_batch2(),
 }
 
 
