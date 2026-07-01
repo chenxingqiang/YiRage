@@ -110,6 +110,18 @@ def test_conv2d_groups_activation_matches_groups_param(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_groups_batch2_fused_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    out = g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
 def test_conv2d_depthwise_fused_builds_graph(yirage_core):
     import yirage as yr
 
