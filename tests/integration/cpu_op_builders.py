@@ -1739,6 +1739,93 @@ def build_conv2d_depthwise_silu_batch1() -> Builder:
     return _build
 
 
+def build_conv2d_depthwise_relu_batch2() -> Builder:
+    """Depthwise conv2d + ReLU batch=2 [2,C,H,W] (groups=C, no bias)."""
+
+    def _build():
+        groups = 4
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.relu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
+            )
+        )
+        inp_x = _f16((2, 4, 8, 8))
+        inp_w = _f16((4, 1, 3, 3))
+        ref = torch.nn.functional.relu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                stride=(1, 1),
+                padding=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
+def build_conv2d_depthwise_gelu_batch2() -> Builder:
+    """Depthwise conv2d + GELU batch=2 [2,C,H,W] (groups=C, no bias)."""
+
+    def _build():
+        groups = 4
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.gelu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
+            )
+        )
+        inp_x = _f16((2, 4, 8, 8))
+        inp_w = _f16((4, 1, 3, 3))
+        ref = torch.nn.functional.gelu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                stride=(1, 1),
+                padding=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
+def build_conv2d_depthwise_silu_batch2() -> Builder:
+    """Depthwise conv2d + SiLU batch=2 [2,C,H,W] (groups=C, no bias)."""
+
+    def _build():
+        groups = 4
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(2, 4, 8, 8), dtype=yr.float16)
+        w = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        g.mark_output(
+            g.silu(
+                g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=groups)
+            )
+        )
+        inp_x = _f16((2, 4, 8, 8))
+        inp_w = _f16((4, 1, 3, 3))
+        ref = torch.nn.functional.silu(
+            torch.nn.functional.conv2d(
+                inp_x,
+                inp_w,
+                stride=(1, 1),
+                padding=(1, 1),
+                groups=groups,
+            )
+        )
+        return g, [inp_x, inp_w], ref
+
+    return _build
+
+
 def build_conv2d_depthwise_bias() -> Builder:
     """Depthwise conv2d + bias (groups = in_channels)."""
 
@@ -2145,6 +2232,31 @@ def build_conv2d_separable_batch2() -> Builder:
             inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
         )
         ref = torch.nn.functional.conv2d(hidden, inp_pw)
+        return g, [inp_x, inp_dw, inp_pw], ref
+
+    return _build
+
+
+def build_conv2d_separable_relu() -> Builder:
+    """Separable conv + ReLU (no bias) vs F.relu(separable reference)."""
+
+    def _build():
+        g = yr.new_kernel_graph()
+        x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+        dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+        pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+        g.mark_output(
+            g.relu(
+                g.conv2d_separable(x, dw, pw, stride=(1, 1), padding=(1, 1))
+            )
+        )
+        inp_x = _f16((1, 4, 8, 8))
+        inp_dw = _f16((4, 1, 3, 3))
+        inp_pw = _f16((8, 4, 1, 1))
+        hidden = torch.nn.functional.conv2d(
+            inp_x, inp_dw, stride=(1, 1), padding=(1, 1), groups=4
+        )
+        ref = torch.nn.functional.relu(torch.nn.functional.conv2d(hidden, inp_pw))
         return g, [inp_x, inp_dw, inp_pw], ref
 
     return _build
@@ -6017,6 +6129,9 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_depthwise_relu_batch1": build_conv2d_depthwise_relu_batch1(),
     "conv2d_depthwise_gelu_batch1": build_conv2d_depthwise_gelu_batch1(),
     "conv2d_depthwise_silu_batch1": build_conv2d_depthwise_silu_batch1(),
+    "conv2d_depthwise_relu_batch2": build_conv2d_depthwise_relu_batch2(),
+    "conv2d_depthwise_gelu_batch2": build_conv2d_depthwise_gelu_batch2(),
+    "conv2d_depthwise_silu_batch2": build_conv2d_depthwise_silu_batch2(),
     "conv2d_depthwise_bias": build_conv2d_depthwise_bias(),
     "conv2d_depthwise_bias_batch1": build_conv2d_depthwise_bias_batch1(),
     "conv2d_depthwise_bias_batch2": build_conv2d_depthwise_bias_batch2(),
@@ -6030,6 +6145,7 @@ CUSTOMIZED_OP_BUILDERS = {
     "conv2d_depthwise_bias_silu_batch1": build_conv2d_depthwise_bias_silu_batch1(),
     "conv2d_depthwise_bias_silu_batch2": build_conv2d_depthwise_bias_silu_batch2(),
     "conv2d_separable": build_conv2d_separable(),
+    "conv2d_separable_relu": build_conv2d_separable_relu(),
     "conv2d_separable_batch1": build_conv2d_separable_batch1(),
     "conv2d_separable_batch2": build_conv2d_separable_batch2(),
     "conv2d_separable_bias": build_conv2d_separable_bias(),
