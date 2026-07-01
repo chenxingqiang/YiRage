@@ -90,6 +90,19 @@ def test_conv2d_depthwise_matches_groups_conv2d(yirage_core):
 
 
 @pytest.mark.cpu
+def test_conv2d_separable_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    dw = g.new_input(dims=(4, 1, 3, 3), dtype=yr.float16)
+    pw = g.new_input(dims=(8, 4, 1, 1), dtype=yr.float16)
+    out = g.conv2d_separable(x, dw, pw, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
 def test_graph_exposes_bias_groups_fused_methods(yirage_core):
     import yirage as yr
 
