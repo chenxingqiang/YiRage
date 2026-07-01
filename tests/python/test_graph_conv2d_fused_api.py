@@ -34,6 +34,10 @@ def test_graph_exposes_no_bias_fused_conv2d_methods(yirage_core):
         "conv2d_separable_relu",
         "conv2d_separable_gelu",
         "conv2d_separable_silu",
+        "conv2d_groups",
+        "conv2d_groups_relu",
+        "conv2d_groups_gelu",
+        "conv2d_groups_silu",
     ):
         assert hasattr(g, name), f"KNGraph missing fused API {name}"
 
@@ -49,6 +53,31 @@ def test_conv2d_relu_fused_matches_unary_chain(yirage_core):
     chain = g.relu(g.conv2d(x, w, stride=(1, 1), padding=(1, 1)))
     assert fused is not None
     assert chain is not None
+
+
+@pytest.mark.cpu
+def test_conv2d_groups_fused_builds_graph(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    out = g.conv2d_groups_relu(x, w, stride=(1, 1), padding=(1, 1))
+    g.mark_output(out)
+    assert g.cygraph is not None
+
+
+@pytest.mark.cpu
+def test_conv2d_groups_matches_groups_conv2d(yirage_core):
+    import yirage as yr
+
+    g = yr.new_kernel_graph()
+    x = g.new_input(dims=(1, 4, 8, 8), dtype=yr.float16)
+    w = g.new_input(dims=(8, 2, 3, 3), dtype=yr.float16)
+    grouped = g.conv2d_groups(x, w, stride=(1, 1), padding=(1, 1))
+    direct = g.conv2d(x, w, stride=(1, 1), padding=(1, 1), groups=2)
+    assert grouped is not None
+    assert direct is not None
 
 
 @pytest.mark.cpu
