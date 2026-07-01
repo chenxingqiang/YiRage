@@ -109,6 +109,10 @@ kn_ops:
     tier: supported
     layer: kn
     note: value-verify batch=2 [2,C,H,W] conv2d shape contract (R56)
+  kn_conv2d_groups_op:
+    tier: supported
+    layer: kn
+    note: grouped conv2d groups=2 base KN registry naming (symmetric batch1/batch2_op, R99)
   kn_conv2d_groups_batch1_op:
     tier: supported
     layer: kn
