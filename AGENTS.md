@@ -537,8 +537,8 @@ make test-cpu-demos
 - **Loop R146（YiRage main，KN depthwise_bias batch2 激活 FAST_PATH，PR #142）**：闸门：图级/正确性（``kn_conv2d_depthwise_bias_{,relu,gelu,silu}_batch2_fast``）。FAST_PATH + parity。验证：**594 passed**。
 - **Loop R147（YiRage main，depthwise batch2 op + KN separable base FAST_PATH，PR #143）**：闸门：图级/正确性（``conv2d_depthwise_batch2_op_fast`` + ``kn_conv2d_separable_{,relu,gelu}_fast``）。FAST_PATH + parity。验证：**598 passed**。
 - **Loop R148（YiRage main，KN separable silu/batch1 激活/op + graph doc，PR #144）**：闸门：图级/正确性（``kn_conv2d_separable_silu_fast`` + ``kn_conv2d_separable_{relu,gelu}_batch1_fast`` + ``conv2d_separable_op_fast`` + ``graph.py`` separable 激活 See Also + unit smoke）。FAST_PATH + parity。验证：**602 passed**。
-- **Loop R149（YiRage main，KN separable silu batch1 + batch1 op + batch2 base FAST_PATH，PR 待合并）**：闸门：图级/正确性（``kn_conv2d_separable_silu_batch1_fast`` + ``conv2d_separable_batch1_op_fast`` + ``kn_conv2d_separable_{,relu}_batch2_fast``）。FAST_PATH + parity。验证：**606 passed**。
-- **Loop R150（YiRage main，KN separable batch2 激活/op + bias base FAST_PATH，PR 待合并）**：闸门：图级/正确性（``kn_conv2d_separable_{gelu,silu}_batch2_fast`` + ``conv2d_separable_batch2_op_fast`` + ``kn_conv2d_separable_bias_fast``）。FAST_PATH + parity。验证：**610 passed**。
+- **Loop R149（YiRage main，KN separable silu batch1 + batch1 op + batch2 base FAST_PATH，PR #145）**：闸门：图级/正确性（``kn_conv2d_separable_silu_batch1_fast`` + ``conv2d_separable_batch1_op_fast`` + ``kn_conv2d_separable_{,relu}_batch2_fast``）。FAST_PATH + parity。验证：**606 passed**。
+- **Loop R150（YiRage main，KN separable batch2 激活/op + bias base FAST_PATH，PR #146）**：闸门：图级/正确性（``kn_conv2d_separable_{gelu,silu}_batch2_fast`` + ``conv2d_separable_batch2_op_fast`` + ``kn_conv2d_separable_bias_fast``）。FAST_PATH + parity。验证：**610 passed**。
 - **Loop 节奏（2026-06，用户确认：混合 C）**：**2 轮验证 + 1 轮实现** 交替，避免纯 registry 命名闭合凑 passed。
   - **验证轮**：registry + parity + inventory 闸门；闸门类型「图级/正确性 / 命名闭合」；**不改** `graph.py`/C++/search，除非发现静默错误。
   - **实现轮**：须动生产栈（`graph.py`、Cython/C++、matrix tier、search explore、fast path）；PR 描述必填「四轮自问」+ bench/cert 证据。
