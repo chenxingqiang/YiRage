@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""CPU certification profile helpers (Loop R57)."""
+"""CPU certification profile helpers (Loop R66)."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ def test_parse_pytest_summary_missing_returns_none():
     assert parse_pytest_summary("no summary here")["passed"] is None
 
 
-def test_planned_value_verify_still_230():
-    assert planned_value_verify_count() == 230
+def test_planned_value_verify_still_622():
+    assert planned_value_verify_count() == 622
 
 
 def test_rms_matmul_tractability_sets_env(monkeypatch):
@@ -59,7 +59,7 @@ def test_cert_profile_from_stages_includes_walkthrough_substage_elapsed():
             },
         },
     }
-    profile = cert_profile_from_stages(stages, planned_value_verify=230)
+    profile = cert_profile_from_stages(stages, planned_value_verify=502)
     assert profile["walkthrough_substage_elapsed_s"]["2. Ray µGraph search"] == 8.0
     assert profile["walkthrough_elapsed_s"] == 12.5
 
@@ -69,13 +69,13 @@ def test_cert_profile_from_stages_stage_elapsed_and_alignment():
         "value_verify_all": {
             "ok": True,
             "elapsed_s": 2.5,
-            "pytest": {"passed": 230, "skipped": 1, "failed": 0},
+            "pytest": {"passed": 502, "skipped": 1, "failed": 0},
         },
         "op_contract": {"ok": True, "elapsed_s": 1.2},
         "native_gemm": {"ok": True, "elapsed_s": 25.0},
         "superoptimize_smoke": {"ok": True, "elapsed_s": 1.5},
     }
-    profile = cert_profile_from_stages(stages, planned_value_verify=230)
+    profile = cert_profile_from_stages(stages, planned_value_verify=502)
     assert profile["value_verify_aligned"] is True
     assert profile["stages_run"] == 4
     assert profile["stages_ok"] == 4
@@ -94,7 +94,7 @@ def test_cert_profile_from_stages_includes_mlir_bench_profile():
             },
         },
     }
-    profile = cert_profile_from_stages(stages, planned_value_verify=230)
+    profile = cert_profile_from_stages(stages, planned_value_verify=502)
     assert profile["mlir_bench_profile_ok"] is True
     assert profile["mlir_bench_elapsed_s"] == 3.0
     assert profile["mlir_bench_profile"]["profile_ok"] is True
