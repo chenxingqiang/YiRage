@@ -100,16 +100,6 @@ def main():
     print(f"  PyTorch: {pt_s * 1000:.3f} ms")
     print(f"  YiRage:  {yr_s * 1000:.3f} ms")
     print(f"  Speedup: {speedup:.2f}x")
-    if os.environ.get("YIRAGE_MACA_TORCH_MATMUL", "1").strip().lower() in (
-        "1",
-        "true",
-        "yes",
-        "on",
-    ):
-        print(
-            "  Note: YIRAGE_MACA_TORCH_MATMUL=1 uses torch.matmul until mxcc compile "
-            "is stable (Loop R2)"
-        )
     sync_device(device)
 
     print(f"\nWarp size: {MACA_WARP_SIZE}, compiler: mxcc when nvcc absent")

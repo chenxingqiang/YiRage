@@ -3643,17 +3643,6 @@ class KNGraph:
 
     def maca_call(self, **kwargs):
         """Execute the optimized graph on MetaX MACA GPU (mcPytorch CUDA API)."""
-        use_torch_matmul = os.environ.get(
-            "YIRAGE_MACA_TORCH_MATMUL", "1"
-        ).strip().lower() in ("1", "true", "yes", "on")
-        input_tensors = kwargs.get("inputs", [])
-        if (
-            use_torch_matmul
-            and len(input_tensors) == 2
-            and _is_plain_matmul_mugraph(self.cygraph)
-            and torch.cuda.is_available()
-        ):
-            return [torch.matmul(input_tensors[0], input_tensors[1])]
         if torch.cuda.is_available():
             return self.cuda_call(**kwargs)
         return self.ascend_call(**kwargs)
@@ -4730,13 +4719,6 @@ class KNGraph:
             print(f"MACA backend: Processing {len(all_graphs)} muGraphs...")
             print(f"  Note: MACA uses 64-thread warps (vs NVIDIA's 32)")
 
-            skip_profile = os.environ.get("YIRAGE_MACA_SKIP_PROFILE", "1").strip().lower() in (
-                "1",
-                "true",
-                "yes",
-                "on",
-            )
-
             # Check if MACA GPU is available (mcPytorch maps MACA to cuda)
             maca_available = False
             try:
@@ -4756,15 +4738,9 @@ class KNGraph:
 
             best_graph, best_perf = None, float("inf")
 
-            if not maca_available or skip_profile:
-                # No mcPytorch or compile/profile disabled — return first graph.
-                if skip_profile and maca_available:
-                    print(
-                        "  Skipping MACA compile/profile "
-                        "(YIRAGE_MACA_SKIP_PROFILE; Loop R2 will re-enable)"
-                    )
-                elif not maca_available:
-                    print(f"  Skipping profiling (mcPytorch not available)")
+            if not maca_available:
+                # No mcPytorch — return first graph without compile/profile.
+                print(f"  Skipping profiling (mcPytorch not available)")
                 print(f"  Returning first graph from {len(all_graphs)} candidates")
                 if len(all_graphs) > 0:
                     best_graph = all_graphs[0]

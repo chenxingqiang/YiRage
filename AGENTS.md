@@ -19,6 +19,20 @@
 | **验证通过再沉淀** | bench 与 superoptimize smoke 通过后再更新 `AGENTS.md`、`docs/maca_*.md`、kernel 契约 |
 | **框架对齐** | 借鉴 CUDA/Triton 分工：重 GEMM/conv 委托 mcPytorch/cuBLAS 类库；YiRage 价值在**图级融合**（µGraph search、TB customized、64-thread warp tiling），而非孤立 beat `torch.matmul` |
 | **执行前价值闸门** | 每轮进入「策略 → 落地」前，必须对照框架目标判断本轮改动是否值得做（见下节）；性能向改动需有 `benchmark/maca_vs_pytorch.py` 或 e2e bench 证据 |
+| **行为性价比** | **每一步**行动前须过 [Agent 行为性价比审查](#agent-行为性价比审查每步必做)；禁止用回退/workaround 冒充正式实现 |
+
+### Agent 行为性价比审查（每步必做）
+
+Cloud Agent 在**每一步**行动前（读文件、改代码、跑命令、开 PR、引入 env 开关）须自问并写入 PR / 本轮笔记（可 1 句话）：
+
+| 维度 | 问题 |
+|------|------|
+| **目标对齐** | 本步是否直接闭合当前策略卡片的主瓶颈？ |
+| **正式 vs 回退** | 是否在绕开根因（stub 占位、torch 回退、skip 编译/评测假装通过）？**禁止**用回退代替 mxcc / transpiler / fingerprint 正式路径，除非用户**显式**要求临时烟雾 |
+| **证据** | 本步产出是否有可复现证据（MetaX VM 日志、pytest、bench JSON）？ |
+| **机会成本** | 同时间是否更应修编译失败、ABI 缺口、契约不一致？ |
+
+**结论为「性价比不足」或「属于回退」时**：停止落地，回到策略层重选 backlog；不得为凑 Loop 合并 PR。
 
 ### 执行前闸门：框架目标与优化价值（每轮必做）
 
@@ -296,11 +310,11 @@ pytest tests/python/test_backends.py -k maca -v
 ### Cloud Agent 单轮检查清单（MACA）
 
 ```
-[ ] 0. 闸门：四轮自问；性能向已跑 maca_vs_pytorch / maca_native_benchmark
+[ ] 0. 闸门：四轮自问 + [行为性价比审查](#agent-行为性价比审查每步必做)；性能向已跑 maca_vs_pytorch / maca_native_benchmark
 [ ] 1. 感知：mx-smi、mcPytorch、demo_maca_optimization、bench JSON
-[ ] 2. 策略：只选 1 个主攻瓶颈；对齐 64-warp + get_maca_search_config
-[ ] 3. 落地：最小 patch；触及 .maca / maca config / search strategy
-[ ] 4. 验证：MetaX VM 烟雾 + pytest -k maca；Cython 则 pip install -e
+[ ] 2. 策略：只选 1 个主攻瓶颈；对齐 64-warp + get_maca_search_config；拒绝回退/workaround 冒充正式实现
+[ ] 3. 落地：最小 patch；触及 transpiler/mxcc / .maca / maca config / search；每步过行为性价比
+[ ] 4. 验证：MetaX VM 正式路径（transpiler+mxcc 编译+执行）+ pytest -k maca；Cython 则 pip install -e
 [ ] 5. 开 PR：push 分支 cursor/...-ffec，base=main
 [ ] 6. 自动合并：MetaX VM 验证全绿 → gh pr merge
 [ ] 7. 同步 main：git checkout main && git pull
@@ -325,7 +339,7 @@ pytest tests/python/test_backends.py -k maca -v
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
-- **Loop R1（2026-07-07，demo/kernel 性能路径，PR 待合并）**：闸门：执行层 + 感知/工具层。根因：`yirage.maca_config` 缺失、`maca_call` 走 ascend 解释器、`compile()` 仅 nvcc、demo/bench 用 `backend=cpu` 与占位计时。修复：`maca_config.py` shim、`get_maca_search_config_quick`/`resolve_maca_search_config`、`maca_call→cuda_call`（mcPytorch）、`mxcc` 编译回退、`demo/_maca_utils.py` + demo/bench 真实 `superoptimize(backend=maca)` + GPU 计时。验证：`pytest tests/python/test_maca_config.py`；MetaX VM：`YIRAGE_BACKEND=maca pip install -e .` → `python3 demo/maca_superopt_test.py` → `python3 benchmark/maca_vs_pytorch.py`。
+- **Loop R1（2026-07-07，demo/kernel 性能路径，PR 待合并）**：闸门：执行层 + 感知/工具层。根因：`yirage.maca_config` 缺失、`maca_call` 走 ascend 解释器、`compile()` 仅 nvcc、demo/bench 用 `backend=cpu` 与占位计时；**正式路径阻塞**：`USE_MACA` 链 `transpiler_stub` 致 `generate_cuda_program` segfault。修复：`maca_config.py` shim、`get_maca_search_config_quick`/`resolve_maca_search_config`、`maca_call→cuda_call`（mcPytorch）、`mxcc` JIT、`CMakeLists` MACA 启用 CUDA transpiler（`YIRAGE_BACKEND_CUDA_ENABLED`）、**撤销** `YIRAGE_MACA_SKIP_PROFILE`/`YIRAGE_MACA_TORCH_MATMUL` 回退、`demo/_maca_utils.py` + demo/bench 真实 `superoptimize(backend=maca)`。验证：`pytest tests/python/test_maca_config.py`；MetaX VM：rebuild → `generate_cuda_program` + `compile` + `demo/maca_superopt_test.py` + `benchmark/maca_vs_pytorch.py`。
 
 - **协议（2026-07-07）**：MACA 改动须在 MetaX GPU VM 验证通过后合并；禁止用 CPU cert/loop-close 替代。
 - **协议（框架对齐）**：每轮策略前必过执行前闸门 — 融合上浮、原语对齐 mcPytorch，64-thread warp 约束。

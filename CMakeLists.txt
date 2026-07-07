@@ -200,6 +200,9 @@ if ("${USE_CUDA}" STREQUAL "ON")
   )
   list(APPEND YIRAGE_SRCS ${YIRAGE_CUDA_SRCS})
   message(STATUS "CUDA backend enabled, including .cu files and transpiler")
+elseif ("${USE_MACA}" STREQUAL "ON")
+  # MACA: CUDA-compatible transpiler (host C++) + mxcc JIT; no nvcc .cu objects
+  message(STATUS "MACA backend enabled, including CUDA transpiler (mxcc JIT)")
 else()
   # CUDA disabled: exclude transpiler, triton_transpiler, and nki_transpiler
   file(GLOB_RECURSE YIRAGE_EXCLUDE_SRCS
@@ -411,9 +414,10 @@ if ("${USE_CUDA}" STREQUAL "ON")
     message(STATUS "OpenMP enabled for CUDA parallel search (YIRAGE_ENABLE_PARALLEL_SEARCH defined)")
   endif()
 elseif ("${USE_MACA}" STREQUAL "ON")
-  # MACA is CUDA-compatible, use MACA fingerprint (enables parallel search)
-  # Don't define YIRAGE_FINGERPRINT_USE_CPU here - it disables OpenMP
-  message(STATUS "Using MACA fingerprint (parallel search enabled)")
+  # MACA: CUDA-compatible transpiler for generate_cuda_program; mxcc compiles emitted .cu
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)
+  message(STATUS "MACA transpiler enabled (YIRAGE_BACKEND_USE_CUDA for mxcc JIT)")
 elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
   # Ascend NPU - don't define CPU fingerprint, Ascend has its own
   message(STATUS "Using Ascend fingerprint (parallel search enabled)")
