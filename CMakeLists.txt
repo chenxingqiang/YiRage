@@ -661,8 +661,6 @@ if ("${USE_MACA}" STREQUAL "ON")
   # Include MACA configuration
   include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
-  # MACA uses GPU fingerprint for verification (compiled with mxcc)
-  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
   
   # Enable OpenMP for parallel search with MACA
   find_package(OpenMP)
@@ -696,9 +694,12 @@ if ("${USE_MACA}" STREQUAL "ON")
   
   if(MXCC_COMPILER)
     message(STATUS "Found MACA compiler: ${MXCC_COMPILER}")
-    
-    # Collect MACA GPU kernel source files (.maca files)
-    file(GLOB MACA_GPU_KERNEL_SRCS src/kernel/maca/*.maca)
+
+    if(MACA_COMPILE_KERNELS)
+      target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
+
+      # Collect MACA GPU kernel source files (.maca files)
+      file(GLOB MACA_GPU_KERNEL_SRCS src/kernel/maca/*.maca)
     
     # Compile each MACA GPU kernel file with mxcc
     set(MACA_KERNEL_OBJS "")
@@ -745,7 +746,11 @@ if ("${USE_MACA}" STREQUAL "ON")
     else()
       message(STATUS "No MACA GPU kernel files (.maca) found")
     endif()
-    
+    else()
+      message(STATUS "MACA native .maca kernels skipped (MACA_COMPILE_KERNELS=OFF)")
+      target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+    endif()
+
     # Link MACA runtime library
     list(APPEND YIRAGE_LINK_LIBS mcruntime)
   else()
