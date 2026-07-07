@@ -244,8 +244,10 @@ endif()
 
 if ("${USE_MACA}" STREQUAL "ON")
   message(STATUS "MACA backend enabled (requires MetaX MACA SDK)")
-  # Host uses MACA-specific memory manager (.maca kernels built separately); omit generic .cc
-  list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
+  if(MACA_COMPILE_KERNELS)
+    list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
+  endif()
 elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
   # Ascend implementation is src/kernel/ascend/device_memory_manager.cc (already in KERNEL_OPT_SRCS).
   # Omit generic CPU stub .cc before add_library (post-add_library list edits do not change the target).
