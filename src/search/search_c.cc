@@ -7,6 +7,7 @@
 #include "utils/containers.h"
 #include "type.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstdlib>
 #include <cstring>
@@ -60,6 +61,36 @@ int cython_search(yirage::kernel::Graph const *input_graph,
       if (config.backend_type == type::BT_MACA) {
         config.warp_size = 64;  // MetaX MACA uses 64-thread warps
         std::cout << "[Search] Using MACA backend (warpSize=64)" << std::endl;
+        bool maca_quick = true;
+        if (const char *qs = std::getenv("YIRAGE_MACA_SEARCH_QUICK")) {
+          std::string s(qs);
+          for (auto &c : s) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+          }
+          maca_quick = !(s == "0" || s == "false" || s == "no" || s == "off");
+        }
+        if (maca_quick) {
+          std::cout << "[Search] MACA quick search (YIRAGE_MACA_SEARCH_QUICK)"
+                    << std::endl;
+          config.max_num_threadblock_graph_op = 6;
+          config.max_num_kernel_graph_op = 3;
+          config.search_thread =
+              std::max<size_t>(1, std::min(config.search_thread, size_t{4}));
+          // Plain matmul / fused GEMM smoke: avoid full default explore grid.
+          config.knop_to_explore = {
+              type::KN_MATMUL_OP,
+              type::KN_CUSTOMIZED_OP,
+          };
+          config.tbop_to_explore = {
+              type::TB_MATMUL_OP,
+              type::TB_RMS_NORM_OP,
+              type::TB_FORLOOP_ACCUM_NO_RED_OP,
+              type::TB_FORLOOP_ACCUM_RED_LD_SUM_OP,
+              type::TB_FORLOOP_ACCUM_RED_LD_RMS_OP,
+              type::TB_ADD_OP,
+              type::TB_MUL_OP,
+          };
+        }
       } else if (config.backend_type == type::BT_ROCM) {
         config.warp_size = 64;  // AMD ROCm uses 64-thread wavefronts
         std::cout << "[Search] Using ROCm backend (wavefrontSize=64)" << std::endl;
