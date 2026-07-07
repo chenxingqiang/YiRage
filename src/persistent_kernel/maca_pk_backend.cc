@@ -18,10 +18,10 @@
 #include <cstring>
 #include <sstream>
 
-// MACA includes (CUDA-compatible API)
+// MACA includes (CUDA-compatible API via mc* headers)
 #ifdef YIRAGE_BACKEND_MACA_ENABLED
-#include <maca_runtime.h>
-#include <maca.h>
+#include <mcr/mc_runtime.h>
+#include <mcr/mc_common.h>
 #endif
 
 namespace yirage {
