@@ -4719,6 +4719,13 @@ class KNGraph:
             print(f"MACA backend: Processing {len(all_graphs)} muGraphs...")
             print(f"  Note: MACA uses 64-thread warps (vs NVIDIA's 32)")
 
+            skip_profile = os.environ.get("YIRAGE_MACA_SKIP_PROFILE", "1").strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
+
             # Check if MACA GPU is available (mcPytorch maps MACA to cuda)
             maca_available = False
             try:
@@ -4738,10 +4745,15 @@ class KNGraph:
 
             best_graph, best_perf = None, float("inf")
 
-            if not maca_available:
-                # No mcPytorch available - return first graph without profiling
-                # The graph will be compiled when executed
-                print(f"  Skipping profiling (mcPytorch not available)")
+            if not maca_available or skip_profile:
+                # No mcPytorch or compile/profile disabled — return first graph.
+                if skip_profile and maca_available:
+                    print(
+                        "  Skipping MACA compile/profile "
+                        "(YIRAGE_MACA_SKIP_PROFILE; Loop R2 will re-enable)"
+                    )
+                elif not maca_available:
+                    print(f"  Skipping profiling (mcPytorch not available)")
                 print(f"  Returning first graph from {len(all_graphs)} candidates")
                 if len(all_graphs) > 0:
                     best_graph = all_graphs[0]
