@@ -698,6 +698,7 @@ if ("${USE_MACA}" STREQUAL "ON")
 
     if(MACA_COMPILE_KERNELS)
       target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
+      target_compile_definitions(yirage_runtime PUBLIC YIRAGE_PK_MACA_BACKEND_ENABLED)
 
       # Collect MACA GPU kernel source files (.maca files)
       file(GLOB MACA_GPU_KERNEL_SRCS src/kernel/maca/*.maca)
