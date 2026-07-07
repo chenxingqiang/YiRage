@@ -121,6 +121,7 @@ file(GLOB PK_EXCLUDE_SRCS
   src/persistent_kernel/nki_pk_backend.cc
   src/persistent_kernel/triton_pk_backend.cc
   src/persistent_kernel/mlir_pk_backend.cc
+  src/persistent_kernel/maca_pk_backend.cc
 )
 if(PK_EXCLUDE_SRCS)
   list(REMOVE_ITEM YIRAGE_SRCS ${PK_EXCLUDE_SRCS})
