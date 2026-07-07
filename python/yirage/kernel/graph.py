@@ -232,6 +232,22 @@ def _resolve_gpu_compiler():
     )
 
 
+def _maca_recover_cuda_device(device_id: int = 0) -> None:
+    """Best-effort reset after MACA/mcPytorch device-side assert poisons the context."""
+    if torch is None or not torch.cuda.is_available():
+        return
+    try:
+        torch.cuda.synchronize(device_id)
+    except Exception:
+        pass
+    reset = getattr(torch.cuda, "device_reset", None)
+    if callable(reset):
+        try:
+            reset(device_id)
+        except Exception:
+            pass
+
+
 def _resolve_transpiler_target_cc(kwargs: dict) -> int:
     """Pick transpiler GPU_CC for codegen + smem limits."""
     if kwargs.get("target_cc") is not None:
@@ -288,6 +304,7 @@ def get_mxcc_cc_cmd(
             "-D__CUDACC__",
             "-D__NVCC__",
             "-DCUTE_ARCH_LDSM_SM75_ACTIVATED=1",
+            "-DCUTE_ARCH_MMA_SM70_ENABLED=1",
             "-shared",
             "-std=c++17",
             "-fPIC",
@@ -4805,59 +4822,74 @@ class KNGraph:
                     handles.popleft().wait()
 
                 # Profile all graphs (skip graphs that fail at runtime on MACA)
+                dev_id = global_config.gpu_device_id
                 for idx, g in enumerate(all_graphs):
-                    dtensors = g.cygraph.get_input_dtensors()
-                    input_tensors = list()
-                    for t in dtensors:
-                        dims, strides = g.cygraph.get_input_dtensor_shape_and_stride(t)
-                        dtype = convert_dtype_to_torch_type(t.dtype)
-                        x = torch.randn(
-                            dims,
-                            dtype=dtype,
-                            device="cuda:{}".format(global_config.gpu_device_id),
-                        )
-                        x = torch.as_strided(x, size=dims, stride=strides)
-                        input_tensors.append(x)
-                    if not g.valid_kernels():
-                        print("muGraph {}: {}".format(idx, g.get_error_message()))
-                        continue
                     try:
-                        for _ in range(warmup_iters):
-                            g(inputs=input_tensors)
-                        torch.cuda.synchronize()
+                        dtensors = g.cygraph.get_input_dtensors()
+                        input_tensors = list()
+                        for t in dtensors:
+                            dims, strides = g.cygraph.get_input_dtensor_shape_and_stride(t)
+                            dtype = convert_dtype_to_torch_type(t.dtype)
+                            x = torch.randn(
+                                dims,
+                                dtype=dtype,
+                                device="cuda:{}".format(dev_id),
+                            )
+                            x = torch.as_strided(x, size=dims, stride=strides)
+                            input_tensors.append(x)
+                        if not g.valid_kernels():
+                            print("muGraph {}: {}".format(idx, g.get_error_message()))
+                            continue
+                        try:
+                            for _ in range(warmup_iters):
+                                g(inputs=input_tensors)
+                            torch.cuda.synchronize(dev_id)
+                        except Exception as e:
+                            print(f"  muGraph[{idx}]: warmup failed - {e}")
+                            _maca_recover_cuda_device(dev_id)
+                            continue
+                        try:
+                            starter = torch.cuda.Event(enable_timing=True)
+                            ender = torch.cuda.Event(enable_timing=True)
+                            starter.record()
+                            for _ in range(profile_iters):
+                                g(inputs=input_tensors)
+                            ender.record()
+                            torch.cuda.synchronize(dev_id)
+                            perf = starter.elapsed_time(ender) / profile_iters
+                            print(
+                                "muGraph {}: profiled performance (ms) = {}".format(
+                                    idx, perf
+                                )
+                            )
+                            if perf < best_perf:
+                                best_graph, best_perf = g, perf
+                        except Exception as e:
+                            print(f"  muGraph[{idx}]: profiling failed - {e}")
+                            _maca_recover_cuda_device(dev_id)
+                            continue
                     except Exception as e:
-                        print(f"  muGraph[{idx}]: warmup failed - {e}")
-                        continue
-                    try:
-                        starter = torch.cuda.Event(enable_timing=True)
-                        ender = torch.cuda.Event(enable_timing=True)
-                        starter.record()
-                        for _ in range(profile_iters):
-                            g(inputs=input_tensors)
-                        ender.record()
-                        torch.cuda.synchronize()
-                        perf = starter.elapsed_time(ender) / profile_iters
-                        print("muGraph {}: profiled performance (ms) = {}".format(idx, perf))
-                        if perf < best_perf:
-                            best_graph, best_perf = g, perf
-                    except Exception as e:
-                        print(f"  muGraph[{idx}]: profiling failed - {e}")
+                        print(f"  muGraph[{idx}]: skipped - {e}")
+                        _maca_recover_cuda_device(dev_id)
                         continue
 
             if best_graph is not None:
                 best_graph.backend = "maca"
                 if use_graph_dataset:
-                    graph_dataset.store(
-                        input_graph=self.cygraph,
-                        optimized_graph=best_graph,
-                        imaps=imaps,
-                        omaps=omaps,
-                        griddims=griddims,
-                        blockdims=blockdims,
-                        fmaps=fmaps,
-                        franges=franges,
-                        backend=backend,
-                    )
+                    try:
+                        graph_dataset.store(
+                            input_graph=self.cygraph,
+                            optimized_graph=best_graph,
+                            imaps=imaps,
+                            omaps=omaps,
+                            griddims=griddims,
+                            blockdims=blockdims,
+                            fmaps=fmaps,
+                            franges=franges,
+                            backend=backend,
+                        )
+                    except Exception as e:
+                        print(f"Warning: Could not save muGraph to dataset: {e}")
             return best_graph
         elif backend == "nki":
             return all_graphs
