@@ -199,6 +199,77 @@ def get_cc_cmd(target, cc, FILE_NAME, py_include_dir, INCLUDE_PATH, DEPS_PATH, s
     return common_cmd[:6] + specific_cmd + common_cmd[6:]
 
 
+def _detect_maca_sdk_path() -> Optional[str]:
+    for var in ("MACA_PATH", "MACA_HOME"):
+        path = os.environ.get(var)
+        if path and os.path.isdir(path):
+            return path
+    for path in ("/opt/maca", "/usr/local/maca", "/opt/metax/maca"):
+        if os.path.isdir(path):
+            return path
+    return None
+
+
+def _resolve_gpu_compiler():
+    """Prefer nvcc; fall back to MetaX mxcc on MACA hosts."""
+    nvcc = shutil.which("nvcc")
+    if nvcc is not None:
+        return nvcc, "nvcc"
+    maca_path = _detect_maca_sdk_path()
+    mxcc = shutil.which("mxcc")
+    if mxcc is None and maca_path:
+        candidate = os.path.join(maca_path, "mxgpu_llvm/bin/mxcc")
+        if os.path.isfile(candidate):
+            mxcc = candidate
+    if mxcc is not None and os.path.isfile(mxcc):
+        return mxcc, "mxcc"
+    raise RuntimeError(
+        "No GPU compiler found. Install CUDA (nvcc) or MetaX MACA SDK (mxcc)."
+    )
+
+
+def get_mxcc_cc_cmd(
+    mxcc,
+    maca_path,
+    FILE_NAME,
+    py_include_dir,
+    INCLUDE_PATH,
+    DEPS_PATH,
+    so_path,
+    profiling,
+):
+    cmd = [
+        mxcc,
+        "-x",
+        "maca",
+        FILE_NAME,
+        "-O3",
+        f"-I{py_include_dir}",
+        f"-I{os.path.join(INCLUDE_PATH, 'transpiler/runtime')}",
+        f"-I{os.path.join(DEPS_PATH, 'cutlass/include')}",
+        "-DYIRAGE_BACKEND_USE_CUDA",
+        "-DYIRAGE_BACKEND_MACA_ENABLED",
+        "-shared",
+        "-std=c++17",
+        "-fPIC",
+        "-o",
+        so_path,
+    ]
+    if maca_path:
+        cmd.append(f"--maca-path={maca_path}")
+        cmd.extend(
+            [
+                f"-I{maca_path}/include",
+                f"-I{maca_path}/include/mcr",
+                f"-L{maca_path}/lib",
+            ]
+        )
+    if profiling:
+        cmd.append("-DYIRAGE_ENABLE_PROFILER")
+    cmd.extend(["-lmcruntime", "-lmcblas", "-lcublas"])
+    return cmd
+
+
 def check_stride(dims, strides, layout="row-major"):
     curr_stride = 1
     if layout == "row-major":
@@ -3571,8 +3642,10 @@ class KNGraph:
         return self.ascend_call(**kwargs)  # Use same implementation for now
 
     def maca_call(self, **kwargs):
-        """Execute the optimized graph on MetaX MACA GPU"""
-        return self.ascend_call(**kwargs)  # Use same implementation for now
+        """Execute the optimized graph on MetaX MACA GPU (mcPytorch CUDA API)."""
+        if torch.cuda.is_available():
+            return self.cuda_call(**kwargs)
+        return self.ascend_call(**kwargs)
 
     def cuda_call(self, **kwargs):
         results = self.compile(**kwargs)
@@ -3719,30 +3792,38 @@ class KNGraph:
                 with open(saved_addr + "test" + str(file_id) + ".cu", "w") as f:
                     f.write(result["code"] + HARD_CODE)
 
-        cc = shutil.which("nvcc")
-        if cc is None:
-            raise RuntimeError("nvcc not found. Please make sure you have installed CUDA.")
-
-        # This function was renamed and made public in Python 3.10
         if hasattr(sysconfig, "get_default_scheme"):
             scheme = sysconfig.get_default_scheme()
         else:
             scheme = sysconfig._get_default_scheme()
-        # 'posix_local' is a custom scheme on Debian. However, starting Python 3.10, the default install
-        # path changes to include 'local'. This change is required to use triton with system-wide python.
         if scheme == "posix_local":
             scheme = "posix_prefix"
         py_include_dir = sysconfig.get_paths(scheme=scheme)["include"]
-        cc_cmd = get_cc_cmd(
-            target_cc,
-            cc,
-            FILE_NAME,
-            py_include_dir,
-            INCLUDE_PATH,
-            DEPS_PATH,
-            so_path,
-            profiling,
-        )
+
+        cc, compiler_kind = _resolve_gpu_compiler()
+        maca_path = _detect_maca_sdk_path() if compiler_kind == "mxcc" else None
+        if compiler_kind == "mxcc":
+            cc_cmd = get_mxcc_cc_cmd(
+                cc,
+                maca_path,
+                FILE_NAME,
+                py_include_dir,
+                INCLUDE_PATH,
+                DEPS_PATH,
+                so_path,
+                profiling,
+            )
+        else:
+            cc_cmd = get_cc_cmd(
+                target_cc,
+                cc,
+                FILE_NAME,
+                py_include_dir,
+                INCLUDE_PATH,
+                DEPS_PATH,
+                so_path,
+                profiling,
+            )
 
         def remain_op():
             import importlib.util
@@ -3916,14 +3997,14 @@ class KNGraph:
         elif backend == "maca":
             # MetaX MACA GPU-specific optimization
             if griddims is None and blockdims is None and franges is None:
-                from ..backends.maca.config import get_maca_search_config
+                from ..backends.maca.config import resolve_maca_search_config
 
-                maca_config = get_maca_search_config()
+                maca_config = resolve_maca_search_config()
                 griddims = maca_config.get("grid_dims_to_explore")
                 blockdims = maca_config.get("block_dims_to_explore")
                 fmaps = maca_config.get("fmaps_to_explore")
                 franges = maca_config.get("franges_to_explore")
-                print(f"✓ MACA backend: Using MetaX GPU optimized search")
+                print("✓ MACA backend: Using MetaX GPU optimized search")
                 print(f"  - warpSize: 64 (NOT 32 like NVIDIA!)")
                 print(f"  - Grids: {len(griddims)} configs (SM blocks)")
                 print(f"  - Blocks: {len(blockdims)} configs (64-thread warp aligned)")

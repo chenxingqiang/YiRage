@@ -9,12 +9,27 @@ on MetaX MACA GPU.
 import torch
 import time
 import numpy as np
+import os
+import sys
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
 import yirage
+from demo._maca_utils import (
+    apply_maca_demo_env,
+    benchmark_callable,
+    benchmark_mugraph,
+    maca_search_kwargs,
+    sync_device,
+)
 from yirage.maca_config import (
     MACA_WARP_SIZE,
     get_maca_search_config,
     get_maca_device_info,
     is_maca_available,
+    resolve_maca_search_config,
 )
 
 # Benchmark configurations
@@ -60,35 +75,32 @@ def benchmark_pytorch_matmul(M, N, K, device, warmup=WARMUP_ITERS, iters=BENCHMA
     return (end - start) / iters
 
 
-def benchmark_yirage_matmul(M, N, K, config, warmup=WARMUP_ITERS, iters=BENCHMARK_ITERS):
-    """Benchmark YiRage optimized matrix multiplication."""
-    # Create YiRage kernel graph
+def benchmark_yirage_matmul(M, N, K, device, warmup=WARMUP_ITERS, iters=BENCHMARK_ITERS):
+    """Benchmark YiRage MACA superoptimized matmul on GPU."""
+    apply_maca_demo_env()
+    search = maca_search_kwargs()
     graph = yirage.new_kernel_graph()
     A = graph.new_input(dims=(M, K), dtype=yirage.float16)
     B = graph.new_input(dims=(K, N), dtype=yirage.float16)
     C = graph.matmul(A, B)
     graph.mark_output(C)
 
-    # Get optimized kernel
     try:
-        # Try to get optimized kernel from search
-        block_dims = config.get("block_dims_to_explore", [])
-        grid_dims = config.get("grid_dims_to_explore", [])
-        franges = config.get("franges_to_explore", [])
-
-        result = graph.superoptimize(
-            griddims=grid_dims[:3] if grid_dims else None,  # Limit search space
-            blockdims=block_dims[:5] if block_dims else None,
-            franges=franges if franges else None,
-            backend="cpu",
+        opt = graph.superoptimize(
+            backend="maca",
+            use_ray=False,
             verbose=False,
+            **search,
         )
-
-        if result:
-            # Return estimated time based on search
-            return 0.001  # Placeholder - actual profiling needs MACA runtime
-        else:
+        if opt is None or device.type != "cuda":
             return None
+
+        a_t = torch.randn(M, K, dtype=DTYPE, device=device)
+        b_t = torch.randn(K, N, dtype=DTYPE, device=device)
+        opt.backend = "maca"
+        elapsed = benchmark_mugraph(opt, [a_t, b_t], warmup=warmup, iters=iters)
+        sync_device(device)
+        return elapsed
     except Exception as e:
         print(f"    YiRage optimization: {e}")
         return None
@@ -176,25 +188,15 @@ def run_matmul_benchmarks(device, maca_config):
     for M, N, K, name in configs:
         print(f"\n  [{name}] M={M}, N={N}, K={K}")
 
-        # PyTorch baseline
         pytorch_time = benchmark_pytorch_matmul(M, N, K, device)
-        print(f"    PyTorch: {pytorch_time*1000:.3f} ms")
-
-        # YiRage with MACA config
-        # Note: Full optimization requires MACA GPU execution
-        # Here we show the search configuration being applied
-        print(f"    YiRage MACA config applied:")
-        print(f"      Block dims: {len(maca_config.get('block_dims_to_explore', []))} (64-aligned)")
-        print(f"      Warp size: {MACA_WARP_SIZE}")
-
-        # Theoretical speedup estimation based on MACA optimizations
-        # MACA C500 has 104 SMs, 64-thread warps
-        theoretical_speedup = 1.0  # Baseline
-        if M >= 512 and N >= 512:
-            theoretical_speedup = 1.2  # Tensor core potential
-
-        print(f"    Theoretical speedup potential: {theoretical_speedup:.1f}x")
-        results.append((name, M, N, K, pytorch_time))
+        yirage_time = benchmark_yirage_matmul(M, N, K, device)
+        if yirage_time is not None:
+            print_result(name, pytorch_time, yirage_time)
+            results.append((name, M, N, K, pytorch_time, yirage_time))
+        else:
+            print(f"    PyTorch: {pytorch_time*1000:.3f} ms")
+            print(f"    YiRage:  (search/exec unavailable)")
+            results.append((name, M, N, K, pytorch_time, None))
 
     return results
 
@@ -271,8 +273,8 @@ def main():
         print("  PyTorch device: CPU (no GPU available)")
 
     # Get MACA config
-    maca_config = get_maca_search_config()
-    print(f"\n  MACA Search Configuration:")
+    maca_config = resolve_maca_search_config()
+    print(f"\n  MACA Search Configuration (quick default):")
     print(f"    Block dims: {len(maca_config.get('block_dims_to_explore', []))} configs")
     print(f"    Grid dims: {len(maca_config.get('grid_dims_to_explore', []))} configs")
     print(f"    Forloop ranges: {maca_config.get('franges_to_explore', [])}")

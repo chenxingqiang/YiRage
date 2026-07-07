@@ -325,6 +325,7 @@ pytest tests/python/test_backends.py -k maca -v
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
+- **Loop R1（2026-07-07，demo/kernel 性能路径，PR 待合并）**：闸门：执行层 + 感知/工具层。根因：`yirage.maca_config` 缺失、`maca_call` 走 ascend 解释器、`compile()` 仅 nvcc、demo/bench 用 `backend=cpu` 与占位计时。修复：`maca_config.py` shim、`get_maca_search_config_quick`/`resolve_maca_search_config`、`maca_call→cuda_call`（mcPytorch）、`mxcc` 编译回退、`demo/_maca_utils.py` + demo/bench 真实 `superoptimize(backend=maca)` + GPU 计时。验证：`pytest tests/python/test_maca_config.py`；MetaX VM：`YIRAGE_BACKEND=maca pip install -e .` → `python3 demo/maca_superopt_test.py` → `python3 benchmark/maca_vs_pytorch.py`。
 
 - **协议（2026-07-07）**：MACA 改动须在 MetaX GPU VM 验证通过后合并；禁止用 CPU cert/loop-close 替代。
 - **协议（框架对齐）**：每轮策略前必过执行前闸门 — 融合上浮、原语对齐 mcPytorch，64-thread warp 约束。

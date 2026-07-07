@@ -16,9 +16,10 @@ import numpy as np
 import sys
 import os
 
-# Add YiRage to path
-sys.path.insert(0, "/root/YiRage/python")
-os.environ["MACA_PATH"] = "/opt/maca"
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+os.environ.setdefault("MACA_PATH", "/opt/maca")
 
 # Import YiRage MACA config
 try:
@@ -26,7 +27,14 @@ try:
         MACA_WARP_SIZE,
         get_maca_search_config,
         get_maca_device_info,
+        resolve_maca_search_config,
     )
+    from demo._maca_utils import (
+        apply_maca_demo_env,
+        benchmark_mugraph,
+        maca_search_kwargs,
+    )
+    import yirage
 
     YIRAGE_AVAILABLE = True
 except ImportError:
@@ -190,6 +198,26 @@ def benchmark_fused_matmul_gelu(M, N, K, device, warmup=WARMUP_ITERS, iters=BENC
     return (end - start) / iters
 
 
+def benchmark_yirage_matmul(M, N, K, device, warmup=5, iters=20):
+    """YiRage MACA superoptimize + GPU execution (quick search)."""
+    if not YIRAGE_AVAILABLE:
+        return None
+    apply_maca_demo_env()
+    search = maca_search_kwargs()
+    graph = yirage.new_kernel_graph()
+    a = graph.new_input(dims=(M, K), dtype=yirage.float16)
+    b = graph.new_input(dims=(K, N), dtype=yirage.float16)
+    c = graph.matmul(a, b)
+    graph.mark_output(c)
+    opt = graph.superoptimize(backend="maca", use_ray=False, verbose=False, **search)
+    if opt is None:
+        return None
+    a_t = torch.randn(M, K, dtype=DTYPE, device=device)
+    b_t = torch.randn(K, N, dtype=DTYPE, device=device)
+    opt.backend = "maca"
+    return benchmark_mugraph(opt, [a_t, b_t], warmup=warmup, iters=iters)
+
+
 def run_matmul_benchmarks(device):
     """Run matrix multiplication benchmarks."""
     print_header("Matrix Multiplication (GEMM)")
@@ -203,16 +231,24 @@ def run_matmul_benchmarks(device):
         (8192, 8192, 8192, "XXLarge"),
     ]
 
-    print(f"\n  {'Config':<10} {'M×N×K':<18} {'Time (ms)':<12} {'TFLOPS':<10}")
-    print("  " + "-" * 55)
+    print(f"\n  {'Config':<10} {'M×N×K':<18} {'PyTorch (ms)':<14} {'YiRage (ms)':<14} {'Speedup':<8}")
+    print("  " + "-" * 70)
 
     results = []
     for M, N, K, name in configs:
-        time_s = benchmark_matmul(M, N, K, device)
+        pt_s = benchmark_matmul(M, N, K, device)
+        yr_s = benchmark_yirage_matmul(M, N, K, device) if YIRAGE_AVAILABLE else None
         flops = 2 * M * N * K
-        tflops = flops / time_s / 1e12
-        print(f"  {name:<10} {M}×{N}×{K:<8} {time_s*1000:>10.4f}  {tflops:>8.2f}")
-        results.append((name, M, N, K, time_s, tflops))
+        tflops = flops / pt_s / 1e12
+        pt_ms = pt_s * 1000
+        if yr_s is not None:
+            speedup = pt_s / yr_s if yr_s > 0 else 0
+            print(
+                f"  {name:<10} {M}×{N}×{K:<8} {pt_ms:>12.4f}  {yr_s*1000:>12.4f}  {speedup:>6.2f}x"
+            )
+        else:
+            print(f"  {name:<10} {M}×{N}×{K:<8} {pt_ms:>12.4f}  {'N/A':>12}  {'—':>8}")
+        results.append((name, M, N, K, pt_s, tflops, yr_s))
 
     return results
 

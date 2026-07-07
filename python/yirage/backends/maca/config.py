@@ -97,6 +97,35 @@ def get_maca_search_config() -> Dict[str, Any]:
     }
 
 
+def get_maca_search_config_quick() -> Dict[str, Any]:
+    """
+    Tractable MACA search space for demos, smoke tests, and quick benchmarks.
+
+    Single grid × single block × one forloop range keeps superoptimize finishable
+    on C500 while still exercising 64-thread warp constraints.
+    """
+    base = get_maca_search_config()
+    return {
+        **base,
+        "grid_dims_to_explore": [(4, 1, 1)],
+        "block_dims_to_explore": [(256, 1, 1)],
+        "fmaps_to_explore": [-1],
+        "franges_to_explore": [8],
+    }
+
+
+def resolve_maca_search_config(*, quick: Optional[bool] = None) -> Dict[str, Any]:
+    """Return full or quick MACA search config (env: ``YIRAGE_MACA_SEARCH_QUICK``)."""
+    if quick is None:
+        quick = os.environ.get("YIRAGE_MACA_SEARCH_QUICK", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+    return get_maca_search_config_quick() if quick else get_maca_search_config()
+
+
 def get_maca_matmul_config() -> Dict[str, Any]:
     """
     Get optimized matrix multiplication configuration for MACA
@@ -341,6 +370,8 @@ __all__ = [
     "MACA_REGISTERS_PER_SM",
     "MACA_SM_COUNT_C500",
     "get_maca_search_config",
+    "get_maca_search_config_quick",
+    "resolve_maca_search_config",
     "get_maca_matmul_config",
     "get_maca_memory_config",
     "get_maca_device_info",
