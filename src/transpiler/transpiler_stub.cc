@@ -1,6 +1,6 @@
-/* Transpiler stub for non-CUDA builds */
+/* Transpiler stub for builds without the host transpiler */
 
-#ifndef YIRAGE_BACKEND_CUDA_ENABLED
+#ifndef YIRAGE_HOST_TRANSPILER_ENABLED
 
 #include "kernel/graph.h"
 #include <vector>
@@ -94,5 +94,5 @@ void Graph::generate_triton_program(char const *filepath) {
 
 } // namespace yirage
 
-#endif // !YIRAGE_BACKEND_CUDA_ENABLED
+#endif // !YIRAGE_HOST_TRANSPILER_ENABLED
 

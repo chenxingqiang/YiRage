@@ -112,9 +112,13 @@ PyMODINIT_FUNC PyInit___yirage_launcher(void) {
 # Because pip install -e . and pip install . have different directory structure,
 # we need to check the directory structure to find the correct YIRAGE_ROOT.
 def get_key_paths():
-    root_dir = os.path.join(os.path.dirname(__file__), "../..")  # Using pip install -e .
-    if not os.path.exists(os.path.join(root_dir, "deps")):  # Using pip install .
-        root_dir = os.path.dirname(__file__)
+    here = os.path.dirname(os.path.abspath(__file__))
+    # graph.py: python/yirage/kernel/graph.py (editable) or site-packages layout
+    root_dir = os.path.abspath(os.path.join(here, "../../.."))
+    if not os.path.exists(os.path.join(root_dir, "deps")):
+        root_dir = os.path.abspath(os.path.join(here, "../.."))
+    if not os.path.exists(os.path.join(root_dir, "deps")):
+        root_dir = here
 
     # If YIRAGE_ROOT is not set, use the root_dir as YIRAGE_ROOT
     YIRAGE_ROOT = os.environ.get("YIRAGE_ROOT", root_dir)
@@ -228,6 +232,21 @@ def _resolve_gpu_compiler():
     )
 
 
+def _resolve_transpiler_target_cc(kwargs: dict) -> int:
+    """Pick transpiler GPU_CC for codegen + smem limits."""
+    if kwargs.get("target_cc") is not None:
+        return int(kwargs["target_cc"])
+    if torch is None or not torch.cuda.is_available():
+        return 80
+    props = torch.cuda.get_device_properties(0)
+    cc = props.major * 10 + props.minor
+    # MetaX mxcc + 64-thread warps: CUTLASS ldmatrix paths assume 32-thread warps.
+    # Cap at Volta until MACA warp-aware TB codegen is wired through search.
+    if _resolve_gpu_compiler()[1] == "mxcc":
+        return min(cc, 70)
+    return cc
+
+
 def get_mxcc_cc_cmd(
     mxcc,
     maca_path,
@@ -238,35 +257,50 @@ def get_mxcc_cc_cmd(
     so_path,
     profiling,
 ):
+    maca_compat = os.path.join(INCLUDE_PATH, "transpiler/runtime/maca_compat")
+    runtime_inc = os.path.join(INCLUDE_PATH, "transpiler/runtime")
+    cutlass_inc = os.path.join(DEPS_PATH, "cutlass/include")
+    # Shims first, then YiRage CUTLASS/cute (do NOT prefer /opt/maca/include/cute —
+    # version skew breaks transpiler runtime templates). MACA SDK common/mcr only.
+    include_dirs = [maca_compat, py_include_dir, runtime_inc, cutlass_inc]
+    if maca_path:
+        include_dirs.extend(
+            [
+                f"{maca_path}/include/common",
+                f"{maca_path}/include/mcr",
+                f"{maca_path}/include/mcblas",
+            ]
+        )
+
     cmd = [
         mxcc,
         "-x",
         "maca",
         FILE_NAME,
         "-O3",
-        f"-I{py_include_dir}",
-        f"-I{os.path.join(INCLUDE_PATH, 'transpiler/runtime')}",
-        f"-I{os.path.join(DEPS_PATH, 'cutlass/include')}",
-        "-DYIRAGE_BACKEND_USE_CUDA",
-        "-DYIRAGE_BACKEND_MACA_ENABLED",
-        "-shared",
-        "-std=c++17",
-        "-fPIC",
-        "-o",
-        so_path,
     ]
+    for inc in include_dirs:
+        cmd.append(f"-I{inc}")
+    cmd.extend(
+        [
+            "-DYIRAGE_BACKEND_USE_CUDA",
+            "-DYIRAGE_BACKEND_MACA_ENABLED",
+            "-D__CUDACC__",
+            "-D__NVCC__",
+            "-DCUTE_ARCH_LDSM_SM75_ACTIVATED=1",
+            "-shared",
+            "-std=c++17",
+            "-fPIC",
+            "-o",
+            so_path,
+        ]
+    )
     if maca_path:
         cmd.append(f"--maca-path={maca_path}")
-        cmd.extend(
-            [
-                f"-I{maca_path}/include",
-                f"-I{maca_path}/include/mcr",
-                f"-L{maca_path}/lib",
-            ]
-        )
+        cmd.append(f"-L{maca_path}/lib")
     if profiling:
         cmd.append("-DYIRAGE_ENABLE_PROFILER")
-    cmd.extend(["-lmcruntime", "-lmcblas", "-lcublas"])
+    cmd.extend(["-lmcruntime", "-lmcblas"])
     return cmd
 
 
@@ -3736,11 +3770,7 @@ class KNGraph:
                 strides, input_tensors[i].stride()
             )
             input_strides.append(strides)
-        target_cc = kwargs.get(
-            "target_cc",
-            torch.cuda.get_device_properties(0).major * 10
-            + torch.cuda.get_device_properties(0).minor,
-        )
+        target_cc = _resolve_transpiler_target_cc(kwargs)
         num_warp_groups = kwargs.get("num_warp_groups", 2)
         pipeline_stages = kwargs.get("pipeline_stages", 2)
         # TODO, add profling for Ampere later to show gpu wave
@@ -4774,7 +4804,7 @@ class KNGraph:
                 while handles:
                     handles.popleft().wait()
 
-                # Profile all graphs
+                # Profile all graphs (skip graphs that fail at runtime on MACA)
                 for idx, g in enumerate(all_graphs):
                     dtensors = g.cygraph.get_input_dtensors()
                     input_tensors = list()
@@ -4788,24 +4818,31 @@ class KNGraph:
                         )
                         x = torch.as_strided(x, size=dims, stride=strides)
                         input_tensors.append(x)
-                    starter = torch.cuda.Event(enable_timing=True)
-                    ender = torch.cuda.Event(enable_timing=True)
                     if not g.valid_kernels():
                         print("muGraph {}: {}".format(idx, g.get_error_message()))
                         continue
-                    # Warmup runs
-                    for _ in range(warmup_iters):
-                        g(inputs=input_tensors)
-                    torch.cuda.synchronize()
-                    starter.record()
-                    for _ in range(profile_iters):
-                        g(inputs=input_tensors)
-                    ender.record()
-                    torch.cuda.synchronize()
-                    perf = starter.elapsed_time(ender) / profile_iters
-                    print("muGraph {}: profiled performance (ms) = {}".format(idx, perf))
-                    if perf < best_perf:
-                        best_graph, best_perf = g, perf
+                    try:
+                        for _ in range(warmup_iters):
+                            g(inputs=input_tensors)
+                        torch.cuda.synchronize()
+                    except Exception as e:
+                        print(f"  muGraph[{idx}]: warmup failed - {e}")
+                        continue
+                    try:
+                        starter = torch.cuda.Event(enable_timing=True)
+                        ender = torch.cuda.Event(enable_timing=True)
+                        starter.record()
+                        for _ in range(profile_iters):
+                            g(inputs=input_tensors)
+                        ender.record()
+                        torch.cuda.synchronize()
+                        perf = starter.elapsed_time(ender) / profile_iters
+                        print("muGraph {}: profiled performance (ms) = {}".format(idx, perf))
+                        if perf < best_perf:
+                            best_graph, best_perf = g, perf
+                    except Exception as e:
+                        print(f"  muGraph[{idx}]: profiling failed - {e}")
+                        continue
 
             if best_graph is not None:
                 best_graph.backend = "maca"

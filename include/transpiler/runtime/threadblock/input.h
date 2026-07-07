@@ -14,12 +14,14 @@
 
 #pragma once
 
+#ifndef YIRAGE_BACKEND_MACA_ENABLED
 #include "cute/arch/cluster_sm100.hpp"
 #include "cute/arch/cluster_sm90.hpp"
 #include "cutlass/gemm/collective/builders/sm100_common.inl"
 #include "cutlass/gemm/collective/builders/sm90_common.inl"
 #include "cutlass/gemm/gemm.h"
 #include "cutlass/pipeline/pipeline.hpp"
+#endif
 #include "utils.h"
 #include <cstdint>
 #include <cute/layout.hpp>
@@ -147,19 +149,26 @@ public:
       uint32_t dst_addr =
           dst_base_addr +
           dst_layout(dst_chunked_coord2coord(chunk_idx)) * sizeof(T);
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+      // mxcc: cp.async PTX ('l' constraint) is unsupported; use sync 128-bit copy.
+      T const *src_ptr = src + src_layout(src_chunked_coord2coord(chunk_idx));
+      T *dst_ptr = dst + dst_layout(dst_chunked_coord2coord(chunk_idx));
+      *reinterpret_cast<uint128_t *>(dst_ptr) =
+          *reinterpret_cast<uint128_t const *>(src_ptr);
+#else
       asm volatile(
           "cp.async.cg.shared.global.L2::128B [%0], [%1], 16;" ::"r"(dst_addr),
           "l"(src_addr));
+#endif
     }
   }
 };
 
+#ifndef YIRAGE_BACKEND_MACA_ENABLED
 template <typename T,
           class DstLayout,
           class SrcLayout,
           class TMA,
-          // class MainloopPipeline,
-          // class PipelineState,
           class HopperAsyncPipeline,
           bool MInput,
           int K_ITER>
@@ -393,5 +402,7 @@ public:
     }
   }
 };
+
+#endif // YIRAGE_BACKEND_MACA_ENABLED
 
 } // namespace tb

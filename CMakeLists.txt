@@ -202,6 +202,13 @@ if ("${USE_CUDA}" STREQUAL "ON")
   message(STATUS "CUDA backend enabled, including .cu files and transpiler")
 elseif ("${USE_MACA}" STREQUAL "ON")
   # MACA: CUDA-compatible transpiler (host C++) + mxcc JIT; no nvcc .cu objects
+  # C500 uses baseline transpiler only (exclude NVIDIA Hopper/Blackwell TB emitters).
+  set(_YIRAGE_MACA_TRANSPILER_EXCLUDE
+    ${CMAKE_SOURCE_DIR}/src/transpiler/ascend_transpiler.cc
+    ${CMAKE_SOURCE_DIR}/src/transpiler/ascend_transpiler_stub.cc
+  )
+  list(REMOVE_ITEM YIRAGE_SRCS ${_YIRAGE_MACA_TRANSPILER_EXCLUDE})
+  list(APPEND YIRAGE_SRCS src/kernel/graph_cuda_api_stubs.cc)
   message(STATUS "MACA backend enabled, including CUDA transpiler (mxcc JIT)")
 else()
   # CUDA disabled: exclude transpiler, triton_transpiler, and nki_transpiler
@@ -405,6 +412,7 @@ if ("${USE_CUDA}" STREQUAL "ON")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)  # Backward compatibility
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CUDA)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_HOST_TRANSPILER_ENABLED)
   
   # Enable OpenMP for parallel search with CUDA
   find_package(OpenMP)
@@ -414,10 +422,10 @@ if ("${USE_CUDA}" STREQUAL "ON")
     message(STATUS "OpenMP enabled for CUDA parallel search (YIRAGE_ENABLE_PARALLEL_SEARCH defined)")
   endif()
 elseif ("${USE_MACA}" STREQUAL "ON")
-  # MACA: CUDA-compatible transpiler for generate_cuda_program; mxcc compiles emitted .cu
-  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
-  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)
-  message(STATUS "MACA transpiler enabled (YIRAGE_BACKEND_USE_CUDA for mxcc JIT)")
+  # MACA: host CUDA-compatible transpiler for generate_cuda_program; mxcc compiles emitted code.
+  # Do NOT define YIRAGE_BACKEND_CUDA_ENABLED (no cuda_runtime.h on MACA hosts).
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_HOST_TRANSPILER_ENABLED)
+  message(STATUS "MACA host transpiler enabled (mxcc JIT)")
 elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
   # Ascend NPU - don't define CPU fingerprint, Ascend has its own
   message(STATUS "Using Ascend fingerprint (parallel search enabled)")

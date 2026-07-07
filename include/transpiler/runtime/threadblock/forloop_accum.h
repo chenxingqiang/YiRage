@@ -22,7 +22,10 @@ public:
     uint128_t *accum_128 = reinterpret_cast<uint128_t *>(accum);
     for (int elem_idx = thread_idx; elem_idx < NUM_ELEMS / GROUP_SIZE;
          elem_idx += NUM_THREADS) {
-      accum_128[elem_idx] = 0ul;
+      unsigned long long *chunk =
+          reinterpret_cast<unsigned long long *>(&accum_128[elem_idx]);
+      chunk[0] = 0ULL;
+      chunk[1] = 0ULL;
     }
   }
 };

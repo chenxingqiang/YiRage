@@ -69,7 +69,12 @@ __device__ __forceinline__ uint32_t make_event_tag_instant(uint32_t base_tag,
 
 __device__ __forceinline__ uint32_t get_timestamp() {
   uint32_t volatile ret;
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+  // mxcc: %globaltimer_lo PTX is unsupported in transpiler profiling path.
+  ret = 0u;
+#else
   asm volatile("mov.u32 %0, %globaltimer_lo;" : "=r"(ret));
+#endif
   return ret;
 }
 
