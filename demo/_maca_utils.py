@@ -15,6 +15,7 @@ def apply_maca_demo_env() -> None:
     """Default tractable MACA search for smoke demos (override with env)."""
     os.environ.setdefault("YIRAGE_MACA_SEARCH_QUICK", "1")
     os.environ.setdefault("YIRAGE_MACA_SKIP_PROFILE", "1")
+    os.environ.setdefault("YIRAGE_MACA_TORCH_MATMUL", "1")
     os.environ.setdefault("MACA_PATH", "/opt/maca")
 
 

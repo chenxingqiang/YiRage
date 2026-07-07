@@ -3643,6 +3643,17 @@ class KNGraph:
 
     def maca_call(self, **kwargs):
         """Execute the optimized graph on MetaX MACA GPU (mcPytorch CUDA API)."""
+        use_torch_matmul = os.environ.get(
+            "YIRAGE_MACA_TORCH_MATMUL", "1"
+        ).strip().lower() in ("1", "true", "yes", "on")
+        input_tensors = kwargs.get("inputs", [])
+        if (
+            use_torch_matmul
+            and len(input_tensors) == 2
+            and _is_plain_matmul_mugraph(self.cygraph)
+            and torch.cuda.is_available()
+        ):
+            return [torch.matmul(input_tensors[0], input_tensors[1])]
         if torch.cuda.is_available():
             return self.cuda_call(**kwargs)
         return self.ascend_call(**kwargs)
