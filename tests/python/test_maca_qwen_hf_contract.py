@@ -65,6 +65,35 @@ def test_maca_rebuild_core_script_exists_and_documents_smem():
     assert text.startswith("#!/usr/bin/env bash")
 
 
+def test_qwen_from_pretrained_demo_exists_and_uses_maca_modeling():
+    demo = _REPO / "demo" / "maca" / "qwen_from_pretrained_demo.py"
+    assert demo.is_file()
+    text = demo.read_text(encoding="utf-8")
+    assert "modeling_qwen2_maca" in text
+    assert "from_pretrained" in text
+    assert "superoptimize_kernels" in text
+    assert "demo/qwen2.5/demo.py" in text
+    assert "--max-layers" in text
+
+
+def test_modeling_qwen2_maca_superoptimize_uses_maca_backend():
+    modeling = _REPO / "demo" / "maca" / "models" / "modeling_qwen2_maca.py"
+    assert modeling.is_file()
+    text = modeling.read_text(encoding="utf-8")
+    assert "superoptimize_mlp_gate_up" in text
+    assert "superoptimize_attn_qkv" in text
+    assert "qwen_kernel_utils" in text
+    assert "import flashinfer" not in text
+
+
+def test_qwen_kernel_utils_maca_search_contract():
+    utils_path = _REPO / "demo" / "maca" / "qwen_kernel_utils.py"
+    text = utils_path.read_text(encoding="utf-8")
+    assert 'backend": "maca"' in text or "backend='maca'" in text
+    assert "maca_search_kwargs" in text
+    assert "superoptimize_mlp_gate_up" in text
+
+
 @pytest.mark.skipif(
     not (_REPO / "demo" / "maca" / "qwen_hf_utils.py").is_file(),
     reason="qwen_hf_utils missing",

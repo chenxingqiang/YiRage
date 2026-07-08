@@ -66,3 +66,12 @@ def test_maca_qwen_demo_script_exists():
     assert 'backend="maca"' in text or "backend='maca'" in text
     assert "--model" in text
     assert "qwen_hf_utils" in text
+    assert "qwen_kernel_utils" in text
+
+
+def test_maca_qwen_from_pretrained_demo_exists():
+    demo = _REPO / "demo" / "maca" / "qwen_from_pretrained_demo.py"
+    assert demo.is_file()
+    text = demo.read_text(encoding="utf-8")
+    assert "modeling_qwen2_maca" in text
+    assert "--max-layers" in text

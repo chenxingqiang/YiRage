@@ -69,8 +69,9 @@ def resolve_qwen_dims(
 
 
 def describe_from_pretrained_gap() -> str:
-    """Document full-weight ``from_pretrained`` requirements on MACA."""
+    """Document full-weight ``from_pretrained`` entry on MACA."""
     return (
-        "Full HF weights require MetaX VM + flashinfer (see demo/qwen2.5/models/modeling_qwen2.py). "
-        "Use --model Qwen/Qwen3-8B --config-only for Hub config smoke without weight download."
+        "Full HF weights: demo/maca/qwen_from_pretrained_demo.py "
+        "(modeling_qwen2_maca.superoptimize_kernels, backend=maca). "
+        "Use --max-layers 1 --quick for smoke; requires MetaX VM + mcPytorch."
     )

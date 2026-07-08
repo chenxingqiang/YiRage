@@ -118,7 +118,7 @@ MACA 无限闭环的**首要优化目标**是：在 MetaX 真卡上，使 YiRage
 | **融合 vs 库基线** | fused vs `torch` CUDA | fused vs **mcPytorch** on MACA | `benchmark/maca_vs_pytorch.py --quick` |
 | **Ray 分布式搜索** | `superoptimize(use_ray=True)` + `DistributedSearchCoordinator` | 同 API；MACA demo 暂 `use_ray=False` | `tests/integration/test_ray_maca_e2e.py`（MetaX VM）；CPU 镜像 `test_ray_cpu_e2e.py` |
 | **RL 分层搜索** | `ConstrainedGraphEnv` + AccelForge prescreen + walkthrough | RL 编码含 `maca`；CPU walkthrough + **MACA walkthrough** | `tests/python/test_maca_rl_ray_capability.py`；**MetaX** `scripts/maca_capability_walkthrough.py` |
-| **Qwen 全链路推理** | `demo/qwen2.5/demo.py`（HF load → superoptimize → decode） | `demo/maca/qwen_inference_demo.py`（Qwen3 形状 → maca superoptimize → prefill+decode） | **MetaX VM** `demo/maca/qwen_inference_demo.py --quick`；`benchmark/end-to-end/maca/qwen_maca.py` |
+| **Qwen 全链路推理** | `demo/qwen2.5/demo.py`（HF load → superoptimize → decode） | `demo/maca/qwen_inference_demo.py`（合成权重 smoke）；`demo/maca/qwen_from_pretrained_demo.py`（HF 全权重） | **MetaX VM** `qwen_inference_demo.py --quick`；`qwen_from_pretrained_demo.py --max-layers 1 --quick` |
 
 矩阵扩展时：在「当前轮次笔记」或 PR 中增一行 **CUDA 参照 PR/commit + MACA 验证命令**；禁止只改文档不补真卡测试。
 
@@ -149,13 +149,13 @@ MACA 无限闭环的**首要优化目标**是：在 MetaX 真卡上，使 YiRage
 
 | | CUDA | MACA |
 |---|------|------|
-| **参照 demo** | `demo/qwen2.5/demo.py`（`Qwen/Qwen3-8B`、chat template、CUDA Graph decode） | `demo/maca/qwen_inference_demo.py` |
-| **融合内核** | `modeling_qwen2.superoptimize_kernels()` → 默认 cuda transpiler | 同构图 `superoptimize(backend="maca", config="mlp")` |
+| **参照 demo** | `demo/qwen2.5/demo.py`（`Qwen/Qwen3-8B`、chat template、CUDA Graph decode） | `demo/maca/qwen_inference_demo.py`（合成）；`demo/maca/qwen_from_pretrained_demo.py`（HF 全权重） |
+| **融合内核** | `modeling_qwen2.superoptimize_kernels()` → 默认 cuda transpiler | `modeling_qwen2_maca.superoptimize_kernels()` → `backend=maca` via `qwen_kernel_utils` |
 | **Decode 路径** | `q_len==1` → YiRage MLP + attn kernels | 同语义：prefill PyTorch → decode YiRage |
 | **e2e bench** | CI `tests/ci-tests/qwen2.5/demo.py` | `benchmark/end-to-end/maca/qwen_maca.py` |
 | **真卡验证** | NVIDIA GPU | **MetaX VM** `--quick` smoke；`tests/integration/test_maca_qwen_inference_demo.py` |
 
-**尚未对标（backlog）**：`demo/qwen3/demo.py --use-yirage` PersistentKernel 路径、HF 全权重 `from_pretrained` on MACA（`--from-pretrained` 需 MetaX VM + flashinfer；`--model --config-only` 已支持 Hub config 形状 smoke）。
+**尚未对标（backlog）**：`demo/qwen3/demo.py --use-yirage` PersistentKernel 路径、HF 全权重 CUDA Graph decode on MACA（`qwen_from_pretrained_demo.py` 已实现 eager decode；CUDA Graph 待补）。
 
 
 #### 对齐策略（每轮策略层）
@@ -481,6 +481,7 @@ pytest tests/python/test_backends.py -k maca -v
 - **Loop R9（2026-07-08，MACA Ray opt-in + smem 源码契约，PR #152）**：闸门：图级/工具契约层（闭合 R8 `use_ray` 硬编码 gap）。`demo/_maca_utils.py` 增 `resolve_maca_use_ray()` / `maca_superoptimize_ray_kwargs()`（`YIRAGE_MACA_USE_RAY=1` opt-in）；`maca_superopt_test`/`demo_maca_optimization`/`qwen_inference_demo` 统一调用；`test_maca_config` 增 `config.h` MACA smem 64KB 断言。验证：pytest `test_maca_config` + `test_maca_rl_ray_capability`（可无卡）；MetaX VM `YIRAGE_MACA_USE_RAY=1 maca_superopt_test.py`。下一轮：**R10** — VM 重编 `yirage.core` 闭合 smem 98304；HF Qwen `from_pretrained`；`RayDistributedEngine` MACA placement。
 - **Loop R10（2026-07-08，RayDistributedEngine MACA placement，PR #152）**：闸门：图级/工具契约层（闭合 R9 `RayDistributedEngine` placement gap）。`maca/config.py` 增 `is_maca_torch_device_available` / `resolve_maca_gpus_per_worker` / `maca_ray_gpu_placement_kwargs`；`RayDistributedEngine._effective_gpus_per_worker` + `create_engine(backend=maca)` 接入；`test_ray_maca_e2e` 改用 placement helper。验证：pytest `test_maca_config` + `test_maca_rl_ray_capability`（可无卡）；MetaX VM `test_ray_maca_e2e::test_ray_distributed_engine_maca`。下一轮：**R11** — VM 重编 `yirage.core` 闭合 smem 98304；HF Qwen `from_pretrained`。
 - **Loop R11（2026-07-08，HF Qwen config scaffold + smem rebuild script，PR #152）**：闸门：图级/工具契约层（闭合 R10 HF/smem backlog 的可 Cloud 落地部分）。`demo/maca/qwen_hf_utils.py`（Hub `config.json` 形状 + `--model`/`--config-only`）；`qwen_inference_demo.py` HF flags；`scripts/maca_rebuild_core.sh`（MetaX VM `YIRAGE_BACKEND=maca pip install -e .` + smem 65536 断言）；`test_maca_qwen_hf_contract.py`。验证：pytest 契约（可无卡）；MetaX VM `bash scripts/maca_rebuild_core.sh` + `qwen_inference_demo --model Qwen/Qwen3-8B --config-only --quick`。下一轮：**R12** — MetaX 全权重 `from_pretrained` + `modeling_qwen2.superoptimize_kernels` on MACA；PersistentKernel qwen3 路径。
+- **Loop R12（2026-07-08，HF from_pretrained + modeling_qwen2_maca，PR #152）**：闸门：图级/正确性（闭合 R11 HF 全权重 backlog）。`demo/maca/qwen_kernel_utils.py`（共享 MACA superoptimize）；`demo/maca/models/modeling_qwen2_maca.py`（无 flashinfer，`superoptimize_kernels` → `backend=maca`）；`demo/maca/qwen_from_pretrained_demo.py`（对齐 `demo/qwen2.5/demo.py`）；`qwen_inference_demo` 复用 kernel utils；`test_maca_qwen_hf_contract` 扩展。验证：pytest 契约（可无卡）；MetaX VM `qwen_from_pretrained_demo.py --model Qwen/Qwen3-8B --max-layers 1 --quick`。下一轮：**R13** — CUDA Graph decode on MACA；`demo/qwen3` PersistentKernel 路径；VM `maca_rebuild_core.sh` smem 闭合。
 
 - **协议（2026-07-07）**：MACA 改动须在 MetaX GPU VM 验证通过后合并；禁止用 CPU cert/loop-close 替代。
 - **协议（2026-07-08，CUDA 对标）**：MACA 算子/融合/搜索须逐项对齐 CUDA 后端能力；每项能力须有 MetaX **真卡**验证入口；性能同后端对 mcPytorch，**功能**以 CUDA 正式路径为参照。

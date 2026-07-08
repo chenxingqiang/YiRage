@@ -31,8 +31,6 @@ if _REPO_ROOT not in sys.path:
 
 from demo._maca_utils import (  # noqa: E402
     apply_maca_demo_env,
-    maca_search_kwargs,
-    maca_superoptimize_ray_kwargs,
     sync_device,
 )
 from demo.maca.qwen_hf_utils import (  # noqa: E402
@@ -41,6 +39,11 @@ from demo.maca.qwen_hf_utils import (  # noqa: E402
     default_qwen_dims,
     describe_from_pretrained_gap,
     resolve_qwen_dims,
+)
+from demo.maca.qwen_kernel_utils import (  # noqa: E402
+    superoptimize_attn_qkv,
+    superoptimize_mlp_down,
+    superoptimize_mlp_gate_up,
 )
 
 
@@ -73,98 +76,6 @@ def _require_maca_device() -> torch.device:
     return torch.device("cuda:0")
 
 
-def _superoptimize_mlp_gate_up(
-    hidden_size: int,
-    intermediate_size: int,
-    *,
-    backend: str,
-    search: Dict[str, Any],
-    dtype,
-):
-    import yirage as yr
-
-    graph = yr.new_kernel_graph()
-    x = graph.new_input(dims=(1, hidden_size), dtype=dtype)
-    g = graph.new_input(dims=(1, hidden_size), dtype=dtype)
-    w = graph.new_input(
-        dims=(hidden_size, 2 * intermediate_size),
-        strides=(1, hidden_size),
-        dtype=dtype,
-    )
-    d = graph.rms_norm(x, normalized_shape=(hidden_size,))
-    d = graph.mul(d, g)
-    o = graph.matmul(d, w)
-    graph.mark_output(o)
-    return graph.superoptimize(
-        backend=backend,
-        config="mlp",
-        verbose=False,
-        **maca_superoptimize_ray_kwargs(),
-        **search,
-    )
-
-
-def _superoptimize_mlp_down(
-    hidden_size: int,
-    intermediate_size: int,
-    *,
-    backend: str,
-    search: Dict[str, Any],
-    dtype,
-):
-    import yirage as yr
-
-    graph = yr.new_kernel_graph()
-    x = graph.new_input(dims=(1, intermediate_size), dtype=dtype)
-    y = graph.new_input(dims=(1, intermediate_size), dtype=dtype)
-    w = graph.new_input(
-        dims=(intermediate_size, hidden_size),
-        strides=(1, intermediate_size),
-        dtype=dtype,
-    )
-    d = graph.mul(graph.silu(x), y)
-    o = graph.matmul(d, w)
-    graph.mark_output(o)
-    return graph.superoptimize(
-        backend=backend,
-        config="mlp",
-        verbose=False,
-        **maca_superoptimize_ray_kwargs(),
-        **search,
-    )
-
-
-def _superoptimize_attn_qkv(
-    hidden_size: int,
-    fused_outdim: int,
-    *,
-    backend: str,
-    search: Dict[str, Any],
-    dtype,
-):
-    import yirage as yr
-
-    graph = yr.new_kernel_graph()
-    x = graph.new_input(dims=(1, hidden_size), dtype=dtype)
-    g = graph.new_input(dims=(1, hidden_size), dtype=dtype)
-    w = graph.new_input(
-        dims=(hidden_size, fused_outdim),
-        strides=(1, hidden_size),
-        dtype=dtype,
-    )
-    d = graph.rms_norm(x, normalized_shape=(hidden_size,))
-    d = graph.mul(d, g)
-    o = graph.matmul(d, w)
-    graph.mark_output(o)
-    return graph.superoptimize(
-        backend=backend,
-        config="mlp",
-        verbose=False,
-        **maca_superoptimize_ray_kwargs(),
-        **search,
-    )
-
-
 def build_qwen_kernels(
     *,
     backend: str = "maca",
@@ -172,39 +83,32 @@ def build_qwen_kernels(
     dtype_name: str = "float16",
     dims: Optional[QwenModelDims] = None,
 ) -> QwenLayerKernels:
-    import yirage as yr
-
     model_dims = dims or default_qwen_dims()
-    dtype = yr.float16 if dtype_name == "float16" else yr.bfloat16
-    search = maca_search_kwargs(quick=quick)
 
     print(
         f"Qwen shapes: H={model_dims.hidden_size} I={model_dims.intermediate_size} "
         f"heads={model_dims.num_heads} kv={model_dims.num_kv_heads}"
     )
     print("Superoptimizing Qwen MLP gate/up (RMS+matmul)...")
-    mlp1 = _superoptimize_mlp_gate_up(
+    mlp1 = superoptimize_mlp_gate_up(
         model_dims.hidden_size,
         model_dims.intermediate_size,
-        backend=backend,
-        search=search,
-        dtype=dtype,
+        dtype_name=dtype_name,
+        quick=quick,
     )
     print("Superoptimizing Qwen MLP down (SiLU gate × up + matmul)...")
-    mlp2 = _superoptimize_mlp_down(
+    mlp2 = superoptimize_mlp_down(
         model_dims.hidden_size,
         model_dims.intermediate_size,
-        backend=backend,
-        search=search,
-        dtype=dtype,
+        dtype_name=dtype_name,
+        quick=quick,
     )
     print("Superoptimizing Qwen attention QKV (RMS+matmul)...")
-    attn = _superoptimize_attn_qkv(
+    attn = superoptimize_attn_qkv(
         model_dims.hidden_size,
         model_dims.fused_qkv_outdim,
-        backend=backend,
-        search=search,
-        dtype=dtype,
+        dtype_name=dtype_name,
+        quick=quick,
     )
     if mlp1 is None or mlp2 is None or attn is None:
         raise RuntimeError("superoptimize returned None — mxcc compile or search failed")
