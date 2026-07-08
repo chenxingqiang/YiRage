@@ -4,6 +4,8 @@
 
 > **当前主后端**：`YIRAGE_BACKEND=maca`（MetaX C500 等 MACA GPU）。CPU 闭环历史见文末 [历史归档：CPU 无限优化闭环](#历史归档cpu-无限优化闭环)。
 
+> **优化北极星（2026-07-08）**：MACA 算子支持、搜索空间、融合模式与执行路径须**逐项对标 CUDA 后端**（`YIRAGE_BACKEND=cuda` / transpiler+nvcc 正式路径），而非仅与 mcPytorch 孤立算子对齐。每项能力在 MetaX **真实 GPU** 上须有对应 smoke / pytest / bench 证据；Cloud CPU VM 或 torch 回退**不能**作为该能力的合并依据。详见 [CUDA 对标：优化目标与能力矩阵](#cuda-对标优化目标与能力矩阵)。
+
 本仓库的持续改进**没有终止条件**。每一轮闭环的目标不是「做完就停」，而是：**感知现状 → 选定瓶颈 → 最小落地 → 用证据验证 → 把结论写回文档与契约 → 进入下一轮**。Cloud Agent 与人类协作者都应把 `AGENTS.md` 当作活文档，每轮验证通过后更新本节或下方 Gotchas。
 
 **不要**为此闭环新增独立编排脚本（例如一键跑完全部阶段的 orchestrator），除非用户明确要求。闭环由 Agent 按层执行现有脚本与测试，并把经验沉淀进文档。
@@ -17,7 +19,8 @@
 | **瓶颈驱动** | 优先修「mxcc 编译失败 / fingerprint 不一致 / 搜索探索了但 MACA kernel 不支持」类问题，再追求微基准 |
 | **最小改动** | 每轮只解决本轮策略选定的 1～2 个瓶颈，避免无关重构 |
 | **验证通过再沉淀** | bench 与 superoptimize smoke 通过后再更新 `AGENTS.md`、`docs/maca_*.md`、kernel 契约 |
-| **框架对齐** | 借鉴 CUDA/Triton 分工：重 GEMM/conv 委托 mcPytorch/cuBLAS 类库；YiRage 价值在**图级融合**（µGraph search、TB customized、64-thread warp tiling），而非孤立 beat `torch.matmul` |
+| **框架对齐** | **CUDA 路径为能力参照系**：原语/图级/搜索/执行分层与 CUDA 后端一致；差异项（64-warp、smem 64KB、mxcc）单独标注；YiRage 价值在**图级融合**（µGraph search、TB customized），而非孤立 beat cuBLAS/mcPytorch |
+| **CUDA 对标** | 每轮须对照 [CUDA 能力矩阵](#cuda-对标优化目标与能力矩阵) 选 gap；新增 MACA 能力时同步补齐真卡验证项；禁止「CUDA 有、MACA 无」且无 backlog 记录 |
 | **执行前价值闸门** | 每轮进入「策略 → 落地」前，必须对照框架目标判断本轮改动是否值得做（见下节）；性能向改动需有 `benchmark/maca_vs_pytorch.py` 或 e2e bench 证据 |
 | **行为性价比** | **每一步**行动前须过 [Agent 行为性价比审查](#agent-行为性价比审查每步必做)；禁止用回退/workaround 冒充正式实现 |
 
@@ -59,9 +62,11 @@ Cloud Agent 在**每一步**行动前（读文件、改代码、跑命令、开 
 在 PR 描述或本轮笔记中**用 1～2 句话**回答：
 
 1. **层级**：本轮改的是 `.maca` 原语层还是图级/搜索层？若原语层，是否因 mxcc 编译失败/静默错误（必须修）？若仅为 beat mcPytorch 孤立 GEMM → **拒绝或降级**。
-2. **路径**：block/grid 是否满足 64-thread warp 约束？`get_maca_search_config()` 与 `GeneratorConfig` MACA 分支是否一致？
-3. **收益**：预期收益类型是什么 — 正确性、搜索可探索、融合加速、还是 persistent kernel？性能向须写明对照基线（如 `benchmark/maca_vs_pytorch.py`）。
-4. **机会成本**：同一轮是否还有更高优先级 backlog（mxcc 编译失败、superoptimize abort、常用融合模式 unsupported）？
+2. **CUDA 对标**：闭合 [能力矩阵](#cuda-对标优化目标与能力矩阵) 哪一行？CUDA 参照行为/文件路径是什么？MACA 差异是否属于「刻意不对齐」表？
+3. **路径**：block/grid 是否满足 64-thread warp 约束？`get_maca_search_config()` 与 `GeneratorConfig` MACA 分支是否与 CUDA 搜索宏一致（除 warp/smem 常量）？
+4. **收益**：预期收益类型 — 能力 parity / 语义 parity / 融合加速 / persistent kernel？性能向须写明对照基线（`maca_vs_pytorch` JSON）。
+5. **真卡验证**：本轮触及能力域的「真卡验证入口」是否已在 MetaX VM 跑通？若无 VM，是否仅文档/CPU 契约（不得合并 parity 项）？
+6. **机会成本**：同一轮是否还有更高优先级 backlog（CUDA 有而 MACA 编译失败、superoptimize abort、无真卡测试）？
 
 **性能向轮次**在感知阶段额外跑：
 
@@ -74,6 +79,71 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_native_benchmark.py
 ```
 
 若融合已不慢于 mcPytorch、且本轮仅微调无关热点，**暂停该性能项**，转向编译/契约 gap。
+
+### CUDA 对标：优化目标与能力矩阵
+
+MACA 无限闭环的**首要优化目标**是：在 MetaX 真卡上，使 YiRage MACA 后端在**能力边界**与**用户可感知行为**上对齐 CUDA 后端；性能基线为**同机 mcPytorch**（MACA）/ **同机 PyTorch CUDA**（NVIDIA 对照机），但**功能完备性**以 CUDA 代码路径为金标准。
+
+#### 三层对齐（优化目标）
+
+| 对齐层 | 含义 | 通过标准 |
+|--------|------|----------|
+| **能力 parity** | CUDA 已支持的算子、TB epilogue、搜索 explore、transpiler 产物在 MACA 上可构图、可搜索、可 mxcc 编译、可执行 | 矩阵 tier ≠ `unsupported`；真卡 smoke exit 0 |
+| **语义 parity** | 同 seed 图在 MACA/CUDA 上数值一致（允许 fp16/bf16 tol） | fingerprint 或 runtime vs reference 通过 |
+| **融合 parity** | CUDA 上已验证的融合模式（rms+matmul、MLP、attention tile、forloop accum 等）MACA 可 superoptimize 且不慢于 mcPytorch 基线 | `maca_vs_pytorch` / e2e bench JSON `speedup ≥ 1.0`（同后端） |
+
+**刻意不对齐（须文档化，不得当 bug 凑 parity）**：
+
+| CUDA / NVIDIA 假设 | MACA / MetaX 现实 | 闭环处理 |
+|--------------------|-------------------|----------|
+| warp = 32 | **warp = 64** | block 为 64 倍数；shuffle 6 步；见 `MACA_WARP_SIZE` |
+| smem 96KB（Volta 档） | **smem 64KB/block** | `maca::MAX_SMEM_SIZE`、搜索 smem 上限 |
+| nvcc + PTX `mma.sync` | **mxcc + xcore1000** | 软件 MMA shadow（`YIRAGE_MACA_SOFTWARE_MMA`）等 |
+| `torch.cuda` → cudart | mcPytorch → mcruntime | API 兼容，**评判仍用 YiRage backend=maca** |
+
+#### 能力矩阵（对标 CUDA 路径）
+
+维护原则：**CUDA 列**以 `YIRAGE_BACKEND=cuda` 正式 transpiler 路径为准；**MACA 列**以 mxcc 编译 + 真卡执行为准；**验证**列须在 MetaX VM 有对应命令（不可仅 CPU pytest）。
+
+| 能力域 | CUDA 参照（金标准） | MACA 落点 | 真卡验证入口 |
+|--------|---------------------|-----------|--------------|
+| **构建 / transpiler** | `generate_cuda_program` + nvcc | `generate_cuda_program` + **mxcc**（`get_mxcc_cc_cmd`） | `demo/maca_superopt_test.py`；`tests/python/test_maca_config.py` |
+| **搜索配置** | `get_cuda_search_config()` / CUDA `GeneratorConfig` | `get_maca_search_config()`、`maca_strategy.cc` | `demo/demo_maca_optimization.py`；`pytest -k maca` |
+| **KN 原语 kernel** | `src/kernel/cuda/*.cu` | `src/kernel/maca/*.maca`（matmul、elementwise、reduction…） | `benchmark/maca_native_benchmark.py` |
+| **TB customized / 融合** | customized CUDA kernel | `customized_kernel.maca` + TB interpreter 回退 | `maca_superopt_test.py`；`maca_vs_pytorch.py` |
+| **RMSNorm + matmul 融合** | CUDA fused µGraph | 同构图 `backend=maca` superoptimize | `maca_vs_pytorch.py`（rms  workload） |
+| **Attention / softmax tile** | CUDA attention kernel 路径 | `attention_kernel.maca`、`softmax_kernel.maca` | e2e / bench 待补项记入 backlog |
+| **Persistent kernel** | CUDA PK backend | `maca_pk_backend.cc` | 真卡 PK smoke（待补则标 `experimental`） |
+| **Verifier** | CUDA fingerprint | MACA GPU fingerprint | `superoptimize(backend="maca")` 无 abort |
+| **融合 vs 库基线** | fused vs `torch` CUDA | fused vs **mcPytorch** on MACA | `benchmark/maca_vs_pytorch.py --quick` |
+
+矩阵扩展时：在「当前轮次笔记」或 PR 中增一行 **CUDA 参照 PR/commit + MACA 验证命令**；禁止只改文档不补真卡测试。
+
+#### 对齐策略（每轮策略层）
+
+1. **感知**：列出「CUDA supported ∧ MACA unsupported / 编译失败 / 无真卡测试」的 gap 清单（优先级高于微基准）。
+2. **策略**：每轮只闭合 **1 个能力域** 的 parity（例如 R3=mxcc MMA；R4=smem 64KB 全链路）。
+3. **落地**：优先复用 CUDA 侧图结构与搜索宏，仅改 MACA 执行层（`.maca`、mxcc flags、warp/smem 常量）；**禁止**用 `YIRAGE_MACA_TORCH_MATMUL` 等回退冒充 parity。
+4. **验证**：该能力域对应的「真卡验证入口」**全部** exit 0 后方可合并。
+5. **进化**：更新本矩阵行状态 + `docs/maca_complete_guide.md` / `HARDWARE_OPTIMIZATION.md` 的 MACA 评估表。
+
+#### 效果检查手段（证据链）
+
+| 检查类型 | 手段 | 适用场景 | 运行环境 |
+|----------|------|----------|----------|
+| **配置契约** | `pytest tests/python/test_maca_config.py`、`test_backends.py -k maca` | mxcc 命令、smem 上限、search quick | 可无卡；**合并前仍须真卡 smoke** |
+| **编译 + 搜索 smoke** | `demo/maca_superopt_test.py` | transpiler→mxcc、µGraph 编译/profile | **MetaX 真卡 VM** |
+| **设备 + search 感知** | `demo/demo_maca_optimization.py` | SDK、GPU 名、grid/block 约束 | **MetaX 真卡 VM** |
+| **融合性能** | `benchmark/maca_vs_pytorch.py`（`--quick` 日常 / 全量 nightly） | 融合 vs mcPytorch；JSON speedup | **MetaX 真卡 VM** |
+| **原语 kernel** | `benchmark/maca_native_benchmark.py` | `.maca` 孤立 kernel | **MetaX 真卡 VM** |
+| **C500 专项 shape** | `benchmark/maca_c500_benchmark.py` | 104 SM / 64KB smem 边界 | **MetaX C500** |
+| **LLM / LoRA e2e** | `benchmark/end-to-end/maca/*.py` | 图级 parity 回归 | **MetaX 真卡 VM** |
+| **CUDA 对照（可选）** | 同 seed 图 `backend=cuda` on NVIDIA 机 | 语义/reference 对照 | NVIDIA GPU（**非**合并硬门槛） |
+
+**合并闸门（MACA + CUDA 对标）**：
+
+- 触及 `.maca` / transpiler / search / fusion 的 PR：**MetaX VM 上表「真卡验证入口」相关项全绿**。
+- 仅文档 / 纯 CPU pytest：**不得**宣称已完成 CUDA parity；须在笔记中标「待真卡 R{n}」。
 
 ### 五层结构
 
@@ -94,7 +164,7 @@ flowchart LR
 
 #### 第 1 层：感知（Perceive）— 我们在哪？
 
-**目标**：弄清 MACA 后端的能力边界、mxcc 编译覆盖、融合相对 mcPytorch 基线的位置，以及搜索空间与 kernel 执行的不一致。
+**目标**：弄清 MACA 后端的能力边界、**相对 CUDA 路径的 parity gap**、mxcc 编译覆盖、融合相对 mcPytorch 基线的位置，以及搜索空间与 kernel 执行的不一致。
 
 **典型动作**：
 
@@ -116,8 +186,13 @@ flowchart LR
   /opt/conda/bin/python3 benchmark/maca_c500_benchmark.py
   ```
 - 对照搜索配置：`python/yirage/backends/maca/config.py` → `get_maca_search_config()`、`MACA_WARP_SIZE`
+- **CUDA 对标 gap 扫描**（与 CUDA 金标准 diff，记入 backlog）：
+  - CUDA kernel 清单：`src/kernel/cuda/` vs `src/kernel/maca/*.maca`
+  - CUDA search：`get_cuda_search_config()` / CUDA `GeneratorConfig` vs MACA 分支
+  - 融合 smoke：CUDA 已有 e2e/bench 而 MACA 无对应脚本的项
+  - transpiler：nvcc 可编译而 mxcc 失败的 µGraph 模式
 
-**产出**：一份简短「现状快照」— mxcc 编译失败列表、superoptimize 无 valid µGraph、融合 vs mcPytorch 倍率、block dim 非 64 倍数警告。
+**产出**：一份简短「现状快照」— **CUDA↔MACA parity gap 列表**、mxcc 编译失败列表、superoptimize 无 valid µGraph、融合 vs mcPytorch 倍率、block dim 非 64 倍数警告。
 
 ---
 
@@ -131,11 +206,13 @@ flowchart LR
 
 | 信号 | 优先策略 |
 |------|----------|
-| `mxcc` 编译 / link 失败 | 修 `.maca` kernel、`cmake/backends/maca.cmake`、`MACA_PATH` |
-| superoptimize abort / 0 valid µGraph | 检查 `get_maca_search_config()` tractability、verifier、abstract_expr |
-| 正确但慢于 mcPytorch | 图级融合、TB customized、调 grid/block（保持 64 倍数） |
-| fingerprint 不一致 | 修 `customized_kernel.maca` / `device_memory_manager.maca` |
-| 跨后端对比诱人 | **拒绝**作为主指标；只在 `backend=maca` 上评判 |
+| **CUDA 有、MACA 无**（算子/融合/搜索 explore） | 按 [能力矩阵](#cuda-对标优化目标与能力矩阵) 补 `.maca` / config / smoke；**须真卡验证** |
+| `mxcc` 编译 / link 失败 | 修 `.maca` kernel、`cmake/backends/maca.cmake`、`MACA_PATH`、mxcc compat shims |
+| superoptimize abort / 0 valid µGraph | 对齐 CUDA 搜索 tractability；检查 `get_maca_search_config()`、verifier、abstract_expr |
+| 正确但慢于 mcPytorch | 图级融合、TB customized、调 grid/block（保持 64 倍数）；对照 CUDA 同模式 fused 结构 |
+| fingerprint 不一致 | 修 `customized_kernel.maca` / `device_memory_manager.maca`；对照 CUDA fingerprint 路径 |
+| 仅有 CPU pytest 绿、无真卡 smoke | **阻塞 parity 合并**；补 MetaX VM 验证项 |
+| 跨后端对比诱人 | **禁止**用 NVIDIA CUDA 速度作主指标；功能 parity 可对照 CUDA **语义**，性能只在 MACA 上对 mcPytorch |
 
 **文档锚点**：`docs/maca_complete_guide.md` §8 MACA 技术特性；`include/kernel/maca/` kernel 清单。
 
@@ -168,7 +245,7 @@ YIRAGE_BACKEND=maca /opt/conda/bin/python3 -m pip install -e . --no-build-isolat
 
 #### 第 4 层：验证（Verify）— 证据链
 
-**目标**：正确性先于速度；速度在同 MACA 卡上与 mcPytorch 比较。
+**目标**：正确性先于速度；**能力/语义 parity 先于融合 speedup**；速度在同 MACA 卡上与 mcPytorch 比较。
 
 | 层 | 机制 | 入口 |
 |----|------|------|
@@ -197,13 +274,13 @@ pytest tests/python/test_comet_search.py -k maca -v
 /opt/conda/bin/python3 benchmark/end-to-end/maca/llama_maca.py
 ```
 
-**合并闸门（Merge gate）**：MACA 相关改动须在 **MetaX GPU VM** 上跑通上述烟雾 + 相关 pytest；不得以 Cloud CPU VM 绿作为 MACA 合并依据。
+**合并闸门（Merge gate）**：MACA 相关改动须在 **MetaX GPU VM** 上跑通上述烟雾 + 相关 pytest + **本轮触及能力域在 [能力矩阵](#cuda-对标优化目标与能力矩阵) 中的真卡验证入口**；不得以 Cloud CPU VM 绿作为 MACA 或 CUDA parity 合并依据。
 
 ---
 
 ### MACA Demo 与 Benchmark 烟雾层
 
-Demo/benchmark 是 MACA 闭环的**用户可复现烟雾层**，证明 Agent 能在真卡上构图、搜索、执行。
+Demo/benchmark 是 MACA 闭环的**用户可复现烟雾层**，证明 Agent 能在真卡上构图、搜索、执行；同时是 [CUDA 能力矩阵](#cuda-对标优化目标与能力矩阵) 的**真卡验证入口**。
 
 | 闭环层 | 作用 | 典型命令 |
 |--------|------|----------|
@@ -246,10 +323,10 @@ $PY benchmark/maca_vs_pytorch.py
 
 **必须更新的位置**：
 
-1. **`AGENTS.md`** — 「当前轮次笔记」或 **Gotchas**
-2. **`docs/maca_quick_start.md` / `docs/maca_complete_guide.md`** — 环境/bench 基线变更
-3. **`docs/HARDWARE_OPTIMIZATION.md`** — MACA 评估标准变更
-4. **集成测试 / benchmark** — 新融合模式须有 smoke
+1. **`AGENTS.md`** — 「当前轮次笔记」、**[CUDA 能力矩阵](#cuda-对标优化目标与能力矩阵) 行状态** 或 **Gotchas**
+2. **`docs/maca_quick_start.md` / `docs/maca_complete_guide.md`** — 环境/bench 基线、CUDA 差异表变更
+3. **`docs/HARDWARE_OPTIMIZATION.md`** — MACA 评估标准、与 CUDA 分层对照变更
+4. **集成测试 / benchmark** — 新融合或新 `.maca` 原语须补 **MetaX 真卡** smoke（可同步加 `test_maca_config` 契约）
 
 ---
 
@@ -293,11 +370,14 @@ export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
 PY=/opt/conda/bin/python3
 
 $PY demo/demo_maca_optimization.py
-$PY benchmark/maca_vs_pytorch.py
-pytest tests/python/test_backends.py -k maca -v
+$PY demo/maca_superopt_test.py
+$PY benchmark/maca_vs_pytorch.py --quick
+pytest tests/python/test_maca_config.py tests/python/test_backends.py -k maca -v
+
+# CUDA 对标：记录 src/kernel/cuda vs maca 文件名 diff、mxcc 失败模式、矩阵中「待补真卡测」项
 ```
 
-**backlog 优先级**：mxcc 编译失败 → superoptimize abort → fingerprint 不一致 → 融合慢于 mcPytorch → 文档/配置漂移。
+**backlog 优先级**：**CUDA 有而 MACA 无/无真卡测** → mxcc 编译失败 → superoptimize abort → fingerprint 不一致 → 融合慢于 mcPytorch → 文档/配置漂移。
 
 #### 连续迭代终止条件
 
@@ -310,16 +390,16 @@ pytest tests/python/test_backends.py -k maca -v
 ### Cloud Agent 单轮检查清单（MACA）
 
 ```
-[ ] 0. 闸门：四轮自问 + [行为性价比审查](#agent-行为性价比审查每步必做)；性能向已跑 maca_vs_pytorch / maca_native_benchmark
-[ ] 1. 感知：mx-smi、mcPytorch、demo_maca_optimization、bench JSON
-[ ] 2. 策略：只选 1 个主攻瓶颈；对齐 64-warp + get_maca_search_config；拒绝回退/workaround 冒充正式实现
+[ ] 0. 闸门：策略卡片（含 CUDA 对标 + 真卡验证）+ [行为性价比审查](#agent-行为性价比审查每步必做)；性能向已跑 maca_vs_pytorch / maca_native_benchmark
+[ ] 1. 感知：mx-smi、mcPytorch、CUDA↔MACA gap 清单、demo_maca_optimization、bench JSON
+[ ] 2. 策略：只选 1 个能力域 parity；对齐 CUDA 参照 + 64-warp + get_maca_search_config；拒绝回退/workaround 冒充正式实现
 [ ] 3. 落地：最小 patch；触及 transpiler/mxcc / .maca / maca config / search；每步过行为性价比
-[ ] 4. 验证：MetaX VM 正式路径（transpiler+mxcc 编译+执行）+ pytest -k maca；Cython 则 pip install -e
-[ ] 5. 开 PR：push 分支 cursor/...-ffec，base=main
+[ ] 4. 验证：MetaX VM 正式路径（transpiler+mxcc 编译+执行）+ 能力矩阵对应入口 + pytest -k maca；Cython 则 pip install -e
+[ ] 5. 开 PR：push 分支 cursor/...-ffec，base=main；PR 描述含 CUDA 参照 + 真卡命令输出摘要
 [ ] 6. 自动合并：MetaX VM 验证全绿 → gh pr merge
 [ ] 7. 同步 main：git checkout main && git pull
-[ ] 8. 进化：更新 AGENTS.md「当前轮次笔记」+ maca docs
-[ ] 9. 扫描 backlog：bench speedup、mxcc errors、search abort
+[ ] 8. 进化：更新 AGENTS.md 能力矩阵行状态 + maca docs
+[ ] 9. 扫描 backlog：CUDA gap、bench speedup、mxcc errors、search abort
 [ ] 10. 下一轮：新分支继续 Loop R{n+1}
 ```
 
@@ -327,11 +407,11 @@ pytest tests/python/test_backends.py -k maca -v
 
 | 层 | 工具 / 路径 |
 |----|-------------|
-| 感知 | `docs/maca_quick_start.md`, `docs/maca_complete_guide.md`, `mx-smi`, `python/yirage/backends/maca/config.py` |
-| 策略 | `get_maca_search_config()`, `src/search/backend_strategies/maca_strategy.cc`, `MACA_WARP_SIZE=64` |
-| 落地 | `src/kernel/maca/*.maca`, `src/backend/maca_backend.cc`, `cmake/backends/maca.cmake` |
-| 验证 | `demo/demo_maca_optimization.py`, `demo/maca_superopt_test.py`, `benchmark/maca_vs_pytorch.py`, `tests/python/test_backends.py -k maca` |
-| 进化 | **`AGENTS.md`**, `docs/maca_*.md`, `docs/HARDWARE_OPTIMIZATION.md` |
+| 感知 | [CUDA 能力矩阵](#cuda-对标优化目标与能力矩阵)、`docs/maca_quick_start.md`, `docs/maca_complete_guide.md`, `src/kernel/cuda/` vs `src/kernel/maca/`, `mx-smi`, `python/yirage/backends/maca/config.py` |
+| 策略 | CUDA `get_cuda_search_config()` 对照、`get_maca_search_config()`, `src/search/backend_strategies/maca_strategy.cc`, `MACA_WARP_SIZE=64` |
+| 落地 | `src/kernel/maca/*.maca`, `src/backend/maca_backend.cc`, `cmake/backends/maca.cmake`, `include/transpiler/runtime/maca_compat/` |
+| 验证 | [效果检查手段](#效果检查手段证据链) 表内脚本；`tests/python/test_maca_config.py` |
+| 进化 | **`AGENTS.md`（能力矩阵 + 轮次笔记）**, `docs/maca_*.md`, `docs/HARDWARE_OPTIMIZATION.md` |
 
 ### 当前轮次笔记（MACA，由 Agent 持续追加）
 
@@ -342,9 +422,11 @@ pytest tests/python/test_backends.py -k maca -v
 - **Loop R1（2026-07-07，demo/kernel 性能路径，PR #152）**：闸门：执行层 + 感知/工具层。根因：`yirage.maca_config` 缺失、`maca_call` 走 ascend 解释器、`compile()` 仅 nvcc、demo/bench 用 `backend=cpu` 与占位计时；**正式路径阻塞**：`USE_MACA` 链 `transpiler_stub` 致 `generate_cuda_program` segfault。修复：`maca_config.py` shim、`get_maca_search_config_quick`/`resolve_maca_search_config`、`maca_call→cuda_call`（mcPytorch）、`mxcc` JIT、`CMakeLists` MACA 启用 CUDA transpiler（`YIRAGE_BACKEND_CUDA_ENABLED`）、**撤销** `YIRAGE_MACA_SKIP_PROFILE`/`YIRAGE_MACA_TORCH_MATMUL` 回退、`demo/_maca_utils.py` + demo/bench 真实 `superoptimize(backend=maca)`；mxcc `maca_compat/` shims + resilient MACA profiling。验证：`pytest tests/python/test_maca_config.py`；MetaX VM：`demo_maca_optimization` + `maca_superopt_test` exit 0（search ~31–49s，部分 µGraph smem/mma 跳过）。
 - **Loop R2（2026-07-08，smem 64KB 对齐，PR #152）**：闸门：执行/契约层（C500 65536 B/block vs Volta 98304 误判）。`maca::MAX_SMEM_SIZE`→64KB；`get_shared_memory_capacity()` MACA/mxcc 返回 `MACA_SHARED_MEM_PER_BLOCK`；`test_maca_config` smem 闸门。MetaX VM：`get_shared_memory_capacity(70)=65536`；`demo_maca_optimization`/`maca_superopt_test`/`test_maca_config` PASS；C++ `plan_stensor_memory` 仍报 98304 直至 VM 重编 `yirage.core`。下一轮：**R3** — mxcc 软件 MMA（`mma.sync` invalid on xcore1000）、VM 重编闭合 smem 警告、`maca_vs_pytorch`/`maca_native_benchmark` 全量 bench。
 - **Loop R3（2026-07-08，mxcc 软件 MMA + bench quick，PR #152）**：闸门：执行/原语层（闭合 R2 mxcc `mma.sync` invalid on xcore1000）。`maca_compat/cute/arch/mma_sm70.hpp` warp-shuffle 软件 m8n8k4；`get_mxcc_cc_cmd()` 改 `YIRAGE_MACA_SOFTWARE_MMA=1`、移除 `CUTE_ARCH_MMA_SM70_ENABLED`/`LDSM_SM75`；`maca_vs_pytorch.py --quick`。MetaX VM：`maca_superopt_test` µGraph **14–15 编译+profile 成功**（原 mma 失败）；`maca_vs_pytorch --quick` **~154s PASS**；`demo_maca_optimization`/`test_maca_config` PASS。C++ `MAX_SMEM_SIZE(98304)` 警告仍在（VM 未重编 `yirage.core`）。下一轮：**R4** — VM 重编闭合 smem 警告、搜索 smem 超限 µGraph 收窄、`maca_native_benchmark --quick`。
+- **Loop R4（2026-07-08，CUDA 对标协议文档，PR #152）**：闸门：文档/契约层（用户要求 MACA **对标 CUDA** 优化目标写入闭环）。`AGENTS.md` 增 [CUDA 对标：优化目标与能力矩阵](#cuda-对标优化目标与能力矩阵)（三层 parity、能力表、对齐策略、真卡效果检查、合并闸门）；核心原则/感知/策略/验证/检查清单/backlog 改为 **CUDA 路径为金标准 + MetaX 真卡必验**。下一轮：**R5** — VM 重编 `yirage.core` 闭合 smem；按能力矩阵补 attention/PK 真卡 smoke backlog。
 
 - **协议（2026-07-07）**：MACA 改动须在 MetaX GPU VM 验证通过后合并；禁止用 CPU cert/loop-close 替代。
-- **协议（框架对齐）**：每轮策略前必过执行前闸门 — 融合上浮、原语对齐 mcPytorch，64-thread warp 约束。
+- **协议（2026-07-08，CUDA 对标）**：MACA 算子/融合/搜索须逐项对齐 CUDA 后端能力；每项能力须有 MetaX **真卡**验证入口；性能同后端对 mcPytorch，**功能**以 CUDA 正式路径为参照。
+- **协议（框架对齐）**：每轮策略前必过执行前闸门 — 融合上浮、原语对齐 mcPytorch/cuBLAS 类库，64-thread warp 约束。
 
 ---
 
