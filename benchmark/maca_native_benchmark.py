@@ -14,6 +14,7 @@ import numpy as np
 from yirage.maca_config import (
     MACA_WARP_SIZE,
     get_maca_search_config,
+    get_maca_search_config_quick,
     get_maca_device_info,
     is_maca_available,
     get_maca_sdk_path,
@@ -146,7 +147,7 @@ def estimate_maca_rmsnorm_time(batch, hidden, device_info):
     return estimated_time
 
 
-def run_benchmarks():
+def run_benchmarks(quick=False):
     """Run all benchmarks."""
     print_header("MACA vs PyTorch CPU Benchmark")
 
@@ -170,13 +171,17 @@ def run_benchmarks():
     # Matrix Multiplication Benchmarks
     print_header("Matrix Multiplication")
 
-    matmul_configs = [
-        (128, 128, 256, "Small"),
-        (512, 512, 1024, "Medium"),
-        (1024, 1024, 4096, "Large"),
-        (4096, 4096, 4096, "XLarge"),
-        (8192, 8192, 8192, "XXLarge"),
-    ]
+    matmul_configs = (
+        [(128, 128, 256, "Quick")]
+        if quick
+        else [
+            (128, 128, 256, "Small"),
+            (512, 512, 1024, "Medium"),
+            (1024, 1024, 4096, "Large"),
+            (4096, 4096, 4096, "XLarge"),
+            (8192, 8192, 8192, "XXLarge"),
+        ]
+    )
 
     print(
         f"\n  {'Config':<12} {'M×N×K':<20} {'CPU (ms)':<12} {'MACA Est (ms)':<14} {'Speedup':<10}"
@@ -195,13 +200,17 @@ def run_benchmarks():
     # RMSNorm Benchmarks
     print_header("RMS Normalization")
 
-    rmsnorm_configs = [
-        (1, 4096, "1×4096"),
-        (8, 4096, "8×4096"),
-        (32, 4096, "32×4096"),
-        (64, 8192, "64×8192"),
-        (128, 8192, "128×8192"),
-    ]
+    rmsnorm_configs = (
+        [(8, 4096, "8×4096")]
+        if quick
+        else [
+            (1, 4096, "1×4096"),
+            (8, 4096, "8×4096"),
+            (32, 4096, "32×4096"),
+            (64, 8192, "64×8192"),
+            (128, 8192, "128×8192"),
+        ]
+    )
 
     print(
         f"\n  {'Config':<12} {'Shape':<15} {'CPU (ms)':<12} {'MACA Est (ms)':<14} {'Speedup':<10}"
@@ -220,7 +229,7 @@ def run_benchmarks():
     # YiRage Optimization Analysis
     print_header("YiRage MACA Optimization Analysis")
 
-    maca_config = get_maca_search_config()
+    maca_config = get_maca_search_config() if not quick else get_maca_search_config_quick()
 
     print("\n  Search Space Configuration:")
     print(f"    Block dimensions: {len(maca_config.get('block_dims_to_explore', []))} configs")
@@ -292,4 +301,11 @@ def run_benchmarks():
 
 
 if __name__ == "__main__":
-    run_benchmarks()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MACA native benchmark smoke")
+    parser.add_argument("--quick", action="store_true", help="Minimal shapes for Loop smoke")
+    args = parser.parse_args()
+    if args.quick:
+        os.environ.setdefault("YIRAGE_MACA_SEARCH_QUICK", "1")
+    run_benchmarks(quick=args.quick)
