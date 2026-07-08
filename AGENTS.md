@@ -134,7 +134,7 @@ MACA 无限闭环的**首要优化目标**是：在 MetaX 真卡上，使 YiRage
 | **`scripts/bench_ray_search.py`** | CPU 公平 seq vs Ray | 仅 `backend=cpu` | 增 `backend=maca` 变体（backlog） |
 | **`business_capability_walkthrough`** | YiRage×Ray×AccelForge×RL | CPU 版 `backend=cpu`；**MACA 版** `scripts/maca_capability_walkthrough.py` | MetaX VM `--quick` |
 | **`ConstrainedGraphEnv` / FINISH** | `accelforge_metrics` + verify | `config_space` 含 maca warp=64；**无 maca env e2e** | `test_accelforge` + maca FINISH（backlog） |
-| **`VerifierPool` / GPU verify** | `backend=cuda` | 硬编码 cuda | `VerifierPool(backend=maca)`（backlog） |
+| **`VerifierPool` / GPU verify** | `backend=cuda` | `VerifierPool(backend=maca)` + env default | `tests/python/test_rl/test_maca_verifier_pool.py`；MetaX Ray smoke |
 
 **RL/Ray 对齐策略**：
 
@@ -476,6 +476,7 @@ pytest tests/python/test_backends.py -k maca -v
 - **Loop R4（2026-07-08，CUDA 对标协议文档，PR #152）**：闸门：文档/契约层（用户要求 MACA **对标 CUDA** 优化目标写入闭环）。`AGENTS.md` 增 [CUDA 对标：优化目标与能力矩阵](#cuda-对标优化目标与能力矩阵)（三层 parity、能力表、对齐策略、真卡效果检查、合并闸门）；核心原则/感知/策略/验证/检查清单/backlog 改为 **CUDA 路径为金标准 + MetaX 真卡必验**。下一轮：**R5** — VM 重编 `yirage.core` 闭合 smem；按能力矩阵补 attention/PK 真卡 smoke backlog。
 - **Loop R5（2026-07-08，RL/Ray parity + Qwen 全链路 demo，PR #152）**：闸门：图级/正确性 + 工具契约层。`AGENTS.md` 增 RL/Ray CUDA 对标表 + Qwen 推理对标表；`demo/maca/qwen_inference_demo.py`（对齐 `demo/qwen2.5/demo.py`：maca superoptimize → prefill+decode）；`benchmark/end-to-end/maca/qwen_maca.py`；`tests/python/test_maca_rl_ray_capability.py`；`tests/integration/test_maca_qwen_inference_demo.py`。验证：pytest RL/Ray 契约（可无卡）；MetaX VM `qwen_inference_demo --quick`。下一轮：**R6** — `test_ray_maca_e2e`、`maca_capability_walkthrough`、HF Qwen `from_pretrained` MACA 路径。
 - **Loop R6（2026-07-08，Ray MACA e2e + walkthrough，PR #152）**：闸门：图级/工具契约层（闭合 R5 Ray/walkthrough backlog）。`tests/integration/test_ray_maca_e2e.py`（镜像 CPU Ray e2e，`backend=maca`，block=256 warp 对齐）；`scripts/maca_capability_walkthrough.py`（YiRage×Ray×AccelForge×RL on MACA）；`test_maca_rl_ray_capability.py` 契约更新。验证：pytest 契约层（可无卡）；MetaX VM `test_ray_maca_e2e` + `maca_capability_walkthrough --quick`。下一轮：**R7** — VM 重编 `yirage.core` 闭合 smem 98304；`VerifierPool(backend=maca)`；HF Qwen `from_pretrained`。
+- **Loop R7（2026-07-08，VerifierPool backend=maca，PR #152）**：闸门：RL/工具契约层（闭合 R6 `VerifierPool` gap）。`VerifierPool` 增 `backend` 参数（默认 `YIRAGE_BACKEND`）；Ray/local verifier 传递 `backend=maca`；`tests/python/test_rl/test_maca_verifier_pool.py`。验证：pytest 契约（可无卡）；MetaX VM Ray verifier smoke。下一轮：**R8** — VM 重编 `yirage.core` 闭合 smem 98304；`bench_ray_search.py backend=maca`；HF Qwen `from_pretrained`。
 
 - **协议（2026-07-07）**：MACA 改动须在 MetaX GPU VM 验证通过后合并；禁止用 CPU cert/loop-close 替代。
 - **协议（2026-07-08，CUDA 对标）**：MACA 算子/融合/搜索须逐项对齐 CUDA 后端能力；每项能力须有 MetaX **真卡**验证入口；性能同后端对 mcPytorch，**功能**以 CUDA 正式路径为参照。

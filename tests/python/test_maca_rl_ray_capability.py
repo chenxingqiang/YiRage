@@ -66,9 +66,9 @@ def maca_rl_ray_capability_matrix() -> list[dict]:
         {
             "id": "gpu_verifier_pool",
             "cuda": "VerifierPool(backend=cuda)",
-            "maca": "Hardcoded cuda in verifier_pool; mcPytorch may piggyback",
-            "maca_vm_test": "VerifierPool(backend=maca) smoke (planned)",
-            "tier": "gap",
+            "maca": "VerifierPool(backend=maca) param + YIRAGE_BACKEND default",
+            "maca_vm_test": "tests/python/test_rl/test_maca_verifier_pool.py; MetaX Ray smoke",
+            "tier": "partial",
         },
         {
             "id": "bench_ray_search",
@@ -137,6 +137,14 @@ def test_rl_config_space_includes_maca():
     obs = cfg_mod.ConfigObservationSpace()
     features = obs.encode_hardware(backend="maca")
     assert features[4] == 1.0  # MACA warp_size 64 normalized
+
+
+def test_verifier_pool_accepts_backend_param_in_source():
+    pool_py = _PKG / "yirage" / "rl" / "verifier" / "verifier_pool.py"
+    text = pool_py.read_text(encoding="utf-8")
+    assert "backend: Optional[str]" in text or "backend=None" in text
+    assert "self.backend" in text
+    assert "backend=self.backend" in text
 
 
 def test_superoptimize_signature_supports_ray_and_maca():
