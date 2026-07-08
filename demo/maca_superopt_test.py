@@ -17,6 +17,8 @@ from demo._maca_utils import (
     apply_maca_demo_env,
     benchmark_mugraph,
     maca_search_kwargs,
+    maca_superoptimize_ray_kwargs,
+    resolve_maca_use_ray,
     sync_device,
 )
 from yirage.maca_config import MACA_WARP_SIZE, resolve_maca_search_config
@@ -53,13 +55,14 @@ def main():
     print(f"\nMatmul: ({args.m}x{args.k}) @ ({args.k}x{args.n}) = ({args.m}x{args.n})")
 
     search = maca_search_kwargs()
-    print("\nRunning superoptimize(backend='maca')...")
+    use_ray = resolve_maca_use_ray()
+    print(f"\nRunning superoptimize(backend='maca', use_ray={use_ray})...")
     start = time.time()
     try:
         opt = graph.superoptimize(
             backend="maca",
-            use_ray=False,
             verbose=args.verbose,
+            **maca_superoptimize_ray_kwargs(),
             **search,
         )
         elapsed = time.time() - start

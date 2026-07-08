@@ -31,8 +31,8 @@ def maca_rl_ray_capability_matrix() -> list[dict]:
         {
             "id": "superoptimize_ray",
             "cuda": "KNGraph.superoptimize(use_ray=True) + griddims>1",
-            "maca": "Same API; demos default use_ray=False",
-            "maca_vm_test": "demo/maca_superopt_test.py + tests/integration/test_ray_maca_e2e.py",
+            "maca": "Same API; demos default off, opt-in YIRAGE_MACA_USE_RAY=1 via demo/_maca_utils",
+            "maca_vm_test": "YIRAGE_MACA_USE_RAY=1 demo/maca_superopt_test.py + tests/integration/test_ray_maca_e2e.py",
             "tier": "partial",
         },
         {
@@ -154,8 +154,10 @@ def test_superoptimize_signature_supports_ray_and_maca():
     assert "maca" in text
 
 
-def test_maca_demo_utils_default_disables_ray_documents_gap():
-    """Documented gap: MACA smoke paths set use_ray=False until Ray MACA e2e exists."""
+def test_maca_demo_utils_reexports_ray_opt_in():
+    """demo/_maca_utils re-exports Ray opt-in helpers from maca config."""
     utils = _REPO / "demo" / "_maca_utils.py"
     text = utils.read_text(encoding="utf-8")
-    assert "use_ray=False" in text
+    assert "resolve_maca_use_ray" in text
+    assert "maca_superoptimize_ray_kwargs" in text
+    assert "YIRAGE_MACA_USE_RAY" in text or "maca_config" in text

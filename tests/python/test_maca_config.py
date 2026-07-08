@@ -58,6 +58,25 @@ def test_maca_shared_memory_capacity_matches_device_limit(monkeypatch):
     assert common.get_shared_memory_capacity(80) == 65536
 
 
+def test_resolve_maca_use_ray_env(monkeypatch):
+    cfg = _load_maca_backend_config()
+    monkeypatch.delenv("YIRAGE_MACA_USE_RAY", raising=False)
+    assert cfg.resolve_maca_use_ray() is False
+    assert cfg.maca_superoptimize_ray_kwargs() == {"use_ray": False}
+    monkeypatch.setenv("YIRAGE_MACA_USE_RAY", "1")
+    assert cfg.resolve_maca_use_ray() is True
+    assert cfg.maca_superoptimize_ray_kwargs() == {"use_ray": True}
+
+
+def test_config_h_maca_smem_64kb():
+    """C++ transpiler must use maca::MAX_SMEM_SIZE = 64 KB (C500 per-block limit)."""
+    config_h = Path(__file__).resolve().parents[2] / "include" / "config.h"
+    text = config_h.read_text(encoding="utf-8")
+    assert "namespace maca {" in text
+    assert "MAX_SMEM_SIZE = 64 * 1024" in text
+    assert "64 KB (C500 per-block limit)" in text
+
+
 def test_mxcc_cmd_uses_software_mma_not_hardware_ptx():
     """mxcc must not pass CUTE_ARCH_MMA_SM70_ENABLED (mma.sync invalid on xcore1000)."""
     graph_py = Path(__file__).resolve().parents[2] / "python" / "yirage" / "kernel" / "graph.py"

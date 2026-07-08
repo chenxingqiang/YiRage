@@ -23,6 +23,7 @@ from demo._maca_utils import (
     benchmark_callable,
     benchmark_mugraph,
     maca_search_kwargs,
+    maca_superoptimize_ray_kwargs,
     sync_device,
 )
 from yirage.maca_config import (
@@ -94,7 +95,12 @@ def demo_superoptimize_matmul(m, n, k, *, verbose=False):
 
     search = maca_search_kwargs()
     t0 = time.time()
-    opt = graph.superoptimize(backend="maca", use_ray=False, verbose=verbose, **search)
+    opt = graph.superoptimize(
+        backend="maca",
+        verbose=verbose,
+        **maca_superoptimize_ray_kwargs(),
+        **search,
+    )
     print(f"  Superoptimize: {time.time() - t0:.2f}s")
     if opt is None:
         print("  No valid µGraph")

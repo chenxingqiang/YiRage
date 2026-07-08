@@ -8,7 +8,12 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 
 import torch
 
-from yirage.maca_config import MACA_WARP_SIZE, resolve_maca_search_config
+from yirage.maca_config import (
+    MACA_WARP_SIZE,
+    maca_superoptimize_ray_kwargs,
+    resolve_maca_search_config,
+    resolve_maca_use_ray,
+)
 
 
 def apply_maca_demo_env() -> None:
@@ -22,6 +27,13 @@ def sync_device(device: torch.device) -> None:
         torch.cuda.synchronize(device)
 
 
+def resolve_maca_use_ray(*, default: bool = False) -> bool:
+    """Re-export from ``yirage.backends.maca.config`` (see that module for env contract)."""
+    from yirage.maca_config import resolve_maca_use_ray as _resolve
+
+    return _resolve(default=default)
+
+
 def maca_search_kwargs(*, quick: Optional[bool] = None) -> Dict[str, Any]:
     cfg = resolve_maca_search_config(quick=quick)
     return {
@@ -30,6 +42,13 @@ def maca_search_kwargs(*, quick: Optional[bool] = None) -> Dict[str, Any]:
         "fmaps": cfg.get("fmaps_to_explore"),
         "franges": cfg.get("franges_to_explore"),
     }
+
+
+def maca_superoptimize_ray_kwargs(*, default: bool = False) -> Dict[str, bool]:
+    """Re-export from ``yirage.backends.maca.config``."""
+    from yirage.maca_config import maca_superoptimize_ray_kwargs as _kwargs
+
+    return _kwargs(default=default)
 
 
 def benchmark_callable(
@@ -92,8 +111,8 @@ def superoptimize_matmul(
     search = maca_search_kwargs(quick=quick)
     return graph.superoptimize(
         backend=backend,
-        use_ray=False,
         verbose=verbose,
+        **maca_superoptimize_ray_kwargs(),
         **search,
     )
 
@@ -109,7 +128,9 @@ __all__ = [
     "benchmark_mugraph",
     "describe_search_config",
     "maca_search_kwargs",
+    "maca_superoptimize_ray_kwargs",
     "resolve_maca_search_config",
+    "resolve_maca_use_ray",
     "superoptimize_matmul",
     "sync_device",
 ]

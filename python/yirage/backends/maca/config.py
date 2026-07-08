@@ -126,6 +126,22 @@ def resolve_maca_search_config(*, quick: Optional[bool] = None) -> Dict[str, Any
     return get_maca_search_config_quick() if quick else get_maca_search_config()
 
 
+def resolve_maca_use_ray(*, default: bool = False) -> bool:
+    """Opt-in Ray for MACA superoptimize (default off for tractable smoke demos).
+
+    Set ``YIRAGE_MACA_USE_RAY=1`` to enable distributed search on MetaX VM.
+    """
+    raw = os.environ.get("YIRAGE_MACA_USE_RAY", "")
+    if raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def maca_superoptimize_ray_kwargs(*, default: bool = False) -> Dict[str, bool]:
+    """``use_ray`` kwarg for ``graph.superoptimize(backend="maca", ...)``."""
+    return {"use_ray": resolve_maca_use_ray(default=default)}
+
+
 def get_maca_matmul_config() -> Dict[str, Any]:
     """
     Get optimized matrix multiplication configuration for MACA

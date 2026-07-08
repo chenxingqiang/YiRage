@@ -32,6 +32,7 @@ if _REPO_ROOT not in sys.path:
 from demo._maca_utils import (  # noqa: E402
     apply_maca_demo_env,
     maca_search_kwargs,
+    maca_superoptimize_ray_kwargs,
     sync_device,
 )
 
@@ -90,8 +91,8 @@ def _superoptimize_mlp_gate_up(
     return graph.superoptimize(
         backend=backend,
         config="mlp",
-        use_ray=False,
         verbose=False,
+        **maca_superoptimize_ray_kwargs(),
         **search,
     )
 
@@ -120,8 +121,8 @@ def _superoptimize_mlp_down(
     return graph.superoptimize(
         backend=backend,
         config="mlp",
-        use_ray=False,
         verbose=False,
+        **maca_superoptimize_ray_kwargs(),
         **search,
     )
 
@@ -151,8 +152,8 @@ def _superoptimize_attn_qkv(
     return graph.superoptimize(
         backend=backend,
         config="mlp",
-        use_ray=False,
         verbose=False,
+        **maca_superoptimize_ray_kwargs(),
         **search,
     )
 
