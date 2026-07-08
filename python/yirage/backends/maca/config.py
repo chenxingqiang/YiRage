@@ -142,6 +142,59 @@ def maca_superoptimize_ray_kwargs(*, default: bool = False) -> Dict[str, bool]:
     return {"use_ray": resolve_maca_use_ray(default=default)}
 
 
+def is_maca_torch_device_available() -> bool:
+    """True when mcPytorch exposes a MetaX GPU (or integration smoke overrides)."""
+    if os.environ.get("YIRAGE_MACA_INTEGRATION", "").strip() == "1":
+        return True
+    try:
+        import torch
+    except ImportError:
+        return False
+    if not torch.cuda.is_available():
+        return False
+    try:
+        if "MetaX" in torch.cuda.get_device_name(0):
+            return True
+    except Exception:
+        pass
+    if os.environ.get("YIRAGE_MACA_ALLOW_NON_METAX", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return True
+    return False
+
+
+def resolve_maca_gpus_per_worker(
+    *,
+    requested: Optional[float] = None,
+    default: float = 1.0,
+) -> float:
+    """Ray ``gpus_per_worker`` for ``backend=maca`` (0 on hosts without MetaX GPU)."""
+    if requested is not None and requested <= 0:
+        return 0.0
+    target = requested if requested is not None else default
+    return target if is_maca_torch_device_available() else 0.0
+
+
+def maca_ray_gpu_placement_kwargs(
+    *,
+    cpus_per_worker: float = 1.0,
+    gpus_per_worker: Optional[float] = None,
+    strategy: str = "PACK",
+    memory_per_worker_mb: int = 4096,
+) -> Dict[str, Any]:
+    """Kwargs for ``GPUPlacementConfig`` when ``DistributedConfig.backend='maca'``."""
+    return {
+        "cpus_per_worker": cpus_per_worker,
+        "gpus_per_worker": resolve_maca_gpus_per_worker(requested=gpus_per_worker),
+        "strategy": strategy,
+        "memory_per_worker_mb": memory_per_worker_mb,
+    }
+
+
 def get_maca_matmul_config() -> Dict[str, Any]:
     """
     Get optimized matrix multiplication configuration for MACA
@@ -388,6 +441,11 @@ __all__ = [
     "get_maca_search_config",
     "get_maca_search_config_quick",
     "resolve_maca_search_config",
+    "resolve_maca_use_ray",
+    "maca_superoptimize_ray_kwargs",
+    "is_maca_torch_device_available",
+    "resolve_maca_gpus_per_worker",
+    "maca_ray_gpu_placement_kwargs",
     "get_maca_matmul_config",
     "get_maca_memory_config",
     "get_maca_device_info",

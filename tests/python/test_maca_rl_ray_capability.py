@@ -45,8 +45,8 @@ def maca_rl_ray_capability_matrix() -> list[dict]:
         {
             "id": "ray_distributed_engine",
             "cuda": "RayDistributedEngine + GPUPlacementConfig",
-            "maca": "Uses torch.cuda.is_available(); no MACA placement policy",
-            "maca_vm_test": "MetaX VM Ray engine smoke (planned)",
+            "maca": "create_engine(backend=maca) + _effective_gpus_per_worker via resolve_maca_gpus_per_worker",
+            "maca_vm_test": "tests/integration/test_ray_maca_e2e.py::test_ray_distributed_engine_maca",
             "tier": "partial",
         },
         {
@@ -152,6 +152,14 @@ def test_superoptimize_signature_supports_ray_and_maca():
     text = graph_py.read_text(encoding="utf-8")
     assert "use_ray" in text
     assert "maca" in text
+
+
+def test_ray_distributed_engine_maca_placement_in_source():
+    ray_py = _PKG / "yirage" / "ray" / "ray_distributed.py"
+    text = ray_py.read_text(encoding="utf-8")
+    assert "_effective_gpus_per_worker" in text
+    assert "resolve_maca_gpus_per_worker" in text
+    assert "maca_ray_gpu_placement_kwargs" in text
 
 
 def test_maca_demo_utils_reexports_ray_opt_in():

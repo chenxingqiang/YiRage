@@ -127,15 +127,9 @@ def test_ray_distributed_engine_maca():
         GPUPlacementConfig,
         RayDistributedEngine,
     )
+    from yirage.backends.maca.config import resolve_maca_gpus_per_worker
 
-    gpus = 1
-    try:
-        import torch
-
-        if not torch.cuda.is_available():
-            gpus = 0
-    except Exception:
-        gpus = 0
+    gpus = resolve_maca_gpus_per_worker()
 
     engine = RayDistributedEngine(
         DistributedConfig(

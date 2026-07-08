@@ -68,6 +68,21 @@ def test_resolve_maca_use_ray_env(monkeypatch):
     assert cfg.maca_superoptimize_ray_kwargs() == {"use_ray": True}
 
 
+def test_resolve_maca_gpus_per_worker_env(monkeypatch):
+    cfg = _load_maca_backend_config()
+    monkeypatch.delenv("YIRAGE_MACA_INTEGRATION", raising=False)
+    monkeypatch.delenv("YIRAGE_MACA_ALLOW_NON_METAX", raising=False)
+    monkeypatch.delenv("MACA_PATH", raising=False)
+    monkeypatch.delenv("MACA_HOME", raising=False)
+    assert cfg.resolve_maca_gpus_per_worker() == 0.0
+    assert cfg.maca_ray_gpu_placement_kwargs()["gpus_per_worker"] == 0.0
+    monkeypatch.setenv("YIRAGE_MACA_INTEGRATION", "1")
+    assert cfg.resolve_maca_gpus_per_worker(requested=1.0) == 1.0
+    assert cfg.maca_ray_gpu_placement_kwargs(gpus_per_worker=1.0)["gpus_per_worker"] == 1.0
+    monkeypatch.delenv("YIRAGE_MACA_INTEGRATION", raising=False)
+    assert cfg.resolve_maca_gpus_per_worker(requested=0.0) == 0.0
+
+
 def test_config_h_maca_smem_64kb():
     """C++ transpiler must use maca::MAX_SMEM_SIZE = 64 KB (C500 per-block limit)."""
     config_h = Path(__file__).resolve().parents[2] / "include" / "config.h"
