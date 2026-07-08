@@ -35,14 +35,21 @@ from demo._maca_utils import (  # noqa: E402
     maca_superoptimize_ray_kwargs,
     sync_device,
 )
+from demo.maca.qwen_hf_utils import (  # noqa: E402
+    DEFAULT_QWEN_MODEL,
+    QwenModelDims,
+    default_qwen_dims,
+    describe_from_pretrained_gap,
+    resolve_qwen_dims,
+)
 
 
-# Qwen3-8B–style shapes (matches ``demo/qwen2.5`` + ``Qwen/Qwen3-8B`` decode tensors)
-HIDDEN_SIZE = 4096
-INTERMEDIATE_SIZE = 12288
-NUM_HEADS = 32
-NUM_KV_HEADS = 8
-HEAD_DIM = HIDDEN_SIZE // NUM_HEADS
+_DEFAULT_DIMS = default_qwen_dims()
+HIDDEN_SIZE = _DEFAULT_DIMS.hidden_size
+INTERMEDIATE_SIZE = _DEFAULT_DIMS.intermediate_size
+NUM_HEADS = _DEFAULT_DIMS.num_heads
+NUM_KV_HEADS = _DEFAULT_DIMS.num_kv_heads
+HEAD_DIM = _DEFAULT_DIMS.head_dim
 
 
 @dataclass
@@ -163,24 +170,41 @@ def build_qwen_kernels(
     backend: str = "maca",
     quick: bool = True,
     dtype_name: str = "float16",
+    dims: Optional[QwenModelDims] = None,
 ) -> QwenLayerKernels:
     import yirage as yr
 
+    model_dims = dims or default_qwen_dims()
     dtype = yr.float16 if dtype_name == "float16" else yr.bfloat16
     search = maca_search_kwargs(quick=quick)
-    fused_out = (NUM_HEADS + 2 * NUM_KV_HEADS) * HEAD_DIM
 
+    print(
+        f"Qwen shapes: H={model_dims.hidden_size} I={model_dims.intermediate_size} "
+        f"heads={model_dims.num_heads} kv={model_dims.num_kv_heads}"
+    )
     print("Superoptimizing Qwen MLP gate/up (RMS+matmul)...")
     mlp1 = _superoptimize_mlp_gate_up(
-        HIDDEN_SIZE, INTERMEDIATE_SIZE, backend=backend, search=search, dtype=dtype
+        model_dims.hidden_size,
+        model_dims.intermediate_size,
+        backend=backend,
+        search=search,
+        dtype=dtype,
     )
     print("Superoptimizing Qwen MLP down (SiLU gate × up + matmul)...")
     mlp2 = _superoptimize_mlp_down(
-        HIDDEN_SIZE, INTERMEDIATE_SIZE, backend=backend, search=search, dtype=dtype
+        model_dims.hidden_size,
+        model_dims.intermediate_size,
+        backend=backend,
+        search=search,
+        dtype=dtype,
     )
     print("Superoptimizing Qwen attention QKV (RMS+matmul)...")
     attn = _superoptimize_attn_qkv(
-        HIDDEN_SIZE, fused_out, backend=backend, search=search, dtype=dtype
+        model_dims.hidden_size,
+        model_dims.fused_qkv_outdim,
+        backend=backend,
+        search=search,
+        dtype=dtype,
     )
     if mlp1 is None or mlp2 is None or attn is None:
         raise RuntimeError("superoptimize returned None — mxcc compile or search failed")
@@ -241,21 +265,30 @@ def _synthetic_decode_loop(
     decode_steps: int,
     torch_dtype: torch.dtype,
     prefill_len: int,
+    dims: Optional[QwenModelDims] = None,
 ) -> Tuple[List[int], float]:
     """Prefill (PyTorch) + decode (YiRage kernels), aligned to q_len==1 decode path in modeling_qwen2."""
+    model_dims = dims or default_qwen_dims()
 
-    norm_w = torch.ones(HIDDEN_SIZE, dtype=torch_dtype, device=device)
+    norm_w = torch.ones(model_dims.hidden_size, dtype=torch_dtype, device=device)
     fused_gate_up = torch.randn(
-        HIDDEN_SIZE, 2 * INTERMEDIATE_SIZE, dtype=torch_dtype, device=device
+        model_dims.hidden_size,
+        2 * model_dims.intermediate_size,
+        dtype=torch_dtype,
+        device=device,
     )
-    down_w = torch.randn(INTERMEDIATE_SIZE, HIDDEN_SIZE, dtype=torch_dtype, device=device)
+    down_w = torch.randn(
+        model_dims.intermediate_size, model_dims.hidden_size, dtype=torch_dtype, device=device
+    )
     fused_qkv = torch.randn(
-        HIDDEN_SIZE, (NUM_HEADS + 2 * NUM_KV_HEADS) * HEAD_DIM, dtype=torch_dtype, device=device
+        model_dims.hidden_size,
+        model_dims.fused_qkv_outdim,
+        dtype=torch_dtype,
+        device=device,
     )
-    lm_head = torch.randn(HIDDEN_SIZE, 151936, dtype=torch_dtype, device=device)
+    lm_head = torch.randn(model_dims.hidden_size, 151936, dtype=torch_dtype, device=device)
 
-    # Prefill: seq > 1 uses PyTorch (same branch as CUDA demo modeling)
-    prefill = torch.randn(1, prefill_len, HIDDEN_SIZE, dtype=torch_dtype, device=device)
+    prefill = torch.randn(1, prefill_len, model_dims.hidden_size, dtype=torch_dtype, device=device)
     _ = _pytorch_mlp(prefill[:, -1:, :], norm_w, fused_gate_up, down_w)
     _ = _pytorch_qkv(prefill[:, -1:, :], norm_w, fused_qkv)
 
@@ -285,17 +318,27 @@ def _parity_check_kernels(
     device: torch.device,
     torch_dtype: torch.dtype,
     atol: float = 0.05,
+    dims: Optional[QwenModelDims] = None,
 ) -> None:
     """Runtime parity: YiRage MACA kernels vs PyTorch reference on decode shape [1,1,H]."""
-    norm_w = torch.ones(HIDDEN_SIZE, dtype=torch_dtype, device=device)
+    model_dims = dims or default_qwen_dims()
+    norm_w = torch.ones(model_dims.hidden_size, dtype=torch_dtype, device=device)
     fused_gate_up = torch.randn(
-        HIDDEN_SIZE, 2 * INTERMEDIATE_SIZE, dtype=torch_dtype, device=device
+        model_dims.hidden_size,
+        2 * model_dims.intermediate_size,
+        dtype=torch_dtype,
+        device=device,
     )
-    down_w = torch.randn(INTERMEDIATE_SIZE, HIDDEN_SIZE, dtype=torch_dtype, device=device)
+    down_w = torch.randn(
+        model_dims.intermediate_size, model_dims.hidden_size, dtype=torch_dtype, device=device
+    )
     fused_qkv = torch.randn(
-        HIDDEN_SIZE, (NUM_HEADS + 2 * NUM_KV_HEADS) * HEAD_DIM, dtype=torch_dtype, device=device
+        model_dims.hidden_size,
+        model_dims.fused_qkv_outdim,
+        dtype=torch_dtype,
+        device=device,
     )
-    hidden = torch.randn(1, 1, HIDDEN_SIZE, dtype=torch_dtype, device=device)
+    hidden = torch.randn(1, 1, model_dims.hidden_size, dtype=torch_dtype, device=device)
 
     ref_mlp = _pytorch_mlp(hidden, norm_w, fused_gate_up, down_w)
     yir_mlp = _yirage_mlp(hidden, norm_w, fused_gate_up, down_w, kernels)
@@ -323,10 +366,38 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         default="float16",
         help="Tensor dtype (CUDA qwen2.5 demo uses bfloat16; float16 default for MACA smoke)",
     )
+    parser.add_argument(
+        "--model",
+        default="",
+        help=f"HF model id for config.json shapes (e.g. {DEFAULT_QWEN_MODEL})",
+    )
+    parser.add_argument(
+        "--config-only",
+        action="store_true",
+        help="With --model: load Hub config.json only (no weight download)",
+    )
+    parser.add_argument(
+        "--from-pretrained",
+        action="store_true",
+        help="Request full HF weights (MetaX VM + flashinfer; see qwen_hf_utils)",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     apply_maca_demo_env()
     os.environ.setdefault("YIRAGE_BACKEND", "maca")
+
+    if args.from_pretrained:
+        print("NOTE:", describe_from_pretrained_gap(), file=sys.stderr)
+        if not args.model:
+            args.model = DEFAULT_QWEN_MODEL
+
+    model_name = args.model.strip() or None
+    if model_name:
+        print(f"Loading HF config shapes: {model_name} (config_only={args.config_only or not args.from_pretrained})")
+    qwen_dims = resolve_qwen_dims(
+        model_name,
+        config_only=not args.from_pretrained or args.config_only,
+    )
 
     print("=" * 60)
     print("MACA Qwen Full-Chain Inference Smoke")
@@ -337,11 +408,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     torch_dtype = torch.float16 if args.dtype == "float16" else torch.bfloat16
     quick = not args.full_search
 
-    kernels = build_qwen_kernels(backend="maca", quick=quick, dtype_name=args.dtype)
+    kernels = build_qwen_kernels(
+        backend="maca", quick=quick, dtype_name=args.dtype, dims=qwen_dims
+    )
 
     if not args.skip_parity:
         print("Checking decode-shape parity vs PyTorch reference...")
-        _parity_check_kernels(kernels, device=device, torch_dtype=torch_dtype)
+        _parity_check_kernels(
+            kernels, device=device, torch_dtype=torch_dtype, dims=qwen_dims
+        )
         print("✓ MLP + QKV parity OK")
 
     print(f"Running synthetic prefill (len={args.prefill_len}) + decode ({args.decode_steps} steps)...")
@@ -351,6 +426,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         decode_steps=args.decode_steps,
         torch_dtype=torch_dtype,
         prefill_len=args.prefill_len,
+        dims=qwen_dims,
     )
     print(f"✓ Generated token ids (first 8): {tokens[:8]}")
     print(f"✓ Mean decode latency: {ms:.4f} ms/step")

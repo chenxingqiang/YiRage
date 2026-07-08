@@ -64,3 +64,5 @@ def test_maca_qwen_demo_script_exists():
     text = _DEMO.read_text(encoding="utf-8")
     assert "demo/qwen2.5/demo.py" in text
     assert 'backend="maca"' in text or "backend='maca'" in text
+    assert "--model" in text
+    assert "qwen_hf_utils" in text
