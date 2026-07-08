@@ -159,6 +159,17 @@ def test_qwen3_pk_one_layer_compile_plan_contract():
     ]
 
 
+def test_qwen3_pk_stack_compile_plan_contract():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    plan = pk_utils.inspect_maca_pk_stack_compile_plan()
+    assert plan["compile_plan_ready"] is True
+    assert plan["variant"] == "stack"
+    assert "lm_head" in plan["minimal_task_graph"]
+    assert plan["pk_compile_layers"] == 2
+    assert "argmax_partial" in plan["tasks"]
+    assert "argmax_reduce" in plan["tasks"]
+
+
 def test_qwen3_pk_grid_for_rmsnorm_linear_layer():
     pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
     from demo.maca.qwen_hf_utils import default_qwen_dims

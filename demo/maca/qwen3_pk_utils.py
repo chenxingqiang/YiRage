@@ -22,6 +22,7 @@ class Qwen3PKScaffold:
     max_seq_length: int = 512
     use_cutlass_kernel: bool = True
     mode: str = "offline"
+    pk_compile_layers: int = 2
 
 
 def resolve_maca_pk_workers_schedulers(rank: int = 0) -> Tuple[int, int]:
@@ -203,17 +204,79 @@ def _build_maca_pk_embed_graph(
     return embed_out
 
 
-def _build_maca_pk_one_layer_graph(
+def _maca_pk_work_buffers(
     ypk,
-    meta,
+    scaffold: Qwen3PKScaffold,
+    dims: "QwenModelDims",
+    yr,
+    *,
+    vocab_smoke: int = 128,
+    with_argmax: bool = False,
+) -> Dict[str, Any]:
+    """Shared intermediate tensors (reused across decoder layers, CUDA demo aligned)."""
+    tokens = scaffold.max_num_batched_tokens
+    hidden_size = dims.hidden_size
+    intermediate_size = dims.intermediate_size
+    fused_qkv_out = dims.fused_qkv_outdim
+    num_q_heads = dims.num_heads
+    head_dim = dims.head_dim
+
+    buffers: Dict[str, Any] = {
+        "rmsnorm_out": ypk.new_tensor(
+            dims=(tokens, hidden_size), dtype=yr.bfloat16, name="rmsnorm_out", io_category="cuda_tensor"
+        ),
+        "attn_in": ypk.new_tensor(
+            dims=(tokens, fused_qkv_out), dtype=yr.bfloat16, name="attn_in", io_category="cuda_tensor"
+        ),
+        "attn_out": ypk.new_tensor(
+            dims=(tokens, num_q_heads * head_dim), dtype=yr.bfloat16, name="attn_out", io_category="cuda_tensor"
+        ),
+        "attn_proj_out": ypk.new_tensor(
+            dims=(tokens, hidden_size), dtype=yr.bfloat16, name="attn_proj_out", io_category="cuda_tensor"
+        ),
+        "mlp_mid": ypk.new_tensor(
+            dims=(tokens, 2 * intermediate_size), dtype=yr.bfloat16, name="mlp_mid", io_category="cuda_tensor"
+        ),
+        "silu_mul_out": ypk.new_tensor(
+            dims=(tokens, intermediate_size), dtype=yr.bfloat16, name="silu_mul_out", io_category="cuda_tensor"
+        ),
+        "mlp_out": ypk.new_tensor(
+            dims=(tokens, hidden_size), dtype=yr.bfloat16, name="mlp_out", io_category="cuda_tensor"
+        ),
+    }
+    if with_argmax:
+        buffers["argmax_in"] = ypk.new_tensor(
+            dims=(tokens, vocab_smoke), dtype=yr.bfloat16, name="argmax_in", io_category="cuda_tensor"
+        )
+        buffers["argmax_part_value"] = ypk.new_tensor(
+            dims=(tokens, ypk.num_workers),
+            dtype=yr.bfloat16,
+            name="argmax_part_value",
+            io_category="cuda_tensor",
+        )
+        buffers["argmax_part_index"] = ypk.new_tensor(
+            dims=(tokens, ypk.num_workers),
+            dtype=yr.int64,
+            name="argmax_part_index",
+            io_category="cuda_tensor",
+        )
+    return buffers
+
+
+def _append_maca_pk_decoder_layer(
+    ypk,
+    x,
+    buffers: Dict[str, Any],
     scaffold: Qwen3PKScaffold,
     dims: "QwenModelDims",
     *,
     device: "torch.device",
     yr,
-    layer_idx: int = 0,
+    layer_idx: int,
+    cos_pos_embed,
+    sin_pos_embed,
 ):
-    """Attach one Qwen3 decoder block (demo/qwen3/demo.py layer loop, synthetic weights)."""
+    """Attach one decoder block; returns activation ``x`` for the next layer."""
     import torch
 
     hidden_size = dims.hidden_size
@@ -221,43 +284,15 @@ def _build_maca_pk_one_layer_graph(
     head_dim = dims.head_dim
     num_q_heads = dims.num_heads
     num_kv_heads = dims.num_kv_heads
-    fused_qkv_out = (num_q_heads + 2 * num_kv_heads) * head_dim
     tokens = scaffold.max_num_batched_tokens
 
-    rmsnorm_out = ypk.new_tensor(
-        dims=(tokens, hidden_size), dtype=yr.bfloat16, name="rmsnorm_out", io_category="cuda_tensor"
-    )
-    attn_in = ypk.new_tensor(
-        dims=(tokens, fused_qkv_out), dtype=yr.bfloat16, name="attn_in", io_category="cuda_tensor"
-    )
-    attn_out = ypk.new_tensor(
-        dims=(tokens, num_q_heads * head_dim), dtype=yr.bfloat16, name="attn_out", io_category="cuda_tensor"
-    )
-    attn_proj_out = ypk.new_tensor(
-        dims=(tokens, hidden_size), dtype=yr.bfloat16, name="attn_proj_out", io_category="cuda_tensor"
-    )
-    mlp_mid = ypk.new_tensor(
-        dims=(tokens, 2 * intermediate_size), dtype=yr.bfloat16, name="mlp_mid", io_category="cuda_tensor"
-    )
-    silu_mul_out = ypk.new_tensor(
-        dims=(tokens, intermediate_size), dtype=yr.bfloat16, name="silu_mul_out", io_category="cuda_tensor"
-    )
-    mlp_out = ypk.new_tensor(
-        dims=(tokens, hidden_size), dtype=yr.bfloat16, name="mlp_out", io_category="cuda_tensor"
-    )
-
-    cos_pos_embed = ypk.attach_input(
-        torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
-        name="cos_position_embedding",
-    )
-    sin_pos_embed = ypk.attach_input(
-        torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
-        name="sin_position_embedding",
-    )
-
-    x = _build_maca_pk_embed_graph(
-        ypk, meta, scaffold, hidden_size=hidden_size, vocab_smoke=128, yr=yr
-    )
+    rmsnorm_out = buffers["rmsnorm_out"]
+    attn_in = buffers["attn_in"]
+    attn_out = buffers["attn_out"]
+    attn_proj_out = buffers["attn_proj_out"]
+    mlp_mid = buffers["mlp_mid"]
+    silu_mul_out = buffers["silu_mul_out"]
+    mlp_out = buffers["mlp_out"]
 
     w_norm = ypk.attach_input(
         torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
@@ -409,6 +444,156 @@ def _build_maca_pk_one_layer_graph(
     return mlp_out
 
 
+def _append_maca_pk_lm_head_argmax(
+    ypk,
+    x,
+    buffers: Dict[str, Any],
+    meta: Dict[str, "torch.Tensor"],
+    scaffold: Qwen3PKScaffold,
+    dims: "QwenModelDims",
+    *,
+    device: "torch.device",
+    yr,
+    vocab_smoke: int = 128,
+):
+    """Attach final rmsnorm + lm_head + argmax (CUDA demo epilogue)."""
+    import torch
+
+    tokens = scaffold.max_num_batched_tokens
+    hidden_size = dims.hidden_size
+    rmsnorm_out = buffers["rmsnorm_out"]
+    argmax_in = buffers["argmax_in"]
+    argmax_part_value = buffers["argmax_part_value"]
+    argmax_part_index = buffers["argmax_part_index"]
+
+    w_norm = ypk.attach_input(
+        torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
+        name="model_norm_weight",
+    )
+    w_proj = ypk.attach_input(
+        torch_tensor=torch.randn(vocab_smoke, hidden_size, dtype=torch.bfloat16, device=device),
+        name="lm_head",
+    )
+    ypk.rmsnorm_layer(
+        input=x,
+        weight=w_norm,
+        output=rmsnorm_out,
+        grid_dim=(tokens, 1, 1),
+        block_dim=(128, 1, 1),
+    )
+    ypk.linear_layer(
+        input=rmsnorm_out,
+        weight=w_proj,
+        output=argmax_in,
+        grid_dim=(ypk.num_workers, 1, 1),
+        block_dim=(128, 1, 1),
+    )
+    ypk.argmax_partial_layer(
+        input=argmax_in,
+        output=(argmax_part_value, argmax_part_index),
+        grid_dim=(ypk.num_workers, 1, 1),
+        block_dim=(128, 1, 1),
+    )
+    argmax_out = ypk.attach_input(torch_tensor=meta["output_tokens"], name="output_token")
+    ypk.argmax_reduce_layer(
+        input=(argmax_part_value, argmax_part_index),
+        output=argmax_out,
+        grid_dim=(1, 1, 1),
+        block_dim=(128, 1, 1),
+    )
+    return argmax_out
+
+
+def _build_maca_pk_stack_graph(
+    ypk,
+    meta,
+    scaffold: Qwen3PKScaffold,
+    dims: "QwenModelDims",
+    *,
+    device: "torch.device",
+    yr,
+    num_layers: int,
+    lm_head: bool = True,
+    vocab_smoke: int = 128,
+):
+    """Build embed + N decoder layers + optional lm_head/argmax (CUDA demo aligned)."""
+    import torch
+
+    head_dim = dims.head_dim
+    hidden_size = dims.hidden_size
+
+    cos_pos_embed = ypk.attach_input(
+        torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
+        name="cos_position_embedding",
+    )
+    sin_pos_embed = ypk.attach_input(
+        torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
+        name="sin_position_embedding",
+    )
+
+    buffers = _maca_pk_work_buffers(
+        ypk, scaffold, dims, yr, vocab_smoke=vocab_smoke, with_argmax=lm_head
+    )
+    x = _build_maca_pk_embed_graph(
+        ypk, meta, scaffold, hidden_size=hidden_size, vocab_smoke=vocab_smoke, yr=yr
+    )
+    for layer_idx in range(num_layers):
+        x = _append_maca_pk_decoder_layer(
+            ypk,
+            x,
+            buffers,
+            scaffold,
+            dims,
+            device=device,
+            yr=yr,
+            layer_idx=layer_idx,
+            cos_pos_embed=cos_pos_embed,
+            sin_pos_embed=sin_pos_embed,
+        )
+    if lm_head:
+        x = _append_maca_pk_lm_head_argmax(
+            ypk, x, buffers, meta, scaffold, dims, device=device, yr=yr, vocab_smoke=vocab_smoke
+        )
+    return x
+
+
+def _build_maca_pk_one_layer_graph(
+    ypk,
+    meta,
+    scaffold: Qwen3PKScaffold,
+    dims: "QwenModelDims",
+    *,
+    device: "torch.device",
+    yr,
+    layer_idx: int = 0,
+):
+    """Attach one Qwen3 decoder block (demo/qwen3/demo.py layer loop, synthetic weights)."""
+    return _build_maca_pk_stack_graph(
+        ypk,
+        meta,
+        scaffold,
+        dims,
+        device=device,
+        yr=yr,
+        num_layers=1,
+        lm_head=False,
+    )
+
+
+def _maca_pk_stack_tasks(*, lm_head: bool) -> list[str]:
+    tasks = [
+        "embedding",
+        "rms_norm",
+        "linear",
+        "paged_attention",
+        "linear_with_residual",
+        "silu_mul",
+    ]
+    if lm_head:
+        tasks.extend(["lm_head", "argmax_partial", "argmax_reduce"])
+    return tasks
+
+
 def _maca_pk_compile_result(
     ypk,
     *,
@@ -462,15 +647,21 @@ def inspect_maca_pk_compile_plan(
             ],
             "cuda_slice": "demo/qwen3/demo.py layer[0] (embed+attn+mlp)",
         },
+        "stack": {
+            "tasks": _maca_pk_stack_tasks(lm_head=True),
+            "cuda_slice": "demo/qwen3/demo.py layers[0:N] + lm_head/argmax",
+        },
     }
     if variant not in variants:
         raise ValueError(f"unknown compile plan variant: {variant}")
+    plan_layers = scaffold.pk_compile_layers if variant == "stack" else 1
     return {
         **contract,
         "cuda_reference": "demo/qwen3/demo.py --use-yirage",
         "variant": variant,
         "minimal_task_graph": variants[variant]["cuda_slice"],
         "tasks": variants[variant]["tasks"],
+        "pk_compile_layers": plan_layers,
         "hidden_size": dims.hidden_size,
         "intermediate_size": dims.intermediate_size,
         "fused_qkv_outdim": dims.fused_qkv_outdim,
@@ -517,15 +708,39 @@ def maca_pk_one_layer_compile_smoke(
         output_dir=output_dir,
         num_workers=num_workers,
         num_schedulers=num_schedulers,
-        tasks=[
-            "embedding",
-            "rms_norm",
-            "linear",
-            "paged_attention",
-            "linear_with_residual",
-            "silu_mul",
-        ],
+        tasks=_maca_pk_stack_tasks(lm_head=False),
     )
+
+
+def maca_pk_stack_compile_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+    num_layers: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Build N-layer Qwen3 PK stack + lm_head/argmax and compile via mxcc (MetaX VM)."""
+    scaffold = scaffold or Qwen3PKScaffold()
+    layers = num_layers if num_layers is not None else scaffold.pk_compile_layers
+    ypk, meta, dims, device, num_workers, num_schedulers, yr = _init_maca_pk_yirage(scaffold)
+    _build_maca_pk_stack_graph(
+        ypk,
+        meta,
+        scaffold,
+        dims,
+        device=device,
+        yr=yr,
+        num_layers=layers,
+        lm_head=True,
+    )
+    result = _maca_pk_compile_result(
+        ypk,
+        output_dir=output_dir,
+        num_workers=num_workers,
+        num_schedulers=num_schedulers,
+        tasks=_maca_pk_stack_tasks(lm_head=True),
+    )
+    result["pk_compile_layers"] = layers
+    return result
 
 
 def inspect_maca_pk_compile_plan_embed_only(
@@ -538,6 +753,12 @@ def inspect_maca_pk_one_layer_compile_plan(
     scaffold: Optional[Qwen3PKScaffold] = None,
 ) -> Dict[str, Any]:
     return inspect_maca_pk_compile_plan(scaffold, variant="one_layer")
+
+
+def inspect_maca_pk_stack_compile_plan(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+) -> Dict[str, Any]:
+    return inspect_maca_pk_compile_plan(scaffold, variant="stack")
 
 
 def inspect_maca_pk_compile_contract(
@@ -593,6 +814,7 @@ def inspect_qwen3_pk_scaffold(scaffold: Optional[Qwen3PKScaffold] = None) -> Dic
         "page_size": scaffold.page_size,
         "max_num_pages": scaffold.max_num_pages,
         "max_seq_length": scaffold.max_seq_length,
+        "pk_compile_layers": scaffold.pk_compile_layers,
         "hidden_size": dims.hidden_size,
         "intermediate_size": dims.intermediate_size,
         "fused_qkv_outdim": dims.fused_qkv_outdim,
@@ -600,8 +822,8 @@ def inspect_qwen3_pk_scaffold(scaffold: Optional[Qwen3PKScaffold] = None) -> Dic
         "compile_note": (
             "PersistentKernel.compile() selects mxcc when YIRAGE_BACKEND=maca "
             "(get_maca_pk_compile_command). Use --compile-plan/--compile-inspect "
-            "for Cloud contract; MetaX --compile-only (embed) or --compile-one-layer "
-            "(decoder block) run mxcc task-graph compile."
+            "for Cloud contract; MetaX --compile-only (embed), --compile-one-layer "
+            "(decoder block), or --compile-stack (N layers + lm_head/argmax)."
         ),
         "yirage_backend": os.environ.get("YIRAGE_BACKEND", "maca"),
     }
@@ -615,9 +837,11 @@ __all__ = [
     "inspect_maca_pk_compile_plan",
     "inspect_maca_pk_compile_plan_embed_only",
     "inspect_maca_pk_one_layer_compile_plan",
+    "inspect_maca_pk_stack_compile_plan",
     "inspect_qwen3_pk_scaffold",
     "maca_pk_minimal_compile_smoke",
     "maca_pk_one_layer_compile_smoke",
+    "maca_pk_stack_compile_smoke",
     "maca_pk_runtime_smoke",
     "resolve_maca_pk_workers_schedulers",
 ]

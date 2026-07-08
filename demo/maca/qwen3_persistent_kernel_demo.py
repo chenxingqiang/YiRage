@@ -10,16 +10,18 @@ nvcc, and runs LLM serving. This MACA demo closes the **smoke/contract** gap:
     worker/scheduler counts from ``get_configurations_from_gpu``.
 
 Full ``ypk.compile()`` task-graph: ``--compile-plan`` (Cloud) /
-``--compile-only`` embed (MetaX) / ``--compile-one-layer`` decoder block (MetaX).
-Full multi-layer qwen3 e2e remains backlog.
+``--compile-only`` embed (MetaX) / ``--compile-one-layer`` decoder block /
+``--compile-stack`` N layers + lm_head/argmax (MetaX). Full HF-weight multi-layer
+runtime e2e remains backlog.
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
   python3 demo/maca/qwen3_persistent_kernel_demo.py --inspect-only
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-plan
-  python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-plan --compile-plan-variant one_layer
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-plan --compile-plan-variant stack
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-only
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-one-layer
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-stack --pk-compile-layers 2
 """
 
 from __future__ import annotations
@@ -41,6 +43,7 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     maca_pk_minimal_compile_smoke,
     maca_pk_one_layer_compile_smoke,
     maca_pk_runtime_smoke,
+    maca_pk_stack_compile_smoke,
     resolve_maca_pk_workers_schedulers,
 )
 
@@ -86,6 +89,12 @@ def main() -> int:
     parser.add_argument("--max-num-pages", type=int, default=Qwen3PKScaffold.max_num_pages)
     parser.add_argument("--max-seq-length", type=int, default=Qwen3PKScaffold.max_seq_length)
     parser.add_argument(
+        "--pk-compile-layers",
+        type=int,
+        default=Qwen3PKScaffold.pk_compile_layers,
+        help="Decoder layers for --compile-stack (default: scaffold pk_compile_layers=2)",
+    )
+    parser.add_argument(
         "--compile-plan",
         action="store_true",
         help="Validate PK compile plan (no GPU required)",
@@ -93,7 +102,7 @@ def main() -> int:
     parser.add_argument(
         "--compile-plan-variant",
         type=str,
-        choices=("embed_only", "one_layer"),
+        choices=("embed_only", "one_layer", "stack"),
         default="embed_only",
         help="Compile plan variant for --compile-plan (default: embed_only)",
     )
@@ -106,6 +115,11 @@ def main() -> int:
         "--compile-one-layer",
         action="store_true",
         help="MetaX: build one-layer Qwen3 PK graph (embed+attn+mlp) and ypk.compile()",
+    )
+    parser.add_argument(
+        "--compile-stack",
+        action="store_true",
+        help="MetaX: build N-layer stack + lm_head/argmax PK graph and ypk.compile()",
     )
     parser.add_argument(
         "--compile-inspect",
@@ -139,6 +153,7 @@ def main() -> int:
         page_size=args.page_size,
         max_num_pages=args.max_num_pages,
         max_seq_length=args.max_seq_length,
+        pk_compile_layers=args.pk_compile_layers,
     )
 
     report: dict = {"scaffold": inspect_qwen3_pk_scaffold(scaffold)}
@@ -188,13 +203,27 @@ def main() -> int:
             print("PASS — compile-inspect (no MetaX GPU required)")
         return 0
 
-    if args.compile_only or args.compile_one_layer:
+    if args.compile_only or args.compile_one_layer or args.compile_stack:
         if not _is_maca_device():
-            flag = "--compile-one-layer" if args.compile_one_layer else "--compile-only"
+            if args.compile_stack:
+                flag = "--compile-stack"
+            elif args.compile_one_layer:
+                flag = "--compile-one-layer"
+            else:
+                flag = "--compile-only"
             print(f"✗ MetaX MACA GPU required for {flag}", file=sys.stderr)
             return 1
         os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
-        if args.compile_one_layer:
+        if args.compile_stack:
+            report["compile"] = maca_pk_stack_compile_smoke(
+                scaffold, num_layers=args.pk_compile_layers
+            )
+            report["status"] = "compile_stack"
+            pass_msg = (
+                f"PASS — compile-stack ({args.pk_compile_layers} layers + lm_head/argmax via mxcc)"
+            )
+            title = "MACA Qwen3 PK stack compile smoke"
+        elif args.compile_one_layer:
             report["compile"] = maca_pk_one_layer_compile_smoke(scaffold)
             report["status"] = "compile_one_layer"
             pass_msg = "PASS — compile-one-layer (decoder block via mxcc)"
