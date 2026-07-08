@@ -35,6 +35,8 @@ from yirage.maca_config import (
 # Benchmark configurations
 WARMUP_ITERS = 10
 BENCHMARK_ITERS = 100
+QUICK_WARMUP_ITERS = 3
+QUICK_BENCHMARK_ITERS = 20
 DTYPE = torch.float16
 
 
@@ -172,24 +174,31 @@ def benchmark_pytorch_softmax(
     return (end - start) / iters
 
 
-def run_matmul_benchmarks(device, maca_config):
+def run_matmul_benchmarks(device, maca_config, quick=False):
     """Run matrix multiplication benchmarks."""
     print_header("Matrix Multiplication Benchmarks")
 
-    configs = [
-        (128, 128, 256, "Small"),
-        (512, 512, 1024, "Medium"),
-        (1024, 1024, 4096, "Large"),
-        (4096, 4096, 4096, "XLarge"),
-    ]
+    if quick:
+        configs = [(128, 128, 256, "Quick")]
+        warmup = QUICK_WARMUP_ITERS
+        iters = QUICK_BENCHMARK_ITERS
+    else:
+        configs = [
+            (128, 128, 256, "Small"),
+            (512, 512, 1024, "Medium"),
+            (1024, 1024, 4096, "Large"),
+            (4096, 4096, 4096, "XLarge"),
+        ]
+        warmup = WARMUP_ITERS
+        iters = BENCHMARK_ITERS
 
     results = []
 
     for M, N, K, name in configs:
         print(f"\n  [{name}] M={M}, N={N}, K={K}")
 
-        pytorch_time = benchmark_pytorch_matmul(M, N, K, device)
-        yirage_time = benchmark_yirage_matmul(M, N, K, device)
+        pytorch_time = benchmark_pytorch_matmul(M, N, K, device, warmup=warmup, iters=iters)
+        yirage_time = benchmark_yirage_matmul(M, N, K, device, warmup=warmup, iters=iters)
         if yirage_time is not None:
             print_result(name, pytorch_time, yirage_time)
             results.append((name, M, N, K, pytorch_time, yirage_time))
@@ -244,6 +253,19 @@ def run_attention_benchmarks(device):
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="YiRage MACA vs PyTorch benchmark")
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Single small matmul + reduced iters (Loop smoke on MetaX VM)",
+    )
+    args = parser.parse_args()
+
+    if args.quick:
+        os.environ.setdefault("YIRAGE_MACA_SEARCH_QUICK", "1")
+
     print()
     print("=" * 60)
     print("  YiRage MACA vs PyTorch Performance Benchmark")
@@ -280,9 +302,10 @@ def main():
     print(f"    Forloop ranges: {maca_config.get('franges_to_explore', [])}")
 
     # Run benchmarks
-    run_matmul_benchmarks(device, maca_config)
-    run_element_wise_benchmarks(device)
-    run_attention_benchmarks(device)
+    run_matmul_benchmarks(device, maca_config, quick=args.quick)
+    if not args.quick:
+        run_element_wise_benchmarks(device)
+        run_attention_benchmarks(device)
 
     # Summary
     print_header("MACA Optimization Summary")

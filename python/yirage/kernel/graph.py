@@ -301,10 +301,9 @@ def get_mxcc_cc_cmd(
         [
             "-DYIRAGE_BACKEND_USE_CUDA",
             "-DYIRAGE_BACKEND_MACA_ENABLED",
+            "-DYIRAGE_MACA_SOFTWARE_MMA=1",
             "-D__CUDACC__",
             "-D__NVCC__",
-            "-DCUTE_ARCH_LDSM_SM75_ACTIVATED=1",
-            "-DCUTE_ARCH_MMA_SM70_ENABLED=1",
             "-shared",
             "-std=c++17",
             "-fPIC",

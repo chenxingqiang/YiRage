@@ -56,3 +56,12 @@ def test_maca_shared_memory_capacity_matches_device_limit(monkeypatch):
     monkeypatch.setenv("YIRAGE_BACKEND", "maca")
     assert common.get_shared_memory_capacity(70) == 65536
     assert common.get_shared_memory_capacity(80) == 65536
+
+
+def test_mxcc_cmd_uses_software_mma_not_hardware_ptx():
+    """mxcc must not pass CUTE_ARCH_MMA_SM70_ENABLED (mma.sync invalid on xcore1000)."""
+    graph_py = Path(__file__).resolve().parents[2] / "python" / "yirage" / "kernel" / "graph.py"
+    text = graph_py.read_text(encoding="utf-8")
+    assert "YIRAGE_MACA_SOFTWARE_MMA=1" in text
+    assert "CUTE_ARCH_MMA_SM70_ENABLED" not in text
+    assert "CUTE_ARCH_LDSM_SM75_ACTIVATED" not in text
