@@ -15,6 +15,7 @@ Full ``ypk.compile()`` task-graph: ``--compile-plan`` (Cloud) /
 ``--runtime-plan`` (Cloud) / ``--runtime-stack`` (MetaX). HF-weight stack:
 ``--hf-weight-plan`` / ``--hf-runtime-plan`` (Cloud) / ``--hf-runtime-stack`` (MetaX).
 Padded lm_head (153600): ``--hf-padded-lm-head``; generation scaffold: ``--hf-generation-plan``.
+Multi-step decode: ``--hf-decode-step-plan`` (Cloud) / ``--hf-generation-smoke`` (MetaX).
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
@@ -31,6 +32,8 @@ MetaX VM:
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-runtime-stack --pk-compile-layers 2
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-runtime-stack --hf-padded-lm-head
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-generation-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-decode-step-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-generation-smoke --decode-steps 4
 """
 
 from __future__ import annotations
@@ -52,6 +55,7 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     inspect_maca_pk_hf_generation_plan,
     inspect_maca_pk_runtime_plan,
     inspect_qwen3_pk_scaffold,
+    maca_pk_hf_generation_smoke,
     maca_pk_hf_stack_runtime_smoke,
     maca_pk_minimal_compile_smoke,
     maca_pk_one_layer_compile_smoke,
@@ -63,6 +67,9 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
 from demo.maca.qwen3_pk_hf_utils import (  # noqa: E402
     inspect_maca_pk_hf_padded_lm_head_plan,
     inspect_maca_pk_hf_weight_plan,
+)
+from demo.maca.qwen3_pk_generation_utils import (  # noqa: E402
+    inspect_maca_pk_decode_step_contract,
 )
 
 
@@ -175,6 +182,33 @@ def main() -> int:
         "--hf-generation-plan",
         action="store_true",
         help="Validate HF PK generation loop contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-decode-step-plan",
+        action="store_true",
+        help="Validate multi-step decode tensor contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-generation-smoke",
+        action="store_true",
+        help="MetaX: HF stack compile + multi-step ypk() decode loop",
+    )
+    parser.add_argument(
+        "--decode-steps",
+        type=int,
+        default=1,
+        help="Decode steps for --hf-generation-smoke (default: 1)",
+    )
+    parser.add_argument(
+        "--chat-prompt",
+        type=str,
+        default="Hello",
+        help="Chat prompt when --hf-generation-smoke --use-tokenizer",
+    )
+    parser.add_argument(
+        "--use-tokenizer",
+        action="store_true",
+        help="With --hf-generation-smoke: encode/decode via HF tokenizer",
     )
     parser.add_argument(
         "--hf-padded-plan",
@@ -311,10 +345,30 @@ def main() -> int:
             print("MACA Qwen3 PK HF generation plan")
             print("=" * 70)
             for key, val in report["hf_generation_plan"].items():
-                if key != "hf_runtime_plan":
+                if key not in ("hf_runtime_plan", "decode_step_contract"):
                     print(f"  {key}: {val}")
             print()
             print("PASS — hf-generation-plan (no MetaX GPU required)")
+        return 0
+
+    if args.hf_decode_step_plan:
+        report["hf_decode_step_plan"] = inspect_maca_pk_decode_step_contract(scaffold)
+        report["status"] = "hf_decode_step_plan"
+        if not report["hf_decode_step_plan"]["decode_step_contract_ready"]:
+            print("✗ PK HF decode step plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF decode step contract")
+            print("=" * 70)
+            for key, val in report["hf_decode_step_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-decode-step-plan (no MetaX GPU required)")
         return 0
 
     if args.hf_padded_plan:
@@ -400,6 +454,34 @@ def main() -> int:
             print()
             print(
                 f"PASS — hf-runtime-stack ({args.pk_compile_layers} layer(s) HF compile + ypk() launch)"
+            )
+        return 0
+
+    if args.hf_generation_smoke:
+        if not _is_maca_device():
+            print("✗ MetaX MACA GPU required for --hf-generation-smoke", file=sys.stderr)
+            return 1
+        os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
+        report["hf_generation"] = maca_pk_hf_generation_smoke(
+            scaffold,
+            num_layers=args.pk_compile_layers,
+            decode_steps=args.decode_steps,
+            use_padded_lm_head=args.hf_padded_lm_head,
+            use_tokenizer=args.use_tokenizer,
+            chat_prompt=args.chat_prompt,
+        )
+        report["status"] = "hf_generation_smoke"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF generation smoke")
+            print("=" * 70)
+            print(f"  hf_generation: {report['hf_generation']}")
+            print()
+            print(
+                f"PASS — hf-generation-smoke "
+                f"({args.decode_steps} decode step(s), layers={args.pk_compile_layers})"
             )
         return 0
 

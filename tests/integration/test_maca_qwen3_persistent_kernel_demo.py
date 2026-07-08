@@ -218,6 +218,30 @@ def test_maca_qwen3_persistent_kernel_demo_hf_generation_plan():
     assert payload["status"] == "hf_generation_plan"
     assert payload["hf_generation_plan"]["generation_plan_ready"] is True
     assert payload["hf_generation_plan"]["generation_ready"] is False
+    assert payload["hf_generation_plan"]["multi_step_decode_ready"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_decode_step_plan():
+    """Cloud-safe contract: multi-step decode tensor semantics."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-decode-step-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_decode_step_plan"
+    assert payload["hf_decode_step_plan"]["decode_step_contract_ready"] is True
 
 
 @pytest.mark.integration
@@ -493,3 +517,5 @@ def test_maca_qwen3_persistent_kernel_demo_script_exists():
     assert "--hf-runtime-stack" in text
     assert "--hf-padded-plan" in text
     assert "--hf-generation-plan" in text
+    assert "--hf-decode-step-plan" in text
+    assert "--hf-generation-smoke" in text

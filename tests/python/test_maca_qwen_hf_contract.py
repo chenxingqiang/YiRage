@@ -264,7 +264,40 @@ def test_qwen3_pk_hf_generation_plan_contract():
     plan = pk_utils.inspect_maca_pk_hf_generation_plan()
     assert plan["generation_plan_ready"] is True
     assert plan["generation_ready"] is False
-    assert any("ypk()" in step for step in plan["implemented_steps"])
+    assert plan["multi_step_decode_ready"] is True
+    assert any("run_maca_pk_decode_loop" in step for step in plan["implemented_steps"])
+
+
+def test_maca_pk_decode_step_contract():
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    contract = gen_utils.inspect_maca_pk_decode_step_contract()
+    assert contract["decode_step_contract_ready"] is True
+    assert contract["initial_step"] == "prompt_len - 1"
+
+
+def test_prepare_and_advance_maca_pk_prompt_meta_cpu():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    import torch
+
+    scaffold = pk_utils.Qwen3PKScaffold()
+    meta = pk_utils.build_qwen3_pk_meta_tensors(scaffold, torch.device("cpu"))
+    prompt_ids = [11, 22, 33, 44]
+    summary = gen_utils.prepare_maca_pk_prompt_meta(meta, scaffold, prompt_ids, num_tokens=1)
+    assert summary["prompt_len"] == 4
+    assert int(meta["step"][0].item()) == 3
+    assert int(meta["input_tokens"][0, 0].item()) == 44
+
+    meta["output_tokens"][0, 0] = 99
+    advanced = gen_utils.advance_maca_pk_decode_step(meta, scaffold, req=0)
+    assert advanced["output_token"] == 99
+    assert advanced["new_step"] == 4
+    assert int(meta["tokens"][0, 4].item()) == 99
+    assert int(meta["input_tokens"][0, 0].item()) == 99
 
 
 def test_qwen3_pk_prepare_runtime_meta_shapes():
@@ -289,8 +322,11 @@ def test_qwen3_persistent_kernel_demo_has_runtime_modes():
     assert "--hf-runtime-stack" in text
     assert "--hf-padded-plan" in text
     assert "--hf-generation-plan" in text
+    assert "--hf-decode-step-plan" in text
+    assert "--hf-generation-smoke" in text
     assert "maca_pk_stack_runtime_smoke" in text
     assert "maca_pk_hf_stack_runtime_smoke" in text
+    assert "maca_pk_hf_generation_smoke" in text
     assert "inspect_maca_pk_hf_generation_plan" in text
 
 

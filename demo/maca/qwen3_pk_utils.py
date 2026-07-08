@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
+from typing import Any, Dict, Optional, Sequence, Tuple, TYPE_CHECKING
 
 from demo.maca.qwen_hf_utils import DEFAULT_QWEN_MODEL, default_qwen_dims
 
@@ -1028,7 +1028,7 @@ def inspect_maca_pk_hf_runtime_plan(
         "hf_runtime_ready": weight_plan["weight_plan_ready"] and runtime_plan["runtime_plan_ready"],
         "multi_layer_ready": weight_plan["weight_plan_ready"],
         "padded_lm_head_ready": True,
-        "generation_loop_ready": False,
+        "generation_loop_ready": True,
         "synthetic_runtime_ready": runtime_plan["runtime_plan_ready"],
         "weight_plan": weight_plan,
         "model": scaffold.model,
@@ -1038,7 +1038,8 @@ def inspect_maca_pk_hf_runtime_plan(
         "next_steps": [
             "MetaX VM: --hf-runtime-stack --pk-compile-layers 2 (multi-layer)",
             "MetaX VM: --hf-runtime-stack --hf-padded-lm-head (153600 argmax)",
-            "generation decode loop vs CUDA demo/qwen3/demo.py --use-yirage",
+            "MetaX VM: --hf-generation-smoke --decode-steps 4 (multi-step ypk loop)",
+            "tokenizer full-path generation e2e vs CUDA demo/qwen3/demo.py --use-yirage",
         ],
     }
 
@@ -1047,31 +1048,90 @@ def inspect_maca_pk_hf_generation_plan(
     scaffold: Optional[Qwen3PKScaffold] = None,
 ) -> Dict[str, Any]:
     """Cloud-safe HF PK generation loop contract (CUDA ``demo/qwen3/demo.py`` aligned)."""
+    from demo.maca.qwen3_pk_generation_utils import inspect_maca_pk_decode_step_contract
+
     scaffold = scaffold or Qwen3PKScaffold()
     runtime_plan = inspect_maca_pk_hf_runtime_plan(scaffold, max_layers=scaffold.pk_compile_layers)
+    decode_contract = inspect_maca_pk_decode_step_contract(scaffold)
     return {
         "cuda_reference": "demo/qwen3/demo.py --use-yirage (ypk() + tokenizer.decode)",
         "maca_runtime_entry": "maca_pk_hf_stack_runtime_smoke",
         "maca_generation_entry": "maca_pk_hf_generation_smoke",
         "generation_ready": False,
+        "multi_step_decode_ready": decode_contract["decode_step_contract_ready"],
         "implemented_steps": [
             "HF load_maca_pk_hf_weight_bundle",
             "N-layer PK stack graph + mxcc compile",
             "prepare_maca_pk_runtime_meta (qo_indptr / paged_kv)",
-            "single ypk() launch",
-            "read output_tokens[0]",
+            "prepare_maca_pk_prompt_meta (tokenizer prompt ids)",
+            "run_maca_pk_decode_loop (multi-step ypk + step advance)",
+            "encode_maca_pk_chat_prompt / decode_maca_pk_generated_tokens",
         ],
         "backlog_steps": [
-            "multi-step decode loop (step tensor advance)",
-            "tokenizer.encode prompt + batch_decode response",
+            "MetaX VM tokenizer full-path generation e2e",
             "per-token latency reporting",
             "multi-request batching (total_num_requests > 1)",
         ],
+        "decode_step_contract": decode_contract,
         "hf_runtime_plan": runtime_plan,
         "model": scaffold.model,
         "pk_compile_layers": scaffold.pk_compile_layers,
         "generation_plan_ready": runtime_plan["hf_runtime_ready"],
         "requires_metax_gpu": True,
+    }
+
+
+def _maca_pk_hf_init_compiled_stack(
+    scaffold: Qwen3PKScaffold,
+    *,
+    output_dir: Optional[str] = None,
+    num_layers: int = 1,
+    vocab_smoke: int = 128,
+    use_padded_lm_head: bool = False,
+    local_files_only: bool = False,
+) -> Dict[str, Any]:
+    """Compile HF-weight N-layer PK stack; return ypk/meta/compile artifacts (caller finalizes)."""
+    from demo.maca.qwen3_pk_hf_utils import load_maca_pk_hf_weight_bundle, resolve_maca_pk_lm_vocab_size
+
+    lm_vocab = resolve_maca_pk_lm_vocab_size(
+        vocab_smoke=vocab_smoke, use_padded_lm_head=use_padded_lm_head
+    )
+    ypk, meta, dims, device, num_workers, num_schedulers, yr = _init_maca_pk_yirage(scaffold)
+    hf_bundle = load_maca_pk_hf_weight_bundle(
+        scaffold.model,
+        scaffold,
+        device,
+        max_layers=num_layers,
+        vocab_smoke=vocab_smoke,
+        local_files_only=local_files_only,
+        use_padded_lm_head=use_padded_lm_head,
+    )
+    _build_maca_pk_stack_graph(
+        ypk,
+        meta,
+        scaffold,
+        dims,
+        device=device,
+        yr=yr,
+        num_layers=num_layers,
+        lm_head=True,
+        vocab_smoke=lm_vocab,
+        hf_bundle=hf_bundle,
+    )
+    compile_result = _maca_pk_compile_result(
+        ypk,
+        output_dir=output_dir,
+        num_workers=num_workers,
+        num_schedulers=num_schedulers,
+        tasks=_maca_pk_stack_tasks(lm_head=True),
+    )
+    return {
+        "ypk": ypk,
+        "meta": meta,
+        "compile_result": compile_result,
+        "hf_bundle": hf_bundle,
+        "pk_compile_layers": num_layers,
+        "lm_vocab": lm_vocab,
     }
 
 
@@ -1081,27 +1141,90 @@ def maca_pk_hf_generation_smoke(
     output_dir: Optional[str] = None,
     num_layers: Optional[int] = None,
     prompt_len: int = 4,
+    decode_steps: int = 1,
+    prompt_token_ids: Optional[Sequence[int]] = None,
+    use_tokenizer: bool = False,
+    chat_prompt: str = "Hello",
     use_padded_lm_head: bool = False,
     local_files_only: bool = False,
+    eos_token_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Single-step HF PK generation smoke: runtime launch + output token readback."""
-    result = maca_pk_hf_stack_runtime_smoke(
+    """HF PK generation smoke: optional tokenizer prompt + multi-step ``ypk()`` decode loop."""
+    from demo.maca.qwen3_pk_generation_utils import (
+        DEFAULT_MACA_PK_CHAT_PROMPT,
+        decode_maca_pk_generated_tokens,
+        encode_maca_pk_chat_prompt,
+        prepare_maca_pk_prompt_meta,
+        run_maca_pk_decode_loop,
+    )
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    layers = num_layers if num_layers is not None else 1
+    if decode_steps < 1:
+        raise ValueError("decode_steps must be >= 1")
+
+    stack = _maca_pk_hf_init_compiled_stack(
         scaffold,
         output_dir=output_dir,
-        num_layers=num_layers,
-        prompt_len=prompt_len,
-        num_tokens=1,
+        num_layers=layers,
         vocab_smoke=128,
         use_padded_lm_head=use_padded_lm_head,
         local_files_only=local_files_only,
     )
-    output_token = result.get("output_token")
-    return {
-        **result,
-        "generation_steps": 1,
+    ypk = stack["ypk"]
+    meta = stack["meta"]
+    hf_bundle = stack["hf_bundle"]
+
+    tokenizer = None
+    resolved_prompt = chat_prompt or DEFAULT_MACA_PK_CHAT_PROMPT
+    if use_tokenizer:
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            scaffold.model, local_files_only=local_files_only
+        )
+        prompt_token_ids = encode_maca_pk_chat_prompt(tokenizer, resolved_prompt)
+
+    if prompt_token_ids is not None:
+        meta_summary = prepare_maca_pk_prompt_meta(
+            meta, scaffold, prompt_token_ids, num_tokens=1
+        )
+    else:
+        meta_summary = prepare_maca_pk_runtime_meta(
+            meta, scaffold, prompt_len=prompt_len, num_tokens=1
+        )
+
+    decode_result = run_maca_pk_decode_loop(
+        ypk,
+        meta,
+        scaffold,
+        max_decode_steps=decode_steps,
+        eos_token_id=eos_token_id,
+    )
+    ypk.finalize()
+
+    output_token = decode_result["generated_tokens"][-1] if decode_result["generated_tokens"] else None
+    result: Dict[str, Any] = {
+        **stack["compile_result"],
+        "launched": True,
+        "launch_ms": decode_result["launch_ms"],
+        "pk_compile_layers": layers,
+        "meta_summary": meta_summary,
+        "weight_source": "hf",
+        "model_name": hf_bundle.model_name,
+        "vocab_smoke": hf_bundle.vocab_smoke,
+        "use_padded_lm_head": hf_bundle.use_padded_lm_head,
+        "generation_steps": decode_result["decode_steps"],
+        "generated_tokens": decode_result["generated_tokens"],
         "output_token": output_token,
-        "generation_note": "single ypk() launch only; multi-step decode loop is backlog",
+        "final_step": decode_result["final_step"],
+        "stopped_on_eos": decode_result["stopped_on_eos"],
+        "use_tokenizer": use_tokenizer,
+        "chat_prompt": resolved_prompt if use_tokenizer else None,
     }
+    if tokenizer is not None:
+        result["decoded_response"] = decode_maca_pk_generated_tokens(tokenizer, meta)
+    return result
 
 
 def maca_pk_hf_stack_runtime_smoke(
@@ -1118,42 +1241,19 @@ def maca_pk_hf_stack_runtime_smoke(
     """Build HF-weight N-layer PK stack, compile via mxcc, fill meta, and ``ypk()`` launch."""
     import torch
 
-    from demo.maca.qwen3_pk_hf_utils import load_maca_pk_hf_weight_bundle, resolve_maca_pk_lm_vocab_size
-
     scaffold = scaffold or Qwen3PKScaffold()
     layers = num_layers if num_layers is not None else 1
-    lm_vocab = resolve_maca_pk_lm_vocab_size(
-        vocab_smoke=vocab_smoke, use_padded_lm_head=use_padded_lm_head
-    )
-    ypk, meta, dims, device, num_workers, num_schedulers, yr = _init_maca_pk_yirage(scaffold)
-    hf_bundle = load_maca_pk_hf_weight_bundle(
-        scaffold.model,
+    stack = _maca_pk_hf_init_compiled_stack(
         scaffold,
-        device,
-        max_layers=layers,
-        vocab_smoke=vocab_smoke,
-        local_files_only=local_files_only,
-        use_padded_lm_head=use_padded_lm_head,
-    )
-    _build_maca_pk_stack_graph(
-        ypk,
-        meta,
-        scaffold,
-        dims,
-        device=device,
-        yr=yr,
-        num_layers=layers,
-        lm_head=True,
-        vocab_smoke=lm_vocab,
-        hf_bundle=hf_bundle,
-    )
-    compile_result = _maca_pk_compile_result(
-        ypk,
         output_dir=output_dir,
-        num_workers=num_workers,
-        num_schedulers=num_schedulers,
-        tasks=_maca_pk_stack_tasks(lm_head=True),
+        num_layers=layers,
+        vocab_smoke=vocab_smoke,
+        use_padded_lm_head=use_padded_lm_head,
+        local_files_only=local_files_only,
     )
+    ypk = stack["ypk"]
+    meta = stack["meta"]
+    hf_bundle = stack["hf_bundle"]
     meta_summary = prepare_maca_pk_runtime_meta(
         meta, scaffold, prompt_len=prompt_len, num_tokens=num_tokens
     )
@@ -1170,7 +1270,7 @@ def maca_pk_hf_stack_runtime_smoke(
     ypk.finalize()
 
     return {
-        **compile_result,
+        **stack["compile_result"],
         "launched": True,
         "launch_ms": launch_ms,
         "pk_compile_layers": layers,
@@ -1284,8 +1384,8 @@ __all__ = [
     "maca_pk_one_layer_compile_smoke",
     "maca_pk_stack_compile_smoke",
     "maca_pk_stack_runtime_smoke",
-    "maca_pk_hf_stack_runtime_smoke",
     "maca_pk_hf_generation_smoke",
+    "maca_pk_hf_stack_runtime_smoke",
     "maca_pk_runtime_smoke",
     "prepare_maca_pk_runtime_meta",
     "resolve_maca_pk_workers_schedulers",
