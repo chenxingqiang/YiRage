@@ -1022,9 +1022,13 @@ def inspect_maca_pk_hf_runtime_plan(
         "weight_injection_status": "implemented",
         "weight_injection_note": (
             "maca_pk_hf_stack_runtime_smoke loads HF Qwen3 via load_maca_pk_hf_weight_bundle "
-            "and attach_input into PK stack graph (vocab_smoke=128 by default)."
+            "and attach_input into PK stack graph (vocab_smoke=128 default; "
+            "use_padded_lm_head=True for CUDA 153600 argmax)."
         ),
         "hf_runtime_ready": weight_plan["weight_plan_ready"] and runtime_plan["runtime_plan_ready"],
+        "multi_layer_ready": weight_plan["weight_plan_ready"],
+        "padded_lm_head_ready": True,
+        "generation_loop_ready": False,
         "synthetic_runtime_ready": runtime_plan["runtime_plan_ready"],
         "weight_plan": weight_plan,
         "model": scaffold.model,
@@ -1032,10 +1036,71 @@ def inspect_maca_pk_hf_runtime_plan(
         "max_layers_default": max_layers,
         "requires": runtime_plan["requires"] + ["transformers", "HF hub access", "MetaX GPU for launch"],
         "next_steps": [
-            "MetaX VM: qwen3_persistent_kernel_demo.py --hf-runtime-stack --pk-compile-layers 1",
-            "multi-layer HF stack runtime e2e vs CUDA demo",
-            "padded lm_head (153600) full argmax path",
+            "MetaX VM: --hf-runtime-stack --pk-compile-layers 2 (multi-layer)",
+            "MetaX VM: --hf-runtime-stack --hf-padded-lm-head (153600 argmax)",
+            "generation decode loop vs CUDA demo/qwen3/demo.py --use-yirage",
         ],
+    }
+
+
+def inspect_maca_pk_hf_generation_plan(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe HF PK generation loop contract (CUDA ``demo/qwen3/demo.py`` aligned)."""
+    scaffold = scaffold or Qwen3PKScaffold()
+    runtime_plan = inspect_maca_pk_hf_runtime_plan(scaffold, max_layers=scaffold.pk_compile_layers)
+    return {
+        "cuda_reference": "demo/qwen3/demo.py --use-yirage (ypk() + tokenizer.decode)",
+        "maca_runtime_entry": "maca_pk_hf_stack_runtime_smoke",
+        "maca_generation_entry": "maca_pk_hf_generation_smoke",
+        "generation_ready": False,
+        "implemented_steps": [
+            "HF load_maca_pk_hf_weight_bundle",
+            "N-layer PK stack graph + mxcc compile",
+            "prepare_maca_pk_runtime_meta (qo_indptr / paged_kv)",
+            "single ypk() launch",
+            "read output_tokens[0]",
+        ],
+        "backlog_steps": [
+            "multi-step decode loop (step tensor advance)",
+            "tokenizer.encode prompt + batch_decode response",
+            "per-token latency reporting",
+            "multi-request batching (total_num_requests > 1)",
+        ],
+        "hf_runtime_plan": runtime_plan,
+        "model": scaffold.model,
+        "pk_compile_layers": scaffold.pk_compile_layers,
+        "generation_plan_ready": runtime_plan["hf_runtime_ready"],
+        "requires_metax_gpu": True,
+    }
+
+
+def maca_pk_hf_generation_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+    num_layers: Optional[int] = None,
+    prompt_len: int = 4,
+    use_padded_lm_head: bool = False,
+    local_files_only: bool = False,
+) -> Dict[str, Any]:
+    """Single-step HF PK generation smoke: runtime launch + output token readback."""
+    result = maca_pk_hf_stack_runtime_smoke(
+        scaffold,
+        output_dir=output_dir,
+        num_layers=num_layers,
+        prompt_len=prompt_len,
+        num_tokens=1,
+        vocab_smoke=128,
+        use_padded_lm_head=use_padded_lm_head,
+        local_files_only=local_files_only,
+    )
+    output_token = result.get("output_token")
+    return {
+        **result,
+        "generation_steps": 1,
+        "output_token": output_token,
+        "generation_note": "single ypk() launch only; multi-step decode loop is backlog",
     }
 
 
@@ -1047,15 +1112,19 @@ def maca_pk_hf_stack_runtime_smoke(
     prompt_len: int = 4,
     num_tokens: int = 1,
     vocab_smoke: int = 128,
+    use_padded_lm_head: bool = False,
     local_files_only: bool = False,
 ) -> Dict[str, Any]:
     """Build HF-weight N-layer PK stack, compile via mxcc, fill meta, and ``ypk()`` launch."""
     import torch
 
-    from demo.maca.qwen3_pk_hf_utils import load_maca_pk_hf_weight_bundle
+    from demo.maca.qwen3_pk_hf_utils import load_maca_pk_hf_weight_bundle, resolve_maca_pk_lm_vocab_size
 
     scaffold = scaffold or Qwen3PKScaffold()
     layers = num_layers if num_layers is not None else 1
+    lm_vocab = resolve_maca_pk_lm_vocab_size(
+        vocab_smoke=vocab_smoke, use_padded_lm_head=use_padded_lm_head
+    )
     ypk, meta, dims, device, num_workers, num_schedulers, yr = _init_maca_pk_yirage(scaffold)
     hf_bundle = load_maca_pk_hf_weight_bundle(
         scaffold.model,
@@ -1064,6 +1133,7 @@ def maca_pk_hf_stack_runtime_smoke(
         max_layers=layers,
         vocab_smoke=vocab_smoke,
         local_files_only=local_files_only,
+        use_padded_lm_head=use_padded_lm_head,
     )
     _build_maca_pk_stack_graph(
         ypk,
@@ -1074,7 +1144,7 @@ def maca_pk_hf_stack_runtime_smoke(
         yr=yr,
         num_layers=layers,
         lm_head=True,
-        vocab_smoke=vocab_smoke,
+        vocab_smoke=lm_vocab,
         hf_bundle=hf_bundle,
     )
     compile_result = _maca_pk_compile_result(
@@ -1096,6 +1166,7 @@ def maca_pk_hf_stack_runtime_smoke(
     ender.record()
     torch.cuda.synchronize()
     launch_ms = starter.elapsed_time(ender)
+    output_token = int(meta["output_tokens"][0, 0].item())
     ypk.finalize()
 
     return {
@@ -1107,6 +1178,8 @@ def maca_pk_hf_stack_runtime_smoke(
         "weight_source": "hf",
         "model_name": hf_bundle.model_name,
         "vocab_smoke": hf_bundle.vocab_smoke,
+        "use_padded_lm_head": hf_bundle.use_padded_lm_head,
+        "output_token": output_token,
     }
 
 
@@ -1202,6 +1275,7 @@ __all__ = [
     "inspect_maca_pk_compile_plan",
     "inspect_maca_pk_compile_plan_embed_only",
     "inspect_maca_pk_hf_runtime_plan",
+    "inspect_maca_pk_hf_generation_plan",
     "inspect_maca_pk_one_layer_compile_plan",
     "inspect_maca_pk_runtime_plan",
     "inspect_maca_pk_stack_compile_plan",
@@ -1211,6 +1285,7 @@ __all__ = [
     "maca_pk_stack_compile_smoke",
     "maca_pk_stack_runtime_smoke",
     "maca_pk_hf_stack_runtime_smoke",
+    "maca_pk_hf_generation_smoke",
     "maca_pk_runtime_smoke",
     "prepare_maca_pk_runtime_meta",
     "resolve_maca_pk_workers_schedulers",

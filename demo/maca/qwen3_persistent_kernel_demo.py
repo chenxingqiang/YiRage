@@ -14,6 +14,7 @@ Full ``ypk.compile()`` task-graph: ``--compile-plan`` (Cloud) /
 ``--compile-stack`` N layers + lm_head/argmax (MetaX). Stack runtime launch:
 ``--runtime-plan`` (Cloud) / ``--runtime-stack`` (MetaX). HF-weight stack:
 ``--hf-weight-plan`` / ``--hf-runtime-plan`` (Cloud) / ``--hf-runtime-stack`` (MetaX).
+Padded lm_head (153600): ``--hf-padded-lm-head``; generation scaffold: ``--hf-generation-plan``.
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
@@ -27,6 +28,9 @@ MetaX VM:
   python3 demo/maca/qwen3_persistent_kernel_demo.py --runtime-stack --pk-compile-layers 1
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-weight-plan
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-runtime-stack --pk-compile-layers 1
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-runtime-stack --pk-compile-layers 2
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-runtime-stack --hf-padded-lm-head
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-generation-plan
 """
 
 from __future__ import annotations
@@ -45,6 +49,7 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     inspect_maca_pk_compile_contract,
     inspect_maca_pk_compile_plan,
     inspect_maca_pk_hf_runtime_plan,
+    inspect_maca_pk_hf_generation_plan,
     inspect_maca_pk_runtime_plan,
     inspect_qwen3_pk_scaffold,
     maca_pk_hf_stack_runtime_smoke,
@@ -55,7 +60,10 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     maca_pk_stack_runtime_smoke,
     resolve_maca_pk_workers_schedulers,
 )
-from demo.maca.qwen3_pk_hf_utils import inspect_maca_pk_hf_weight_plan  # noqa: E402
+from demo.maca.qwen3_pk_hf_utils import (  # noqa: E402
+    inspect_maca_pk_hf_padded_lm_head_plan,
+    inspect_maca_pk_hf_weight_plan,
+)
 
 
 def _apply_maca_env() -> None:
@@ -157,6 +165,21 @@ def main() -> int:
         "--hf-runtime-stack",
         action="store_true",
         help="MetaX: HF-weight N-layer stack compile + ypk() launch",
+    )
+    parser.add_argument(
+        "--hf-padded-lm-head",
+        action="store_true",
+        help="With --hf-runtime-stack: pad lm_head to 153600 (CUDA demo aligned)",
+    )
+    parser.add_argument(
+        "--hf-generation-plan",
+        action="store_true",
+        help="Validate HF PK generation loop contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-padded-plan",
+        action="store_true",
+        help="Validate padded lm_head (153600) argmax contract (no GPU required)",
     )
     parser.add_argument(
         "--runtime-stack",
@@ -273,6 +296,47 @@ def main() -> int:
             print("PASS — hf-runtime-plan (no MetaX GPU required)")
         return 0
 
+    if args.hf_generation_plan:
+        report["hf_generation_plan"] = inspect_maca_pk_hf_generation_plan(scaffold)
+        report["status"] = "hf_generation_plan"
+        if not report["hf_generation_plan"]["generation_plan_ready"]:
+            print("✗ PK HF generation plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF generation plan")
+            print("=" * 70)
+            for key, val in report["hf_generation_plan"].items():
+                if key != "hf_runtime_plan":
+                    print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-generation-plan (no MetaX GPU required)")
+        return 0
+
+    if args.hf_padded_plan:
+        report["hf_padded_plan"] = inspect_maca_pk_hf_padded_lm_head_plan(scaffold)
+        report["status"] = "hf_padded_plan"
+        if not report["hf_padded_plan"]["padded_lm_head_plan_ready"]:
+            print("✗ PK HF padded lm_head plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF padded lm_head plan (153600)")
+            print("=" * 70)
+            for key, val in report["hf_padded_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-padded-plan (no MetaX GPU required)")
+        return 0
+
     if args.hf_weight_plan:
         report["hf_weight_plan"] = inspect_maca_pk_hf_weight_plan(
             scaffold, max_layers=args.pk_compile_layers
@@ -321,7 +385,9 @@ def main() -> int:
             return 1
         os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
         report["hf_runtime"] = maca_pk_hf_stack_runtime_smoke(
-            scaffold, num_layers=args.pk_compile_layers
+            scaffold,
+            num_layers=args.pk_compile_layers,
+            use_padded_lm_head=args.hf_padded_lm_head,
         )
         report["status"] = "hf_runtime_stack"
         if args.json:

@@ -231,6 +231,40 @@ def test_qwen3_pk_hf_weight_plan_contract():
     assert plan["weight_plan_ready"] is True
     assert plan["attach_map_count"] >= 18
     assert plan["loader"] == "load_maca_pk_hf_weight_bundle"
+    plan2 = hf_utils.inspect_maca_pk_hf_weight_plan(max_layers=2)
+    assert plan2["weight_plan_ready"] is True
+    assert plan2["attach_map_count"] >= 31
+
+
+def test_qwen3_pk_hf_padded_lm_head_plan_contract():
+    hf_utils = _load_module("qwen3_pk_hf_utils", _REPO / "demo" / "maca" / "qwen3_pk_hf_utils.py")
+    plan = hf_utils.inspect_maca_pk_hf_padded_lm_head_plan()
+    assert plan["padded_lm_head_plan_ready"] is True
+    assert plan["pad_vocab_size"] == 153600
+    assert plan["lm_head_shape"][0] == 153600
+
+
+def test_pad_lm_head_weight_shape():
+    import torch
+
+    hf_utils = _load_module("qwen3_pk_hf_utils", _REPO / "demo" / "maca" / "qwen3_pk_hf_utils.py")
+    weight = torch.randn(128, 64, dtype=torch.bfloat16)
+    padded = hf_utils.pad_lm_head_weight(weight, 64)
+    assert padded.shape == (153600, 64)
+
+
+def test_resolve_maca_pk_lm_vocab_size():
+    hf_utils = _load_module("qwen3_pk_hf_utils", _REPO / "demo" / "maca" / "qwen3_pk_hf_utils.py")
+    assert hf_utils.resolve_maca_pk_lm_vocab_size(vocab_smoke=128) == 128
+    assert hf_utils.resolve_maca_pk_lm_vocab_size(use_padded_lm_head=True) == 153600
+
+
+def test_qwen3_pk_hf_generation_plan_contract():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    plan = pk_utils.inspect_maca_pk_hf_generation_plan()
+    assert plan["generation_plan_ready"] is True
+    assert plan["generation_ready"] is False
+    assert any("ypk()" in step for step in plan["implemented_steps"])
 
 
 def test_qwen3_pk_prepare_runtime_meta_shapes():
@@ -253,8 +287,11 @@ def test_qwen3_persistent_kernel_demo_has_runtime_modes():
     assert "--hf-runtime-plan" in text
     assert "--hf-weight-plan" in text
     assert "--hf-runtime-stack" in text
+    assert "--hf-padded-plan" in text
+    assert "--hf-generation-plan" in text
     assert "maca_pk_stack_runtime_smoke" in text
     assert "maca_pk_hf_stack_runtime_smoke" in text
+    assert "inspect_maca_pk_hf_generation_plan" in text
 
 
 @pytest.mark.skipif(

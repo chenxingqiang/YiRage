@@ -198,6 +198,84 @@ def test_maca_qwen3_persistent_kernel_demo_hf_weight_plan():
 
 @pytest.mark.integration
 @pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_generation_plan():
+    """Cloud-safe contract: HF generation loop scaffold plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-generation-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_generation_plan"
+    assert payload["hf_generation_plan"]["generation_plan_ready"] is True
+    assert payload["hf_generation_plan"]["generation_ready"] is False
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_padded_plan():
+    """Cloud-safe contract: padded lm_head 153600 plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-padded-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_padded_plan"
+    assert payload["hf_padded_plan"]["padded_lm_head_plan_ready"] is True
+    assert payload["hf_padded_plan"]["pad_vocab_size"] == 153600
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_weight_plan_multi_layer():
+    """Cloud-safe contract: 2-layer HF weight attach plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [
+        sys.executable,
+        str(_DEMO),
+        "--hf-weight-plan",
+        "--pk-compile-layers",
+        "2",
+        "--json",
+    ]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["hf_weight_plan"]["max_layers"] == 2
+    assert payload["hf_weight_plan"]["weight_plan_ready"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
 def test_maca_qwen3_persistent_kernel_demo_compile_inspect():
     """Cloud-safe contract: compile-inspect validates mxcc PK flags without GPU."""
     env = os.environ.copy()
@@ -413,3 +491,5 @@ def test_maca_qwen3_persistent_kernel_demo_script_exists():
     assert "--runtime-plan" in text
     assert "--hf-weight-plan" in text
     assert "--hf-runtime-stack" in text
+    assert "--hf-padded-plan" in text
+    assert "--hf-generation-plan" in text

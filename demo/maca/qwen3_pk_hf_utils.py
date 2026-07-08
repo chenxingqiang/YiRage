@@ -30,6 +30,7 @@ class MacaPkHfWeightBundle:
     k_caches: tuple
     v_caches: tuple
     num_kv_heads: int
+    use_padded_lm_head: bool = False
 
     def layer(self, layer_idx: int):
         return self.layers[layer_idx]
@@ -70,6 +71,41 @@ def maca_pk_hf_weight_attach_map(*, max_layers: int = 1) -> List[Dict[str, str]]
             ]
         )
     return rows
+
+
+def resolve_maca_pk_lm_vocab_size(
+    *,
+    vocab_smoke: int = 128,
+    use_padded_lm_head: bool = False,
+) -> int:
+    """Return argmax/lm_head vocab dim (CUDA ``demo/qwen3/demo.py`` uses 153600 when padded)."""
+    if use_padded_lm_head:
+        return PK_HF_PAD_VOCAB_SIZE
+    return vocab_smoke
+
+
+def inspect_maca_pk_hf_padded_lm_head_plan(
+    scaffold: Optional["Qwen3PKScaffold"] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe padded lm_head (153600) argmax contract."""
+    from demo.maca.qwen_hf_utils import default_qwen_dims
+    from demo.maca.qwen3_pk_utils import Qwen3PKScaffold
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    dims = default_qwen_dims()
+    vocab = PK_HF_PAD_VOCAB_SIZE
+    return {
+        "cuda_reference": "demo/qwen3/demo.py (lm_head padded to 153600, vocab_size=153600)",
+        "pad_helper": "pad_lm_head_weight",
+        "pad_vocab_size": vocab,
+        "hidden_size": dims.hidden_size,
+        "lm_head_shape": [vocab, dims.hidden_size],
+        "argmax_in_shape": [scaffold.max_num_batched_tokens, vocab],
+        "loader_flag": "use_padded_lm_head=True",
+        "runtime_entry": "maca_pk_hf_stack_runtime_smoke(use_padded_lm_head=True)",
+        "padded_lm_head_plan_ready": vocab == 153600 and dims.hidden_size > 0,
+        "requires_metax_gpu": True,
+    }
 
 
 def pad_lm_head_weight(
@@ -145,6 +181,7 @@ def load_maca_pk_hf_weight_bundle(
         k_caches=tuple(key_cache[i] for i in range(max_layers)),
         v_caches=tuple(value_cache[i] for i in range(max_layers)),
         num_kv_heads=int(model.config.num_key_value_heads),
+        use_padded_lm_head=use_padded_lm_head,
     )
 
 
@@ -178,8 +215,10 @@ def inspect_maca_pk_hf_weight_plan(
 __all__ = [
     "MacaPkHfWeightBundle",
     "PK_HF_PAD_VOCAB_SIZE",
+    "inspect_maca_pk_hf_padded_lm_head_plan",
     "inspect_maca_pk_hf_weight_plan",
     "load_maca_pk_hf_weight_bundle",
     "maca_pk_hf_weight_attach_map",
     "pad_lm_head_weight",
+    "resolve_maca_pk_lm_vocab_size",
 ]
