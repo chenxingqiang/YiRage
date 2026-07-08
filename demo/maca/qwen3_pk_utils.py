@@ -5,9 +5,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple, TYPE_CHECKING
 
 from demo.maca.qwen_hf_utils import DEFAULT_QWEN_MODEL, default_qwen_dims
+
+if TYPE_CHECKING:
+    from demo.maca.qwen3_pk_hf_utils import MacaPkHfWeightBundle
 
 
 @dataclass(frozen=True)
@@ -178,15 +181,19 @@ def _build_maca_pk_embed_graph(
     hidden_size: int,
     vocab_smoke: int,
     yr,
+    hf_bundle: Optional["MacaPkHfWeightBundle"] = None,
 ):
     """Attach embed-only task (returns activation tensor ``x``)."""
     import torch
 
     input_t = ypk.attach_input(torch_tensor=meta["input_tokens"], name="input_token")
-    w_embed = ypk.attach_input(
-        torch_tensor=torch.randn(vocab_smoke, hidden_size, dtype=torch.bfloat16, device=meta["tokens"].device),
-        name="embed_tokens",
-    )
+    if hf_bundle is not None:
+        embed_weight = hf_bundle.embed_weight
+    else:
+        embed_weight = torch.randn(
+            vocab_smoke, hidden_size, dtype=torch.bfloat16, device=meta["tokens"].device
+        )
+    w_embed = ypk.attach_input(torch_tensor=embed_weight, name="embed_tokens")
     embed_out = ypk.new_tensor(
         dims=(scaffold.max_num_batched_tokens, hidden_size),
         dtype=yr.bfloat16,
@@ -275,6 +282,7 @@ def _append_maca_pk_decoder_layer(
     layer_idx: int,
     cos_pos_embed,
     sin_pos_embed,
+    hf_bundle: Optional["MacaPkHfWeightBundle"] = None,
 ):
     """Attach one decoder block; returns activation ``x`` for the next layer."""
     import torch
@@ -294,22 +302,127 @@ def _append_maca_pk_decoder_layer(
     silu_mul_out = buffers["silu_mul_out"]
     mlp_out = buffers["mlp_out"]
 
-    w_norm = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_input_layernorm",
-    )
-    w_q = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, num_q_heads * head_dim, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_q_proj",
-    )
-    w_k = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, num_kv_heads * head_dim, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_k_proj",
-    )
-    w_v = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, num_kv_heads * head_dim, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_v_proj",
-    )
+    if hf_bundle is not None:
+        layer = hf_bundle.layer(layer_idx)
+        w_norm = ypk.attach_input(
+            torch_tensor=layer.input_layernorm.weight,
+            name=f"layer_{layer_idx}_input_layernorm",
+        )
+        w_q = ypk.attach_input(
+            torch_tensor=layer.self_attn.q_proj.weight,
+            name=f"layer_{layer_idx}_q_proj",
+        )
+        w_k = ypk.attach_input(
+            torch_tensor=layer.self_attn.k_proj.weight,
+            name=f"layer_{layer_idx}_k_proj",
+        )
+        w_v = ypk.attach_input(
+            torch_tensor=layer.self_attn.v_proj.weight,
+            name=f"layer_{layer_idx}_v_proj",
+        )
+        w_q_norm = ypk.attach_input(
+            torch_tensor=layer.self_attn.q_norm.weight,
+            name=f"layer_{layer_idx}_q_norm",
+        )
+        w_k_norm = ypk.attach_input(
+            torch_tensor=layer.self_attn.k_norm.weight,
+            name=f"layer_{layer_idx}_k_norm",
+        )
+        k_cache = ypk.attach_input(
+            torch_tensor=hf_bundle.k_cache(layer_idx),
+            name=f"layer_{layer_idx}_k_cache",
+        )
+        v_cache = ypk.attach_input(
+            torch_tensor=hf_bundle.v_cache(layer_idx),
+            name=f"layer_{layer_idx}_v_cache",
+        )
+        w_o = ypk.attach_input(
+            torch_tensor=layer.self_attn.o_proj.weight,
+            name=f"layer_{layer_idx}_o_proj",
+        )
+        w_post_norm = ypk.attach_input(
+            torch_tensor=layer.post_attention_layernorm.weight,
+            name=f"layer_{layer_idx}_post_attn_layernorm",
+        )
+        w_gate = ypk.attach_input(
+            torch_tensor=layer.mlp.gate_proj.weight,
+            name=f"layer_{layer_idx}_gate_proj",
+        )
+        w_up = ypk.attach_input(
+            torch_tensor=layer.mlp.up_proj.weight,
+            name=f"layer_{layer_idx}_up_proj",
+        )
+        w_down = ypk.attach_input(
+            torch_tensor=layer.mlp.down_proj.weight,
+            name=f"layer_{layer_idx}_down_proj",
+        )
+    else:
+        w_norm = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_input_layernorm",
+        )
+        w_q = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, num_q_heads * head_dim, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_q_proj",
+        )
+        w_k = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, num_kv_heads * head_dim, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_k_proj",
+        )
+        w_v = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, num_kv_heads * head_dim, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_v_proj",
+        )
+        w_q_norm = ypk.attach_input(
+            torch_tensor=torch.randn(head_dim, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_q_norm",
+        )
+        w_k_norm = ypk.attach_input(
+            torch_tensor=torch.randn(head_dim, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_k_norm",
+        )
+        k_cache = ypk.attach_input(
+            torch_tensor=torch.randn(
+                scaffold.max_num_pages,
+                scaffold.page_size,
+                num_kv_heads,
+                head_dim,
+                dtype=torch.bfloat16,
+                device=device,
+            ),
+            name=f"layer_{layer_idx}_k_cache",
+        )
+        v_cache = ypk.attach_input(
+            torch_tensor=torch.randn(
+                scaffold.max_num_pages,
+                scaffold.page_size,
+                num_kv_heads,
+                head_dim,
+                dtype=torch.bfloat16,
+                device=device,
+            ),
+            name=f"layer_{layer_idx}_v_cache",
+        )
+        w_o = ypk.attach_input(
+            torch_tensor=torch.randn(num_q_heads * head_dim, hidden_size, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_o_proj",
+        )
+        w_post_norm = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_post_attn_layernorm",
+        )
+        w_gate = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, intermediate_size, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_gate_proj",
+        )
+        w_up = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, intermediate_size, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_up_proj",
+        )
+        w_down = ypk.attach_input(
+            torch_tensor=torch.randn(intermediate_size, hidden_size, dtype=torch.bfloat16, device=device),
+            name=f"layer_{layer_idx}_down_proj",
+        )
     w_qkv = ypk.shuffle_tensors(
         inputs=[w_q, w_k, w_v],
         shuffled_dim=0,
@@ -330,37 +443,6 @@ def _append_maca_pk_decoder_layer(
         grid_dim=(grid_for_rmsnorm_linear_layer(w_qkv.dim(0), scaffold.use_cutlass_kernel), 1, 1),
         block_dim=(128, 1, 1),
     )
-
-    w_q_norm = ypk.attach_input(
-        torch_tensor=torch.randn(head_dim, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_q_norm",
-    )
-    w_k_norm = ypk.attach_input(
-        torch_tensor=torch.randn(head_dim, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_k_norm",
-    )
-    k_cache = ypk.attach_input(
-        torch_tensor=torch.randn(
-            scaffold.max_num_pages,
-            scaffold.page_size,
-            num_kv_heads,
-            head_dim,
-            dtype=torch.bfloat16,
-            device=device,
-        ),
-        name=f"layer_{layer_idx}_k_cache",
-    )
-    v_cache = ypk.attach_input(
-        torch_tensor=torch.randn(
-            scaffold.max_num_pages,
-            scaffold.page_size,
-            num_kv_heads,
-            head_dim,
-            dtype=torch.bfloat16,
-            device=device,
-        ),
-        name=f"layer_{layer_idx}_v_cache",
-    )
     ypk.paged_attention_layer(
         input=attn_in,
         k_cache=k_cache,
@@ -373,11 +455,6 @@ def _append_maca_pk_decoder_layer(
         grid_dim=(scaffold.max_num_batched_requests, num_kv_heads, 1),
         block_dim=(128, 1, 1),
     )
-
-    w_o = ypk.attach_input(
-        torch_tensor=torch.randn(num_q_heads * head_dim, hidden_size, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_o_proj",
-    )
     ypk.linear_with_residual_layer(
         input=attn_out,
         weight=w_o,
@@ -388,18 +465,6 @@ def _append_maca_pk_decoder_layer(
     )
     x = attn_proj_out
 
-    w_post_norm = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_post_attn_layernorm",
-    )
-    w_gate = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, intermediate_size, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_gate_proj",
-    )
-    w_up = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, intermediate_size, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_up_proj",
-    )
     rmsnorm_tasks = grid_for_rmsnorm_linear_layer(
         w_gate.dim(0) + w_up.dim(0), scaffold.use_cutlass_kernel
     )
@@ -429,10 +494,6 @@ def _append_maca_pk_decoder_layer(
         grid_dim=(rmsnorm_tasks // 2, 1, 1),
         block_dim=(128, 1, 1),
     )
-    w_down = ypk.attach_input(
-        torch_tensor=torch.randn(intermediate_size, hidden_size, dtype=torch.bfloat16, device=device),
-        name=f"layer_{layer_idx}_down_proj",
-    )
     ypk.linear_with_residual_layer(
         input=silu_mul_out,
         weight=w_down,
@@ -455,6 +516,7 @@ def _append_maca_pk_lm_head_argmax(
     device: "torch.device",
     yr,
     vocab_smoke: int = 128,
+    hf_bundle: Optional["MacaPkHfWeightBundle"] = None,
 ):
     """Attach final rmsnorm + lm_head + argmax (CUDA demo epilogue)."""
     import torch
@@ -466,14 +528,25 @@ def _append_maca_pk_lm_head_argmax(
     argmax_part_value = buffers["argmax_part_value"]
     argmax_part_index = buffers["argmax_part_index"]
 
-    w_norm = ypk.attach_input(
-        torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
-        name="model_norm_weight",
-    )
-    w_proj = ypk.attach_input(
-        torch_tensor=torch.randn(vocab_smoke, hidden_size, dtype=torch.bfloat16, device=device),
-        name="lm_head",
-    )
+    if hf_bundle is not None:
+        w_norm = ypk.attach_input(
+            torch_tensor=hf_bundle.norm_weight,
+            name="model_norm_weight",
+        )
+        w_proj = ypk.attach_input(
+            torch_tensor=hf_bundle.lm_head_weight,
+            name="lm_head",
+        )
+        vocab_smoke = hf_bundle.vocab_smoke
+    else:
+        w_norm = ypk.attach_input(
+            torch_tensor=torch.randn(hidden_size, dtype=torch.bfloat16, device=device),
+            name="model_norm_weight",
+        )
+        w_proj = ypk.attach_input(
+            torch_tensor=torch.randn(vocab_smoke, hidden_size, dtype=torch.bfloat16, device=device),
+            name="lm_head",
+        )
     ypk.rmsnorm_layer(
         input=x,
         weight=w_norm,
@@ -515,6 +588,7 @@ def _build_maca_pk_stack_graph(
     num_layers: int,
     lm_head: bool = True,
     vocab_smoke: int = 128,
+    hf_bundle: Optional["MacaPkHfWeightBundle"] = None,
 ):
     """Build embed + N decoder layers + optional lm_head/argmax (CUDA demo aligned)."""
     import torch
@@ -522,20 +596,37 @@ def _build_maca_pk_stack_graph(
     head_dim = dims.head_dim
     hidden_size = dims.hidden_size
 
-    cos_pos_embed = ypk.attach_input(
-        torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
-        name="cos_position_embedding",
-    )
-    sin_pos_embed = ypk.attach_input(
-        torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
-        name="sin_position_embedding",
-    )
+    if hf_bundle is not None:
+        cos_pos_embed = ypk.attach_input(
+            torch_tensor=hf_bundle.cos_pos_embed,
+            name="cos_position_embedding",
+        )
+        sin_pos_embed = ypk.attach_input(
+            torch_tensor=hf_bundle.sin_pos_embed,
+            name="sin_position_embedding",
+        )
+        vocab_smoke = hf_bundle.vocab_smoke
+    else:
+        cos_pos_embed = ypk.attach_input(
+            torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
+            name="cos_position_embedding",
+        )
+        sin_pos_embed = ypk.attach_input(
+            torch_tensor=torch.randn(scaffold.page_size, head_dim, dtype=torch.bfloat16, device=device),
+            name="sin_position_embedding",
+        )
 
     buffers = _maca_pk_work_buffers(
         ypk, scaffold, dims, yr, vocab_smoke=vocab_smoke, with_argmax=lm_head
     )
     x = _build_maca_pk_embed_graph(
-        ypk, meta, scaffold, hidden_size=hidden_size, vocab_smoke=vocab_smoke, yr=yr
+        ypk,
+        meta,
+        scaffold,
+        hidden_size=hidden_size,
+        vocab_smoke=vocab_smoke,
+        yr=yr,
+        hf_bundle=hf_bundle,
     )
     for layer_idx in range(num_layers):
         x = _append_maca_pk_decoder_layer(
@@ -549,10 +640,20 @@ def _build_maca_pk_stack_graph(
             layer_idx=layer_idx,
             cos_pos_embed=cos_pos_embed,
             sin_pos_embed=sin_pos_embed,
+            hf_bundle=hf_bundle,
         )
     if lm_head:
         x = _append_maca_pk_lm_head_argmax(
-            ypk, x, buffers, meta, scaffold, dims, device=device, yr=yr, vocab_smoke=vocab_smoke
+            ypk,
+            x,
+            buffers,
+            meta,
+            scaffold,
+            dims,
+            device=device,
+            yr=yr,
+            vocab_smoke=vocab_smoke,
+            hf_bundle=hf_bundle,
         )
     return x
 
@@ -905,29 +1006,107 @@ def inspect_maca_pk_runtime_plan(
 
 def inspect_maca_pk_hf_runtime_plan(
     scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    max_layers: int = 1,
 ) -> Dict[str, Any]:
-    """Cloud-safe HF-weight PK runtime backlog contract (weights not injected yet)."""
+    """Cloud-safe HF-weight PK runtime contract (weight injection implemented in R21)."""
+    from demo.maca.qwen3_pk_hf_utils import inspect_maca_pk_hf_weight_plan
+
     scaffold = scaffold or Qwen3PKScaffold()
-    runtime_plan = inspect_maca_pk_runtime_plan(scaffold, variant="stack", num_layers=1)
+    runtime_plan = inspect_maca_pk_runtime_plan(scaffold, variant="stack", num_layers=max_layers)
+    weight_plan = inspect_maca_pk_hf_weight_plan(scaffold, max_layers=max_layers)
     return {
         "cuda_reference": "demo/qwen3/demo.py --use-yirage (HF model weights)",
         "maca_pretrained_demo": "demo/maca/qwen_from_pretrained_demo.py",
-        "maca_pk_runtime_entry": "maca_pk_stack_runtime_smoke",
-        "weight_injection_status": "backlog",
+        "maca_pk_runtime_entry": "maca_pk_hf_stack_runtime_smoke",
+        "weight_injection_status": "implemented",
         "weight_injection_note": (
-            "maca_pk_stack_runtime_smoke uses synthetic randn attach_input weights; "
-            "HF from_pretrained attach_input is deferred to R21+."
+            "maca_pk_hf_stack_runtime_smoke loads HF Qwen3 via load_maca_pk_hf_weight_bundle "
+            "and attach_input into PK stack graph (vocab_smoke=128 by default)."
         ),
-        "hf_runtime_ready": False,
+        "hf_runtime_ready": weight_plan["weight_plan_ready"] and runtime_plan["runtime_plan_ready"],
         "synthetic_runtime_ready": runtime_plan["runtime_plan_ready"],
+        "weight_plan": weight_plan,
         "model": scaffold.model,
         "pk_compile_layers": scaffold.pk_compile_layers,
-        "requires": runtime_plan["requires"] + ["transformers", "HF hub access"],
+        "max_layers_default": max_layers,
+        "requires": runtime_plan["requires"] + ["transformers", "HF hub access", "MetaX GPU for launch"],
         "next_steps": [
-            "load Qwen3 HF weights on MetaX",
-            "replace synthetic attach_input with model tensors",
-            "multi-layer stack runtime e2e vs CUDA demo",
+            "MetaX VM: qwen3_persistent_kernel_demo.py --hf-runtime-stack --pk-compile-layers 1",
+            "multi-layer HF stack runtime e2e vs CUDA demo",
+            "padded lm_head (153600) full argmax path",
         ],
+    }
+
+
+def maca_pk_hf_stack_runtime_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+    num_layers: Optional[int] = None,
+    prompt_len: int = 4,
+    num_tokens: int = 1,
+    vocab_smoke: int = 128,
+    local_files_only: bool = False,
+) -> Dict[str, Any]:
+    """Build HF-weight N-layer PK stack, compile via mxcc, fill meta, and ``ypk()`` launch."""
+    import torch
+
+    from demo.maca.qwen3_pk_hf_utils import load_maca_pk_hf_weight_bundle
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    layers = num_layers if num_layers is not None else 1
+    ypk, meta, dims, device, num_workers, num_schedulers, yr = _init_maca_pk_yirage(scaffold)
+    hf_bundle = load_maca_pk_hf_weight_bundle(
+        scaffold.model,
+        scaffold,
+        device,
+        max_layers=layers,
+        vocab_smoke=vocab_smoke,
+        local_files_only=local_files_only,
+    )
+    _build_maca_pk_stack_graph(
+        ypk,
+        meta,
+        scaffold,
+        dims,
+        device=device,
+        yr=yr,
+        num_layers=layers,
+        lm_head=True,
+        vocab_smoke=vocab_smoke,
+        hf_bundle=hf_bundle,
+    )
+    compile_result = _maca_pk_compile_result(
+        ypk,
+        output_dir=output_dir,
+        num_workers=num_workers,
+        num_schedulers=num_schedulers,
+        tasks=_maca_pk_stack_tasks(lm_head=True),
+    )
+    meta_summary = prepare_maca_pk_runtime_meta(
+        meta, scaffold, prompt_len=prompt_len, num_tokens=num_tokens
+    )
+
+    starter = torch.cuda.Event(enable_timing=True)
+    ender = torch.cuda.Event(enable_timing=True)
+    torch.cuda.synchronize()
+    starter.record()
+    ypk()
+    ender.record()
+    torch.cuda.synchronize()
+    launch_ms = starter.elapsed_time(ender)
+    ypk.finalize()
+
+    return {
+        **compile_result,
+        "launched": True,
+        "launch_ms": launch_ms,
+        "pk_compile_layers": layers,
+        "meta_summary": meta_summary,
+        "weight_source": "hf",
+        "model_name": hf_bundle.model_name,
+        "vocab_smoke": hf_bundle.vocab_smoke,
     }
 
 
@@ -1031,6 +1210,7 @@ __all__ = [
     "maca_pk_one_layer_compile_smoke",
     "maca_pk_stack_compile_smoke",
     "maca_pk_stack_runtime_smoke",
+    "maca_pk_hf_stack_runtime_smoke",
     "maca_pk_runtime_smoke",
     "prepare_maca_pk_runtime_meta",
     "resolve_maca_pk_workers_schedulers",

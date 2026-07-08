@@ -152,7 +152,7 @@ def test_maca_qwen3_persistent_kernel_demo_runtime_plan():
 @pytest.mark.integration
 @pytest.mark.maca
 def test_maca_qwen3_persistent_kernel_demo_hf_runtime_plan():
-    """Cloud-safe contract: HF runtime backlog plan."""
+    """Cloud-safe contract: HF runtime plan."""
     env = os.environ.copy()
     env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
     env.setdefault("YIRAGE_BACKEND", "maca")
@@ -169,7 +169,31 @@ def test_maca_qwen3_persistent_kernel_demo_hf_runtime_plan():
     assert result.returncode == 0, result.stderr + result.stdout
     payload = json.loads(result.stdout)
     assert payload["status"] == "hf_runtime_plan"
-    assert payload["hf_runtime_plan"]["hf_runtime_ready"] is False
+    assert payload["hf_runtime_plan"]["hf_runtime_ready"] is True
+    assert payload["hf_runtime_plan"]["weight_injection_status"] == "implemented"
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_weight_plan():
+    """Cloud-safe contract: HF weight attach mapping plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-weight-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_weight_plan"
+    assert payload["hf_weight_plan"]["weight_plan_ready"] is True
 
 
 @pytest.mark.integration
@@ -387,3 +411,5 @@ def test_maca_qwen3_persistent_kernel_demo_script_exists():
     assert "--compile-stack" in text
     assert "--runtime-stack" in text
     assert "--runtime-plan" in text
+    assert "--hf-weight-plan" in text
+    assert "--hf-runtime-stack" in text

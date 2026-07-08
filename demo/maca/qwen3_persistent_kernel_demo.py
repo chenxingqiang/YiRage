@@ -12,8 +12,8 @@ nvcc, and runs LLM serving. This MACA demo closes the **smoke/contract** gap:
 Full ``ypk.compile()`` task-graph: ``--compile-plan`` (Cloud) /
 ``--compile-only`` embed (MetaX) / ``--compile-one-layer`` decoder block /
 ``--compile-stack`` N layers + lm_head/argmax (MetaX). Stack runtime launch:
-``--runtime-plan`` (Cloud) / ``--runtime-stack`` (MetaX). HF-weight multi-layer
-runtime e2e remains backlog (see ``--hf-runtime-plan``).
+``--runtime-plan`` (Cloud) / ``--runtime-stack`` (MetaX). HF-weight stack:
+``--hf-weight-plan`` / ``--hf-runtime-plan`` (Cloud) / ``--hf-runtime-stack`` (MetaX).
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
@@ -25,6 +25,8 @@ MetaX VM:
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-stack --pk-compile-layers 2
   python3 demo/maca/qwen3_persistent_kernel_demo.py --runtime-plan --runtime-plan-variant stack
   python3 demo/maca/qwen3_persistent_kernel_demo.py --runtime-stack --pk-compile-layers 1
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-weight-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-runtime-stack --pk-compile-layers 1
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     inspect_maca_pk_hf_runtime_plan,
     inspect_maca_pk_runtime_plan,
     inspect_qwen3_pk_scaffold,
+    maca_pk_hf_stack_runtime_smoke,
     maca_pk_minimal_compile_smoke,
     maca_pk_one_layer_compile_smoke,
     maca_pk_runtime_smoke,
@@ -52,6 +55,7 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     maca_pk_stack_runtime_smoke,
     resolve_maca_pk_workers_schedulers,
 )
+from demo.maca.qwen3_pk_hf_utils import inspect_maca_pk_hf_weight_plan  # noqa: E402
 
 
 def _apply_maca_env() -> None:
@@ -142,7 +146,17 @@ def main() -> int:
     parser.add_argument(
         "--hf-runtime-plan",
         action="store_true",
-        help="Validate HF-weight PK runtime backlog contract (no GPU required)",
+        help="Validate HF-weight PK runtime contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-weight-plan",
+        action="store_true",
+        help="Validate HF-weight attach_input mapping contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-runtime-stack",
+        action="store_true",
+        help="MetaX: HF-weight N-layer stack compile + ypk() launch",
     )
     parser.add_argument(
         "--runtime-stack",
@@ -238,18 +252,47 @@ def main() -> int:
         return 0
 
     if args.hf_runtime_plan:
-        report["hf_runtime_plan"] = inspect_maca_pk_hf_runtime_plan(scaffold)
+        report["hf_runtime_plan"] = inspect_maca_pk_hf_runtime_plan(
+            scaffold, max_layers=args.pk_compile_layers
+        )
         report["status"] = "hf_runtime_plan"
+        if not report["hf_runtime_plan"]["hf_runtime_ready"]:
+            print("✗ PK HF runtime plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
         if args.json:
             print(json.dumps(report, indent=2))
         else:
             print("=" * 70)
-            print("MACA Qwen3 PK HF runtime plan (backlog contract)")
+            print("MACA Qwen3 PK HF runtime plan")
             print("=" * 70)
             for key, val in report["hf_runtime_plan"].items():
                 print(f"  {key}: {val}")
             print()
             print("PASS — hf-runtime-plan (no MetaX GPU required)")
+        return 0
+
+    if args.hf_weight_plan:
+        report["hf_weight_plan"] = inspect_maca_pk_hf_weight_plan(
+            scaffold, max_layers=args.pk_compile_layers
+        )
+        report["status"] = "hf_weight_plan"
+        if not report["hf_weight_plan"]["weight_plan_ready"]:
+            print("✗ PK HF weight plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF weight attach plan")
+            print("=" * 70)
+            for key, val in report["hf_weight_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-weight-plan (no MetaX GPU required)")
         return 0
 
     if args.compile_inspect:
@@ -270,6 +313,28 @@ def main() -> int:
                 print(f"  {key}: {val}")
             print()
             print("PASS — compile-inspect (no MetaX GPU required)")
+        return 0
+
+    if args.hf_runtime_stack:
+        if not _is_maca_device():
+            print("✗ MetaX MACA GPU required for --hf-runtime-stack", file=sys.stderr)
+            return 1
+        os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
+        report["hf_runtime"] = maca_pk_hf_stack_runtime_smoke(
+            scaffold, num_layers=args.pk_compile_layers
+        )
+        report["status"] = "hf_runtime_stack"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF stack runtime smoke")
+            print("=" * 70)
+            print(f"  hf_runtime: {report['hf_runtime']}")
+            print()
+            print(
+                f"PASS — hf-runtime-stack ({args.pk_compile_layers} layer(s) HF compile + ypk() launch)"
+            )
         return 0
 
     if args.runtime_stack:

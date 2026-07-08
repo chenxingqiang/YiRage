@@ -219,9 +219,18 @@ def test_qwen3_pk_runtime_plan_contract():
 def test_qwen3_pk_hf_runtime_plan_contract():
     pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
     plan = pk_utils.inspect_maca_pk_hf_runtime_plan()
-    assert plan["hf_runtime_ready"] is False
-    assert plan["weight_injection_status"] == "backlog"
+    assert plan["hf_runtime_ready"] is True
+    assert plan["weight_injection_status"] == "implemented"
+    assert plan["maca_pk_runtime_entry"] == "maca_pk_hf_stack_runtime_smoke"
     assert "qwen_from_pretrained_demo.py" in plan["maca_pretrained_demo"]
+
+
+def test_qwen3_pk_hf_weight_plan_contract():
+    hf_utils = _load_module("qwen3_pk_hf_utils", _REPO / "demo" / "maca" / "qwen3_pk_hf_utils.py")
+    plan = hf_utils.inspect_maca_pk_hf_weight_plan(max_layers=1)
+    assert plan["weight_plan_ready"] is True
+    assert plan["attach_map_count"] >= 18
+    assert plan["loader"] == "load_maca_pk_hf_weight_bundle"
 
 
 def test_qwen3_pk_prepare_runtime_meta_shapes():
@@ -242,7 +251,10 @@ def test_qwen3_persistent_kernel_demo_has_runtime_modes():
     assert "--runtime-plan" in text
     assert "--runtime-stack" in text
     assert "--hf-runtime-plan" in text
+    assert "--hf-weight-plan" in text
+    assert "--hf-runtime-stack" in text
     assert "maca_pk_stack_runtime_smoke" in text
+    assert "maca_pk_hf_stack_runtime_smoke" in text
 
 
 @pytest.mark.skipif(
