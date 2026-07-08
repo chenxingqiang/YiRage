@@ -58,7 +58,7 @@ constexpr int MAX_TMA_DESC_PER_TENSOR = 3;
 #ifdef YIRAGE_BACKEND_MACA_ENABLED
 namespace maca {
 size_t const MAX_DMEM_SIZE = (size_t)2 * 1024 * 1024 * 1024;    // 2 GB
-size_t const MAX_SMEM_SIZE = 96 * 1024;                         // 96 KB
+size_t const MAX_SMEM_SIZE = 64 * 1024;                         // 64 KB (C500 per-block limit)
 }
 #endif
 

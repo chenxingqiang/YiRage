@@ -41,3 +41,18 @@ def test_resolve_maca_search_config_env(monkeypatch):
     assert cfg.resolve_maca_search_config() == cfg.get_maca_search_config()
     monkeypatch.setenv("YIRAGE_MACA_SEARCH_QUICK", "1")
     assert cfg.resolve_maca_search_config() == cfg.get_maca_search_config_quick()
+
+
+def test_maca_shared_memory_capacity_matches_device_limit(monkeypatch):
+    """Transpiler smem gate must use 64 KB on MACA, not Volta 96 KB."""
+    root = Path(__file__).resolve().parents[2]
+    pkg_root = root / "python"
+    path = pkg_root / "yirage" / "utils" / "common.py"
+    spec = importlib.util.spec_from_file_location("yirage_utils_common", path)
+    common = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(common)
+
+    monkeypatch.setenv("YIRAGE_BACKEND", "maca")
+    assert common.get_shared_memory_capacity(70) == 65536
+    assert common.get_shared_memory_capacity(80) == 65536
