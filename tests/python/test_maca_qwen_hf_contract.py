@@ -106,6 +106,14 @@ def test_qwen_kernel_utils_maca_search_contract():
     assert "superoptimize_mlp_gate_up" in text
 
 
+def test_qwen3_persistent_kernel_demo_has_compile_modes():
+    demo = _REPO / "demo" / "maca" / "qwen3_persistent_kernel_demo.py"
+    text = demo.read_text(encoding="utf-8")
+    assert "--compile-plan" in text
+    assert "--compile-only" in text
+    assert "maca_pk_minimal_compile_smoke" in text
+
+
 def test_qwen3_persistent_kernel_demo_exists_and_aligns_cuda_qwen3():
     demo = _REPO / "demo" / "maca" / "qwen3_persistent_kernel_demo.py"
     assert demo.is_file()
@@ -123,6 +131,26 @@ def test_qwen3_pk_utils_scaffold_contract():
     assert report["mode"] == "offline"
     assert report["hidden_size"] == 4096
     assert report["compile_path"] == "mxcc"
+
+
+def test_qwen3_pk_compile_plan_contract():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    plan = pk_utils.inspect_maca_pk_compile_plan()
+    assert plan["compile_plan_ready"] is True
+    assert plan["minimal_task_graph"] == "embed_layer"
+    assert plan["hidden_size"] == 4096
+    assert "yirage.core" in plan["requires"]
+
+
+def test_qwen3_pk_meta_tensors_shapes():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    import torch
+
+    scaffold = pk_utils.Qwen3PKScaffold()
+    meta = pk_utils.build_qwen3_pk_meta_tensors(scaffold, torch.device("cpu"))
+    assert meta["tokens"].shape == (scaffold.max_num_batched_requests, scaffold.max_seq_length)
+    assert meta["input_tokens"].shape == (scaffold.max_num_batched_tokens, 1)
+    assert meta["qo_indptr_buffer"].shape == (scaffold.max_num_batched_requests + 1,)
 
 
 def test_qwen3_pk_compile_contract():

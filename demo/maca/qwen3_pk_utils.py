@@ -83,6 +83,138 @@ def maca_pk_runtime_smoke(
     }
 
 
+def build_qwen3_pk_meta_tensors(
+    scaffold: Qwen3PKScaffold,
+    device: "torch.device",
+) -> Dict[str, "torch.Tensor"]:
+    """Synthetic meta tensors matching ``demo/qwen3/demo.py`` PersistentKernel contract."""
+    import torch
+
+    total = scaffold.max_num_batched_requests
+    return {
+        "step": torch.zeros(total, dtype=torch.int32, device=device),
+        "tokens": torch.zeros(total, scaffold.max_seq_length, dtype=torch.long, device=device),
+        "input_tokens": torch.zeros(
+            scaffold.max_num_batched_tokens, 1, dtype=torch.long, device=device
+        ),
+        "output_tokens": torch.zeros(
+            scaffold.max_num_batched_tokens, 1, dtype=torch.long, device=device
+        ),
+        "num_new_tokens": torch.ones(total, dtype=torch.int32, device=device),
+        "prompt_lengths": torch.ones(total, dtype=torch.int32, device=device),
+        "qo_indptr_buffer": torch.zeros(total + 1, dtype=torch.int32, device=device),
+        "paged_kv_indptr_buffer": torch.zeros(total + 1, dtype=torch.int32, device=device),
+        "paged_kv_indices_buffer": torch.zeros(
+            scaffold.max_num_pages, dtype=torch.int32, device=device
+        ),
+        "paged_kv_last_page_len_buffer": torch.zeros(total, dtype=torch.int32, device=device),
+    }
+
+
+def inspect_maca_pk_compile_plan(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe compile plan: mxcc contract + minimal embed task prerequisites."""
+    scaffold = scaffold or Qwen3PKScaffold()
+    dims = default_qwen_dims()
+    contract = inspect_maca_pk_compile_contract(scaffold)
+    repo_root = Path(__file__).resolve().parents[2]
+    return {
+        **contract,
+        "cuda_reference": "demo/qwen3/demo.py --use-yirage",
+        "minimal_task_graph": "embed_layer",
+        "hidden_size": dims.hidden_size,
+        "vocab_smoke_size": 128,
+        "requires": ["yirage.core", "YIRAGE_HOME", "mxcc", "MetaX GPU"],
+        "yirage_home_default": str(repo_root),
+        "yirage_home_set": "YIRAGE_HOME" in os.environ,
+        "compile_plan_ready": contract["compile_ready"],
+    }
+
+
+def maca_pk_minimal_compile_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build minimal embed-only PK task graph and ``ypk.compile()`` via mxcc (MetaX VM)."""
+    import tempfile
+
+    import torch
+    import yirage as yr
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    repo_root = Path(__file__).resolve().parents[2]
+    os.environ.setdefault("YIRAGE_BACKEND", "maca")
+    os.environ.setdefault("YIRAGE_HOME", str(repo_root))
+
+    device = torch.device("cuda:0")
+    torch.cuda.set_device(0)
+    dims = default_qwen_dims()
+    hidden_size = dims.hidden_size
+    vocab_smoke = 128
+
+    num_workers, num_schedulers = resolve_maca_pk_workers_schedulers(0)
+    meta = build_qwen3_pk_meta_tensors(scaffold, device)
+
+    ypk = yr.PersistentKernel(
+        mode=scaffold.mode,
+        world_size=1,
+        mpi_rank=0,
+        num_workers=num_workers,
+        num_local_schedulers=num_schedulers,
+        num_remote_schedulers=0,
+        max_seq_length=scaffold.max_seq_length,
+        max_num_batched_requests=scaffold.max_num_batched_requests,
+        max_num_batched_tokens=scaffold.max_num_batched_tokens,
+        max_num_pages=scaffold.max_num_pages,
+        page_size=scaffold.page_size,
+        eos_token_id=0,
+        meta_tensors=meta,
+        profiler_tensor=None,
+        trace_name="maca_pk_minimal",
+        spec_decode_config=None,
+        use_cutlass_kernel=scaffold.use_cutlass_kernel,
+    )
+
+    input_t = ypk.attach_input(torch_tensor=meta["input_tokens"], name="input_token")
+    w_embed = ypk.attach_input(
+        torch_tensor=torch.randn(vocab_smoke, hidden_size, dtype=torch.bfloat16, device=device),
+        name="embed_tokens",
+    )
+    embed_out = ypk.new_tensor(
+        dims=(scaffold.max_num_batched_tokens, hidden_size),
+        dtype=yr.bfloat16,
+        name="embed_out",
+        io_category="cuda_tensor",
+    )
+    ypk.embed_layer(
+        input=input_t,
+        weight=w_embed,
+        output=embed_out,
+        grid_dim=(1, 1, 1),
+        block_dim=(128, 1, 1),
+        input_source=1,
+    )
+
+    out_dir = output_dir or tempfile.mkdtemp(prefix="maca_pk_compile_")
+    ypk.compile(output_dir=out_dir)
+
+    cu_path = Path(out_dir) / "test_rank0.cu"
+    json_path = Path(out_dir) / "task_graph_rank0.json"
+    return {
+        "compiled": True,
+        "compiler": "mxcc",
+        "output_dir": out_dir,
+        "cu_artifact": cu_path.is_file(),
+        "json_artifact": json_path.is_file(),
+        "num_workers": num_workers,
+        "num_schedulers": num_schedulers,
+        "tasks": ["embedding"],
+        "target_cc": ypk.target_cc,
+    }
+
+
 def inspect_maca_pk_compile_contract(
     scaffold: Optional[Qwen3PKScaffold] = None,
 ) -> Dict[str, Any]:
@@ -142,8 +274,8 @@ def inspect_qwen3_pk_scaffold(scaffold: Optional[Qwen3PKScaffold] = None) -> Dic
         "compile_path": "mxcc",
         "compile_note": (
             "PersistentKernel.compile() selects mxcc when YIRAGE_BACKEND=maca "
-            "(get_maca_pk_compile_command). Use --compile-inspect for mxcc flag "
-            "contract; full qwen3 task-graph e2e on MetaX VM remains experimental."
+            "(get_maca_pk_compile_command). Use --compile-plan/--compile-inspect "
+            "for Cloud contract; MetaX --compile-only runs minimal embed task-graph."
         ),
         "yirage_backend": os.environ.get("YIRAGE_BACKEND", "maca"),
     }
@@ -151,8 +283,11 @@ def inspect_qwen3_pk_scaffold(scaffold: Optional[Qwen3PKScaffold] = None) -> Dic
 
 __all__ = [
     "Qwen3PKScaffold",
+    "build_qwen3_pk_meta_tensors",
     "inspect_maca_pk_compile_contract",
+    "inspect_maca_pk_compile_plan",
     "inspect_qwen3_pk_scaffold",
+    "maca_pk_minimal_compile_smoke",
     "maca_pk_runtime_smoke",
     "resolve_maca_pk_workers_schedulers",
 ]

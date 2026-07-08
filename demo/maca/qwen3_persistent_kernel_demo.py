@@ -9,13 +9,14 @@ nvcc, and runs LLM serving. This MACA demo closes the **smoke/contract** gap:
   - Default / ``--quick``: MetaX mcPytorch device + MACA ``PKRuntime`` offline init +
     worker/scheduler counts from ``get_configurations_from_gpu``.
 
-Full ``ypk.compile()`` → mxcc task-graph generation remains **experimental backlog**
-(see ``inspect_qwen3_pk_scaffold()`` compile_note).
+Full ``ypk.compile()`` minimal embed task-graph: ``--compile-plan`` (Cloud) /
+``--compile-only`` (MetaX). Full multi-layer qwen3 e2e remains backlog.
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
   python3 demo/maca/qwen3_persistent_kernel_demo.py --inspect-only
-  python3 demo/maca/qwen3_persistent_kernel_demo.py --quick
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-only
 """
 
 from __future__ import annotations
@@ -32,7 +33,9 @@ if _REPO_ROOT not in sys.path:
 from demo.maca.qwen3_pk_utils import (  # noqa: E402
     Qwen3PKScaffold,
     inspect_maca_pk_compile_contract,
+    inspect_maca_pk_compile_plan,
     inspect_qwen3_pk_scaffold,
+    maca_pk_minimal_compile_smoke,
     maca_pk_runtime_smoke,
     resolve_maca_pk_workers_schedulers,
 )
@@ -79,6 +82,16 @@ def main() -> int:
     parser.add_argument("--max-num-pages", type=int, default=Qwen3PKScaffold.max_num_pages)
     parser.add_argument("--max-seq-length", type=int, default=Qwen3PKScaffold.max_seq_length)
     parser.add_argument(
+        "--compile-plan",
+        action="store_true",
+        help="Validate minimal PK compile plan (no GPU required)",
+    )
+    parser.add_argument(
+        "--compile-only",
+        action="store_true",
+        help="MetaX: build minimal embed PK graph and ypk.compile() via mxcc",
+    )
+    parser.add_argument(
         "--compile-inspect",
         action="store_true",
         help="Validate mxcc PK compile contract (no GPU required)",
@@ -114,6 +127,26 @@ def main() -> int:
 
     report: dict = {"scaffold": inspect_qwen3_pk_scaffold(scaffold)}
 
+    if args.compile_plan:
+        report["compile_plan"] = inspect_maca_pk_compile_plan(scaffold)
+        report["status"] = "compile_plan"
+        if not report["compile_plan"]["compile_plan_ready"]:
+            print("✗ PK compile plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK compile plan (minimal embed task-graph)")
+            print("=" * 70)
+            for key, val in report["compile_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — compile-plan (no MetaX GPU required)")
+        return 0
+
     if args.compile_inspect:
         report["compile_contract"] = inspect_maca_pk_compile_contract(scaffold)
         report["status"] = "compile_inspect"
@@ -132,6 +165,24 @@ def main() -> int:
                 print(f"  {key}: {val}")
             print()
             print("PASS — compile-inspect (no MetaX GPU required)")
+        return 0
+
+    if args.compile_only:
+        if not _is_maca_device():
+            print("✗ MetaX MACA GPU required for --compile-only", file=sys.stderr)
+            return 1
+        os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
+        report["compile"] = maca_pk_minimal_compile_smoke(scaffold)
+        report["status"] = "compile_only"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK minimal compile smoke")
+            print("=" * 70)
+            print(f"  compile: {report['compile']}")
+            print()
+            print("PASS — compile-only (minimal embed task-graph via mxcc)")
         return 0
 
     if args.inspect_only:
@@ -200,7 +251,7 @@ def main() -> int:
         if smem is not None:
             print(f"  smem capacity: {smem}")
         print()
-        print("PASS — MACA PK runtime smoke (full ypk.compile mxcc backlog)")
+        print("PASS — MACA PK runtime smoke (full multi-layer qwen3 e2e backlog)")
 
     return 0
 
