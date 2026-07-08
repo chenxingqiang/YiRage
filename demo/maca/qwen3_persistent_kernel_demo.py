@@ -16,6 +16,7 @@ Full ``ypk.compile()`` task-graph: ``--compile-plan`` (Cloud) /
 ``--hf-weight-plan`` / ``--hf-runtime-plan`` (Cloud) / ``--hf-runtime-stack`` (MetaX).
 Padded lm_head (153600): ``--hf-padded-lm-head``; generation scaffold: ``--hf-generation-plan``.
 Multi-step decode: ``--hf-decode-step-plan`` (Cloud) / ``--hf-generation-smoke`` (MetaX).
+Tokenizer full-path: ``--hf-tokenizer-generation-plan`` (Cloud) / ``--hf-tokenizer-generation-smoke`` (MetaX).
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
@@ -34,6 +35,8 @@ MetaX VM:
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-generation-plan
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-decode-step-plan
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-generation-smoke --decode-steps 4
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-tokenizer-generation-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-tokenizer-generation-smoke --decode-steps 4
 """
 
 from __future__ import annotations
@@ -56,6 +59,7 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     inspect_maca_pk_runtime_plan,
     inspect_qwen3_pk_scaffold,
     maca_pk_hf_generation_smoke,
+    maca_pk_hf_tokenizer_generation_smoke,
     maca_pk_hf_stack_runtime_smoke,
     maca_pk_minimal_compile_smoke,
     maca_pk_one_layer_compile_smoke,
@@ -70,6 +74,8 @@ from demo.maca.qwen3_pk_hf_utils import (  # noqa: E402
 )
 from demo.maca.qwen3_pk_generation_utils import (  # noqa: E402
     inspect_maca_pk_decode_step_contract,
+    inspect_maca_pk_hf_tokenizer_generation_plan,
+    inspect_maca_pk_multi_request_batch_plan,
 )
 
 
@@ -209,6 +215,21 @@ def main() -> int:
         "--use-tokenizer",
         action="store_true",
         help="With --hf-generation-smoke: encode/decode via HF tokenizer",
+    )
+    parser.add_argument(
+        "--hf-tokenizer-generation-plan",
+        action="store_true",
+        help="Validate tokenizer full-path generation contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-multi-request-batch-plan",
+        action="store_true",
+        help="Validate multi-request batch meta contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-tokenizer-generation-smoke",
+        action="store_true",
+        help="MetaX: tokenizer encode + multi-step ypk() + decode + latency",
     )
     parser.add_argument(
         "--hf-padded-plan",
@@ -371,6 +392,49 @@ def main() -> int:
             print("PASS — hf-decode-step-plan (no MetaX GPU required)")
         return 0
 
+    if args.hf_tokenizer_generation_plan:
+        report["hf_tokenizer_generation_plan"] = inspect_maca_pk_hf_tokenizer_generation_plan(
+            scaffold
+        )
+        report["status"] = "hf_tokenizer_generation_plan"
+        if not report["hf_tokenizer_generation_plan"]["tokenizer_generation_plan_ready"]:
+            print("✗ PK HF tokenizer generation plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF tokenizer generation plan")
+            print("=" * 70)
+            for key, val in report["hf_tokenizer_generation_plan"].items():
+                if key != "multi_request_batch_plan":
+                    print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-tokenizer-generation-plan (no MetaX GPU required)")
+        return 0
+
+    if args.hf_multi_request_batch_plan:
+        report["hf_multi_request_batch_plan"] = inspect_maca_pk_multi_request_batch_plan(scaffold)
+        report["status"] = "hf_multi_request_batch_plan"
+        if not report["hf_multi_request_batch_plan"]["multi_request_batch_plan_ready"]:
+            print("✗ PK HF multi-request batch plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF multi-request batch plan")
+            print("=" * 70)
+            for key, val in report["hf_multi_request_batch_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-multi-request-batch-plan (no MetaX GPU required)")
+        return 0
+
     if args.hf_padded_plan:
         report["hf_padded_plan"] = inspect_maca_pk_hf_padded_lm_head_plan(scaffold)
         report["status"] = "hf_padded_plan"
@@ -481,6 +545,33 @@ def main() -> int:
             print()
             print(
                 f"PASS — hf-generation-smoke "
+                f"({args.decode_steps} decode step(s), layers={args.pk_compile_layers})"
+            )
+        return 0
+
+    if args.hf_tokenizer_generation_smoke:
+        if not _is_maca_device():
+            print("✗ MetaX MACA GPU required for --hf-tokenizer-generation-smoke", file=sys.stderr)
+            return 1
+        os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
+        report["hf_tokenizer_generation"] = maca_pk_hf_tokenizer_generation_smoke(
+            scaffold,
+            num_layers=args.pk_compile_layers,
+            decode_steps=args.decode_steps,
+            chat_prompt=args.chat_prompt,
+            use_padded_lm_head=args.hf_padded_lm_head,
+        )
+        report["status"] = "hf_tokenizer_generation_smoke"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF tokenizer generation smoke")
+            print("=" * 70)
+            print(f"  hf_tokenizer_generation: {report['hf_tokenizer_generation']}")
+            print()
+            print(
+                f"PASS — hf-tokenizer-generation-smoke "
                 f"({args.decode_steps} decode step(s), layers={args.pk_compile_layers})"
             )
         return 0

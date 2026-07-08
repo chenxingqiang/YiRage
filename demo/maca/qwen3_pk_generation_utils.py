@@ -172,6 +172,151 @@ def run_maca_pk_decode_loop(
     }
 
 
+def compute_maca_pk_generation_latency(
+    *,
+    launch_ms: float,
+    prompt_len: int,
+    final_step: int,
+) -> Dict[str, Any]:
+    """Per-token latency metrics aligned with CUDA ``demo/qwen3/demo.py`` reporting."""
+    generate_len = final_step + 1 - prompt_len
+    if generate_len < 1:
+        raise ValueError("generate_len must be >= 1")
+    per_token_ms = launch_ms / generate_len
+    return {
+        "prompt_len": prompt_len,
+        "generate_len": generate_len,
+        "total_tokens": final_step + 1,
+        "launch_ms": launch_ms,
+        "per_token_latency_ms": per_token_ms,
+    }
+
+
+def prepare_maca_pk_batched_prompt_meta(
+    meta: Dict[str, "torch.Tensor"],
+    scaffold: "Qwen3PKScaffold",
+    prompt_token_ids: Union[Sequence[int], "torch.Tensor"],
+    *,
+    active_requests: int = 2,
+    num_tokens_per_request: int = 1,
+) -> Dict[str, Any]:
+    """Fill PK meta for replicated multi-request batch (CUDA ``total_num_requests`` style)."""
+    import torch
+
+    if active_requests < 2:
+        raise ValueError("active_requests must be >= 2 for batched meta")
+    if active_requests > scaffold.max_num_batched_requests:
+        raise ValueError("active_requests exceeds max_num_batched_requests")
+
+    num_tokens = active_requests * num_tokens_per_request
+    if num_tokens > scaffold.max_num_batched_tokens:
+        raise ValueError("active_requests * num_tokens_per_request exceeds max_num_batched_tokens")
+
+    single = prepare_maca_pk_prompt_meta(
+        meta,
+        scaffold,
+        prompt_token_ids,
+        active_requests=1,
+        num_tokens=num_tokens_per_request,
+    )
+    prompt_len = single["prompt_len"]
+
+    if isinstance(prompt_token_ids, torch.Tensor):
+        ids = prompt_token_ids.to(device=meta["tokens"].device, dtype=torch.long).flatten()
+    else:
+        ids = torch.tensor(list(prompt_token_ids), device=meta["tokens"].device, dtype=torch.long)
+
+    for req in range(1, active_requests):
+        meta["tokens"][req, :prompt_len] = ids
+        meta["prompt_lengths"][req] = prompt_len
+        meta["step"][req] = prompt_len - 1
+        meta["num_new_tokens"][req] = num_tokens_per_request
+
+    meta["qo_indptr_buffer"].zero_()
+    meta["paged_kv_indptr_buffer"].zero_()
+    meta["paged_kv_indices_buffer"].zero_()
+    meta["paged_kv_last_page_len_buffer"].zero_()
+
+    for req in range(active_requests):
+        meta["qo_indptr_buffer"][req + 1] = (req + 1) * num_tokens_per_request
+        meta["paged_kv_indptr_buffer"][req + 1] = req + 1
+        meta["paged_kv_indices_buffer"][req] = req
+        meta["paged_kv_last_page_len_buffer"][req] = prompt_len
+
+    for req in range(active_requests):
+        slot = req * num_tokens_per_request
+        meta["input_tokens"][slot, 0] = ids[-1]
+
+    return {
+        **single,
+        "active_requests": active_requests,
+        "num_tokens": num_tokens,
+        "num_tokens_per_request": num_tokens_per_request,
+        "qo_indptr": meta["qo_indptr_buffer"][: active_requests + 1].tolist(),
+        "paged_kv_indptr": meta["paged_kv_indptr_buffer"][: active_requests + 1].tolist(),
+        "paged_kv_indices_head": meta["paged_kv_indices_buffer"][:active_requests].tolist(),
+        "paged_kv_last_page_len": meta["paged_kv_last_page_len_buffer"][:active_requests].tolist(),
+        "batched_prompt_meta_ready": True,
+    }
+
+
+def inspect_maca_pk_multi_request_batch_plan(
+    scaffold: Optional["Qwen3PKScaffold"] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe multi-request batch meta contract (CUDA ``total_num_requests > 1``)."""
+    from demo.maca.qwen3_pk_utils import Qwen3PKScaffold
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    return {
+        "cuda_reference": "demo/qwen3/demo.py total_num_requests loop + step.max()==step.min()",
+        "prepare_entry": "prepare_maca_pk_batched_prompt_meta",
+        "max_num_batched_requests": scaffold.max_num_batched_requests,
+        "max_num_batched_tokens": scaffold.max_num_batched_tokens,
+        "default_active_requests": 2,
+        "meta_tensors": [
+            "qo_indptr_buffer",
+            "paged_kv_indptr_buffer",
+            "paged_kv_indices_buffer",
+            "paged_kv_last_page_len_buffer",
+            "step",
+            "tokens",
+        ],
+        "multi_request_batch_plan_ready": scaffold.max_num_batched_requests >= 2,
+    }
+
+
+def inspect_maca_pk_hf_tokenizer_generation_plan(
+    scaffold: Optional["Qwen3PKScaffold"] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe tokenizer full-path generation contract vs CUDA demo."""
+    from demo.maca.qwen3_pk_utils import Qwen3PKScaffold
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    batch_plan = inspect_maca_pk_multi_request_batch_plan(scaffold)
+    return {
+        "cuda_reference": "demo/qwen3/demo.py --use-yirage (tokenizer + ypk + decode + latency)",
+        "maca_entry": "maca_pk_hf_tokenizer_generation_smoke",
+        "tokenizer_generation_ready": False,
+        "tokenizer_generation_plan_ready": True,
+        "pipeline_steps": [
+            "AutoTokenizer.from_pretrained",
+            "encode_maca_pk_chat_prompt",
+            "maca_pk_hf_init_compiled_stack + prepare_maca_pk_prompt_meta",
+            "run_maca_pk_decode_loop",
+            "decode_maca_pk_generated_tokens",
+            "compute_maca_pk_generation_latency",
+        ],
+        "latency_fields": [
+            "prompt_len",
+            "generate_len",
+            "per_token_latency_ms",
+        ],
+        "multi_request_batch_plan": batch_plan,
+        "model": scaffold.model,
+        "requires_metax_gpu": True,
+    }
+
+
 def inspect_maca_pk_decode_step_contract(
     scaffold: Optional["Qwen3PKScaffold"] = None,
 ) -> Dict[str, Any]:
@@ -203,9 +348,13 @@ def inspect_maca_pk_decode_step_contract(
 __all__ = [
     "DEFAULT_MACA_PK_CHAT_PROMPT",
     "advance_maca_pk_decode_step",
+    "compute_maca_pk_generation_latency",
     "decode_maca_pk_generated_tokens",
     "encode_maca_pk_chat_prompt",
     "inspect_maca_pk_decode_step_contract",
+    "inspect_maca_pk_hf_tokenizer_generation_plan",
+    "inspect_maca_pk_multi_request_batch_plan",
+    "prepare_maca_pk_batched_prompt_meta",
     "prepare_maca_pk_prompt_meta",
     "run_maca_pk_decode_loop",
 ]

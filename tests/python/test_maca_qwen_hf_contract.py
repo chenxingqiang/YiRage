@@ -265,7 +265,47 @@ def test_qwen3_pk_hf_generation_plan_contract():
     assert plan["generation_plan_ready"] is True
     assert plan["generation_ready"] is False
     assert plan["multi_step_decode_ready"] is True
+    assert plan["tokenizer_generation_plan_ready"] is True
+    assert plan["multi_request_batch_plan_ready"] is True
     assert any("run_maca_pk_decode_loop" in step for step in plan["implemented_steps"])
+
+
+def test_maca_pk_hf_tokenizer_generation_plan_contract():
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    plan = gen_utils.inspect_maca_pk_hf_tokenizer_generation_plan()
+    assert plan["tokenizer_generation_plan_ready"] is True
+    assert plan["tokenizer_generation_ready"] is False
+    assert "per_token_latency_ms" in plan["latency_fields"]
+
+
+def test_maca_pk_multi_request_batch_meta_cpu():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    import torch
+
+    scaffold = pk_utils.Qwen3PKScaffold()
+    meta = pk_utils.build_qwen3_pk_meta_tensors(scaffold, torch.device("cpu"))
+    summary = gen_utils.prepare_maca_pk_batched_prompt_meta(
+        meta, scaffold, [11, 22, 33], active_requests=2
+    )
+    assert summary["active_requests"] == 2
+    assert summary["qo_indptr"] == [0, 1, 2]
+    assert int(meta["step"][0].item()) == int(meta["step"][1].item()) == 2
+
+
+def test_compute_maca_pk_generation_latency():
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    latency = gen_utils.compute_maca_pk_generation_latency(
+        launch_ms=12.0, prompt_len=10, final_step=13
+    )
+    assert latency["generate_len"] == 4
+    assert latency["per_token_latency_ms"] == 3.0
 
 
 def test_maca_pk_decode_step_contract():
@@ -324,9 +364,13 @@ def test_qwen3_persistent_kernel_demo_has_runtime_modes():
     assert "--hf-generation-plan" in text
     assert "--hf-decode-step-plan" in text
     assert "--hf-generation-smoke" in text
+    assert "--hf-tokenizer-generation-plan" in text
+    assert "--hf-multi-request-batch-plan" in text
+    assert "--hf-tokenizer-generation-smoke" in text
     assert "maca_pk_stack_runtime_smoke" in text
     assert "maca_pk_hf_stack_runtime_smoke" in text
     assert "maca_pk_hf_generation_smoke" in text
+    assert "maca_pk_hf_tokenizer_generation_smoke" in text
     assert "inspect_maca_pk_hf_generation_plan" in text
 
 

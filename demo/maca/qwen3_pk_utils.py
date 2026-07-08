@@ -1048,31 +1048,43 @@ def inspect_maca_pk_hf_generation_plan(
     scaffold: Optional[Qwen3PKScaffold] = None,
 ) -> Dict[str, Any]:
     """Cloud-safe HF PK generation loop contract (CUDA ``demo/qwen3/demo.py`` aligned)."""
-    from demo.maca.qwen3_pk_generation_utils import inspect_maca_pk_decode_step_contract
+    from demo.maca.qwen3_pk_generation_utils import (
+        inspect_maca_pk_decode_step_contract,
+        inspect_maca_pk_hf_tokenizer_generation_plan,
+        inspect_maca_pk_multi_request_batch_plan,
+    )
 
     scaffold = scaffold or Qwen3PKScaffold()
     runtime_plan = inspect_maca_pk_hf_runtime_plan(scaffold, max_layers=scaffold.pk_compile_layers)
     decode_contract = inspect_maca_pk_decode_step_contract(scaffold)
+    tokenizer_plan = inspect_maca_pk_hf_tokenizer_generation_plan(scaffold)
+    batch_plan = inspect_maca_pk_multi_request_batch_plan(scaffold)
     return {
         "cuda_reference": "demo/qwen3/demo.py --use-yirage (ypk() + tokenizer.decode)",
         "maca_runtime_entry": "maca_pk_hf_stack_runtime_smoke",
         "maca_generation_entry": "maca_pk_hf_generation_smoke",
+        "maca_tokenizer_generation_entry": "maca_pk_hf_tokenizer_generation_smoke",
         "generation_ready": False,
         "multi_step_decode_ready": decode_contract["decode_step_contract_ready"],
+        "tokenizer_generation_plan_ready": tokenizer_plan["tokenizer_generation_plan_ready"],
+        "multi_request_batch_plan_ready": batch_plan["multi_request_batch_plan_ready"],
         "implemented_steps": [
             "HF load_maca_pk_hf_weight_bundle",
             "N-layer PK stack graph + mxcc compile",
             "prepare_maca_pk_runtime_meta (qo_indptr / paged_kv)",
             "prepare_maca_pk_prompt_meta (tokenizer prompt ids)",
+            "prepare_maca_pk_batched_prompt_meta (multi-request)",
             "run_maca_pk_decode_loop (multi-step ypk + step advance)",
             "encode_maca_pk_chat_prompt / decode_maca_pk_generated_tokens",
+            "compute_maca_pk_generation_latency (per-token ms)",
         ],
         "backlog_steps": [
-            "MetaX VM tokenizer full-path generation e2e",
-            "per-token latency reporting",
-            "multi-request batching (total_num_requests > 1)",
+            "MetaX VM tokenizer full-path generation e2e validation",
+            "multi-request ypk() decode loop (meta prep ready)",
         ],
         "decode_step_contract": decode_contract,
+        "tokenizer_generation_plan": tokenizer_plan,
+        "multi_request_batch_plan": batch_plan,
         "hf_runtime_plan": runtime_plan,
         "model": scaffold.model,
         "pk_compile_layers": scaffold.pk_compile_layers,
@@ -1152,6 +1164,7 @@ def maca_pk_hf_generation_smoke(
     """HF PK generation smoke: optional tokenizer prompt + multi-step ``ypk()`` decode loop."""
     from demo.maca.qwen3_pk_generation_utils import (
         DEFAULT_MACA_PK_CHAT_PROMPT,
+        compute_maca_pk_generation_latency,
         decode_maca_pk_generated_tokens,
         encode_maca_pk_chat_prompt,
         prepare_maca_pk_prompt_meta,
@@ -1224,7 +1237,51 @@ def maca_pk_hf_generation_smoke(
     }
     if tokenizer is not None:
         result["decoded_response"] = decode_maca_pk_generated_tokens(tokenizer, meta)
+        prompt_len = int(meta_summary["prompt_len"])
+        result["latency"] = compute_maca_pk_generation_latency(
+            launch_ms=decode_result["launch_ms"],
+            prompt_len=prompt_len,
+            final_step=decode_result["final_step"],
+        )
     return result
+
+
+def maca_pk_hf_tokenizer_generation_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+    num_layers: Optional[int] = None,
+    decode_steps: int = 4,
+    chat_prompt: str = "Hello",
+    use_padded_lm_head: bool = False,
+    local_files_only: bool = False,
+    ignore_eos: bool = False,
+) -> Dict[str, Any]:
+    """Tokenizer full-path HF PK generation smoke (CUDA ``demo/qwen3/demo.py --use-yirage``)."""
+    from transformers import AutoTokenizer
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    tokenizer = AutoTokenizer.from_pretrained(
+        scaffold.model, local_files_only=local_files_only
+    )
+    eos_token_id = None if ignore_eos else tokenizer.eos_token_id
+
+    result = maca_pk_hf_generation_smoke(
+        scaffold,
+        output_dir=output_dir,
+        num_layers=num_layers,
+        decode_steps=decode_steps,
+        use_tokenizer=True,
+        chat_prompt=chat_prompt,
+        use_padded_lm_head=use_padded_lm_head,
+        local_files_only=local_files_only,
+        eos_token_id=eos_token_id,
+    )
+    return {
+        **result,
+        "tokenizer_generation_smoke": True,
+        "eos_token_id": eos_token_id,
+    }
 
 
 def maca_pk_hf_stack_runtime_smoke(
@@ -1385,6 +1442,7 @@ __all__ = [
     "maca_pk_stack_compile_smoke",
     "maca_pk_stack_runtime_smoke",
     "maca_pk_hf_generation_smoke",
+    "maca_pk_hf_tokenizer_generation_smoke",
     "maca_pk_hf_stack_runtime_smoke",
     "maca_pk_runtime_smoke",
     "prepare_maca_pk_runtime_meta",
