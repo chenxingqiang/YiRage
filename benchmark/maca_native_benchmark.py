@@ -6,10 +6,13 @@ This script benchmarks operations using MACA native libraries
 via ctypes binding to compare with PyTorch CPU baseline.
 """
 
+import os
+
+os.environ.setdefault("MACA_PATH", "/opt/maca")
+
 import torch
 import time
 import ctypes
-import os
 import numpy as np
 from yirage.maca_config import (
     MACA_WARP_SIZE,
