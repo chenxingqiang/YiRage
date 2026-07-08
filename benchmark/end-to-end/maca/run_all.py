@@ -14,6 +14,7 @@ import os
 BENCHMARKS = [
     ("chameleon_maca.py", "Chameleon"),
     ("llama_maca.py", "LLaMA"),
+    ("qwen_maca.py", "Qwen"),
     ("lora_maca.py", "LoRA"),
     ("ngpt_maca.py", "nGPT"),
 ]
@@ -62,7 +63,7 @@ def main():
         "--benchmark",
         type=str,
         default=None,
-        choices=["chameleon", "llama", "lora", "ngpt"],
+        choices=["chameleon", "llama", "qwen", "lora", "ngpt"],
         help="Run specific benchmark only",
     )
     args = parser.parse_args()
