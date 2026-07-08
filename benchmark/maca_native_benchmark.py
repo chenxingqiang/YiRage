@@ -306,6 +306,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="MACA native benchmark smoke")
     parser.add_argument("--quick", action="store_true", help="Minimal shapes for Loop smoke")
     args = parser.parse_args()
+    os.environ.setdefault("MACA_PATH", "/opt/maca")
     if args.quick:
         os.environ.setdefault("YIRAGE_MACA_SEARCH_QUICK", "1")
     run_benchmarks(quick=args.quick)
