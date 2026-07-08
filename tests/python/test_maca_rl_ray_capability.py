@@ -32,14 +32,14 @@ def maca_rl_ray_capability_matrix() -> list[dict]:
             "id": "superoptimize_ray",
             "cuda": "KNGraph.superoptimize(use_ray=True) + griddims>1",
             "maca": "Same API; demos default use_ray=False",
-            "maca_vm_test": "demo/maca_superopt_test.py + future test_ray_maca_e2e",
+            "maca_vm_test": "demo/maca_superopt_test.py + tests/integration/test_ray_maca_e2e.py",
             "tier": "partial",
         },
         {
             "id": "distributed_coordinator",
             "cuda": "DistributedSearchCoordinator.parallel_search(backend=cuda)",
-            "maca": "backend=maca param accepted; no maca e2e pytest",
-            "maca_vm_test": "tests/integration/test_ray_maca_e2e.py (planned)",
+            "maca": "backend=maca param accepted; maca e2e pytest added",
+            "maca_vm_test": "tests/integration/test_ray_maca_e2e.py",
             "tier": "partial",
         },
         {
@@ -53,8 +53,8 @@ def maca_rl_ray_capability_matrix() -> list[dict]:
             "id": "walkthrough",
             "cuda": "N/A (walkthrough hardcoded cpu today)",
             "maca": "scripts/business_capability_walkthrough.py backend=cpu only",
-            "maca_vm_test": "scripts/maca_capability_walkthrough.py (planned)",
-            "tier": "gap",
+            "maca_vm_test": "scripts/maca_capability_walkthrough.py",
+            "tier": "partial",
         },
         {
             "id": "hierarchical_rl",
@@ -112,6 +112,22 @@ def test_walkthrough_still_cpu_only_documents_gap():
     walk = _REPO / "scripts" / "business_capability_walkthrough.py"
     text = walk.read_text(encoding="utf-8")
     assert 'YIRAGE_BACKEND", "cpu"' in text or "backend=cpu" in text
+
+
+def test_maca_capability_walkthrough_exists_and_uses_maca_backend():
+    walk = _REPO / "scripts" / "maca_capability_walkthrough.py"
+    assert walk.is_file()
+    text = walk.read_text(encoding="utf-8")
+    assert 'backend="maca"' in text or "backend='maca'" in text
+    assert "build_maca_walkthrough_report" in text
+
+
+def test_ray_maca_e2e_module_exists():
+    e2e = _REPO / "tests" / "integration" / "test_ray_maca_e2e.py"
+    assert e2e.is_file()
+    text = e2e.read_text(encoding="utf-8")
+    assert 'backend="maca"' in text
+    assert "DistributedSearchCoordinator" in text
 
 
 def test_rl_config_space_includes_maca():
