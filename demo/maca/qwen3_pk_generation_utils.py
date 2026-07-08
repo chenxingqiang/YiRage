@@ -172,6 +172,174 @@ def run_maca_pk_decode_loop(
     }
 
 
+def advance_maca_pk_batched_decode_step(
+    meta: Dict[str, "torch.Tensor"],
+    scaffold: "Qwen3PKScaffold",
+    *,
+    active_requests: int,
+    num_tokens_per_request: int = 1,
+) -> Dict[str, Any]:
+    """Advance all requests after ``ypk()`` (CUDA ``total_num_requests`` lockstep decode)."""
+    if active_requests < 1:
+        raise ValueError("active_requests must be >= 1")
+
+    per_request: List[Dict[str, Any]] = []
+    for req in range(active_requests):
+        slot = req * num_tokens_per_request
+        output_token = int(meta["output_tokens"][slot, 0].item())
+        cur_step = int(meta["step"][req].item())
+        new_step = cur_step + 1
+        if new_step >= scaffold.max_seq_length:
+            raise ValueError("decode step exceeds max_seq_length")
+
+        meta["tokens"][req, new_step] = output_token
+        meta["step"][req] = new_step
+        meta["input_tokens"][slot, 0] = output_token
+        meta["num_new_tokens"][req] = num_tokens_per_request
+        meta["paged_kv_last_page_len_buffer"][req] = new_step + 1
+        per_request.append(
+            {
+                "req": req,
+                "slot": slot,
+                "output_token": output_token,
+                "prev_step": cur_step,
+                "new_step": new_step,
+            }
+        )
+
+    steps = [int(meta["step"][req].item()) for req in range(active_requests)]
+    return {
+        "per_request": per_request,
+        "steps_aligned": len(set(steps)) == 1,
+        "final_steps": steps,
+    }
+
+
+def run_maca_pk_batched_decode_loop(
+    ypk,
+    meta: Dict[str, "torch.Tensor"],
+    scaffold: "Qwen3PKScaffold",
+    *,
+    active_requests: int,
+    num_tokens_per_request: int = 1,
+    max_decode_steps: int = 1,
+    eos_token_id: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Run ``ypk()`` for a multi-request batch with per-request step advance."""
+    import torch
+
+    if active_requests < 1:
+        raise ValueError("active_requests must be >= 1")
+    if max_decode_steps < 1:
+        raise ValueError("max_decode_steps must be >= 1")
+
+    generated: List[List[int]] = [[] for _ in range(active_requests)]
+    starter = torch.cuda.Event(enable_timing=True)
+    ender = torch.cuda.Event(enable_timing=True)
+    torch.cuda.synchronize()
+    starter.record()
+
+    steps_run = 0
+    stopped_on_eos = False
+    for step_idx in range(max_decode_steps):
+        ypk()
+        steps_run += 1
+        step_tokens: List[int] = []
+        for req in range(active_requests):
+            slot = req * num_tokens_per_request
+            output_token = int(meta["output_tokens"][slot, 0].item())
+            generated[req].append(output_token)
+            step_tokens.append(output_token)
+
+        if eos_token_id is not None and any(tok == eos_token_id for tok in step_tokens):
+            stopped_on_eos = True
+            break
+        if step_idx + 1 < max_decode_steps:
+            advance_maca_pk_batched_decode_step(
+                meta,
+                scaffold,
+                active_requests=active_requests,
+                num_tokens_per_request=num_tokens_per_request,
+            )
+
+    ender.record()
+    torch.cuda.synchronize()
+    launch_ms = starter.elapsed_time(ender)
+
+    final_steps = [int(meta["step"][req].item()) for req in range(active_requests)]
+    return {
+        "decode_steps": steps_run,
+        "generated_tokens": generated,
+        "generated_tokens_req0": generated[0],
+        "launch_ms": launch_ms,
+        "final_step": final_steps[0],
+        "final_steps": final_steps,
+        "steps_aligned": len(set(final_steps)) == 1,
+        "stopped_on_eos": stopped_on_eos,
+        "active_requests": active_requests,
+    }
+
+
+def decode_maca_pk_batched_generated_tokens(
+    tokenizer,
+    meta: Dict[str, "torch.Tensor"],
+    *,
+    active_requests: int,
+    skip_special_tokens: bool = True,
+) -> List[str]:
+    """Decode each request in a batch (CUDA demo per-request loop)."""
+    return [
+        decode_maca_pk_generated_tokens(
+            tokenizer, meta, req=req, skip_special_tokens=skip_special_tokens
+        )
+        for req in range(active_requests)
+    ]
+
+
+def inspect_maca_pk_batched_decode_plan(
+    scaffold: Optional["Qwen3PKScaffold"] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe multi-request ``ypk()`` decode loop contract."""
+    from demo.maca.qwen3_pk_utils import Qwen3PKScaffold
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    batch_plan = inspect_maca_pk_multi_request_batch_plan(scaffold)
+    return {
+        "cuda_reference": "demo/qwen3/demo.py --use-yirage (for r in range(total_num_requests))",
+        "advance_entry": "advance_maca_pk_batched_decode_step",
+        "decode_loop_entry": "run_maca_pk_batched_decode_loop",
+        "decode_entry": "decode_maca_pk_batched_generated_tokens",
+        "steps_aligned_field": "steps_aligned",
+        "batched_decode_plan_ready": batch_plan["multi_request_batch_plan_ready"],
+        "multi_request_batch_plan": batch_plan,
+    }
+
+
+def inspect_maca_pk_hf_full_layer_generation_plan(
+    scaffold: Optional["Qwen3PKScaffold"] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe full-layer HF PK generation e2e contract (CUDA demo default stack)."""
+    from demo.maca.qwen3_pk_utils import Qwen3PKScaffold
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    tokenizer_plan = inspect_maca_pk_hf_tokenizer_generation_plan(scaffold)
+    return {
+        "cuda_reference": "demo/qwen3/demo.py --use-yirage (full decoder stack + lm_head/argmax)",
+        "maca_entry": "maca_pk_hf_full_layer_tokenizer_generation_smoke",
+        "full_layer_generation_ready": False,
+        "full_layer_generation_plan_ready": True,
+        "pk_compile_layers": scaffold.pk_compile_layers,
+        "pipeline_steps": tokenizer_plan["pipeline_steps"]
+        + [
+            f"maca_pk_hf_init_compiled_stack(num_layers={scaffold.pk_compile_layers})",
+            "run_maca_pk_decode_loop or run_maca_pk_batched_decode_loop",
+        ],
+        "tokenizer_generation_plan": tokenizer_plan,
+        "model": scaffold.model,
+        "requires_metax_gpu": True,
+    }
+
+
 def compute_maca_pk_generation_latency(
     *,
     launch_ms: float,
@@ -302,8 +470,8 @@ def inspect_maca_pk_hf_tokenizer_generation_plan(
             "AutoTokenizer.from_pretrained",
             "encode_maca_pk_chat_prompt",
             "maca_pk_hf_init_compiled_stack + prepare_maca_pk_prompt_meta",
-            "run_maca_pk_decode_loop",
-            "decode_maca_pk_generated_tokens",
+            "run_maca_pk_decode_loop / run_maca_pk_batched_decode_loop",
+            "decode_maca_pk_generated_tokens / decode_maca_pk_batched_generated_tokens",
             "compute_maca_pk_generation_latency",
         ],
         "latency_fields": [
@@ -347,14 +515,19 @@ def inspect_maca_pk_decode_step_contract(
 
 __all__ = [
     "DEFAULT_MACA_PK_CHAT_PROMPT",
+    "advance_maca_pk_batched_decode_step",
     "advance_maca_pk_decode_step",
     "compute_maca_pk_generation_latency",
+    "decode_maca_pk_batched_generated_tokens",
     "decode_maca_pk_generated_tokens",
     "encode_maca_pk_chat_prompt",
+    "inspect_maca_pk_batched_decode_plan",
     "inspect_maca_pk_decode_step_contract",
+    "inspect_maca_pk_hf_full_layer_generation_plan",
     "inspect_maca_pk_hf_tokenizer_generation_plan",
     "inspect_maca_pk_multi_request_batch_plan",
     "prepare_maca_pk_batched_prompt_meta",
     "prepare_maca_pk_prompt_meta",
+    "run_maca_pk_batched_decode_loop",
     "run_maca_pk_decode_loop",
 ]

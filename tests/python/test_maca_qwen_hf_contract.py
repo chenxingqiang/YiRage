@@ -267,7 +267,11 @@ def test_qwen3_pk_hf_generation_plan_contract():
     assert plan["multi_step_decode_ready"] is True
     assert plan["tokenizer_generation_plan_ready"] is True
     assert plan["multi_request_batch_plan_ready"] is True
-    assert any("run_maca_pk_decode_loop" in step for step in plan["implemented_steps"])
+    assert plan["multi_request_decode_plan_ready"] is True
+    assert any(
+        "run_maca_pk_decode_loop" in step or "run_maca_pk_batched_decode_loop" in step
+        for step in plan["implemented_steps"]
+    )
 
 
 def test_maca_pk_hf_tokenizer_generation_plan_contract():
@@ -306,6 +310,47 @@ def test_compute_maca_pk_generation_latency():
     )
     assert latency["generate_len"] == 4
     assert latency["per_token_latency_ms"] == 3.0
+
+
+def test_maca_pk_batched_decode_advance_cpu():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    import torch
+
+    scaffold = pk_utils.Qwen3PKScaffold()
+    meta = pk_utils.build_qwen3_pk_meta_tensors(scaffold, torch.device("cpu"))
+    gen_utils.prepare_maca_pk_batched_prompt_meta(meta, scaffold, [11, 22, 33], active_requests=2)
+    meta["output_tokens"][0, 0] = 101
+    meta["output_tokens"][1, 0] = 102
+    advanced = gen_utils.advance_maca_pk_batched_decode_step(
+        meta, scaffold, active_requests=2
+    )
+    assert advanced["steps_aligned"] is True
+    assert int(meta["tokens"][0, 3].item()) == 101
+    assert int(meta["tokens"][1, 3].item()) == 102
+    assert int(meta["input_tokens"][0, 0].item()) == 101
+    assert int(meta["input_tokens"][1, 0].item()) == 102
+
+
+def test_maca_pk_batched_decode_plan_contract():
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    plan = gen_utils.inspect_maca_pk_batched_decode_plan()
+    assert plan["batched_decode_plan_ready"] is True
+    assert plan["decode_loop_entry"] == "run_maca_pk_batched_decode_loop"
+
+
+def test_maca_pk_full_layer_generation_plan_contract():
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    plan = gen_utils.inspect_maca_pk_hf_full_layer_generation_plan()
+    assert plan["full_layer_generation_plan_ready"] is True
+    assert plan["full_layer_generation_ready"] is False
+    assert plan["pk_compile_layers"] == 2
 
 
 def test_maca_pk_decode_step_contract():
@@ -367,6 +412,12 @@ def test_qwen3_persistent_kernel_demo_has_runtime_modes():
     assert "--hf-tokenizer-generation-plan" in text
     assert "--hf-multi-request-batch-plan" in text
     assert "--hf-tokenizer-generation-smoke" in text
+    assert "--hf-batched-decode-plan" in text
+    assert "--hf-batched-generation-smoke" in text
+    assert "--hf-full-layer-generation-plan" in text
+    assert "--hf-full-layer-generation-smoke" in text
+    assert "maca_pk_hf_batched_tokenizer_generation_smoke" in text
+    assert "maca_pk_hf_full_layer_tokenizer_generation_smoke" in text
     assert "maca_pk_stack_runtime_smoke" in text
     assert "maca_pk_hf_stack_runtime_smoke" in text
     assert "maca_pk_hf_generation_smoke" in text

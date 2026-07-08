@@ -292,6 +292,52 @@ def test_maca_qwen3_persistent_kernel_demo_hf_multi_request_batch_plan():
 
 @pytest.mark.integration
 @pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_batched_decode_plan():
+    """Cloud-safe contract: multi-request ypk() decode loop plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-batched-decode-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_batched_decode_plan"
+    assert payload["hf_batched_decode_plan"]["batched_decode_plan_ready"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_full_layer_generation_plan():
+    """Cloud-safe contract: full-layer HF PK generation e2e plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-full-layer-generation-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_full_layer_generation_plan"
+    assert payload["hf_full_layer_generation_plan"]["full_layer_generation_plan_ready"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
 def test_maca_qwen3_persistent_kernel_demo_hf_padded_plan():
     """Cloud-safe contract: padded lm_head 153600 plan."""
     env = os.environ.copy()
@@ -568,3 +614,7 @@ def test_maca_qwen3_persistent_kernel_demo_script_exists():
     assert "--hf-tokenizer-generation-plan" in text
     assert "--hf-multi-request-batch-plan" in text
     assert "--hf-tokenizer-generation-smoke" in text
+    assert "--hf-batched-decode-plan" in text
+    assert "--hf-batched-generation-smoke" in text
+    assert "--hf-full-layer-generation-plan" in text
+    assert "--hf-full-layer-generation-smoke" in text
