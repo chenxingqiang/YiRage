@@ -338,6 +338,59 @@ def test_maca_qwen3_persistent_kernel_demo_hf_full_layer_generation_plan():
 
 @pytest.mark.integration
 @pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_divergent_batch_plan():
+    """Cloud-safe contract: per-request distinct prompt batch plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-divergent-batch-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_divergent_batch_plan"
+    assert payload["hf_divergent_batch_plan"]["divergent_batch_plan_ready"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_full_layer_batched_generation_plan():
+    """Cloud-safe contract: full-layer batched padded-lm_head generation plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [
+        sys.executable,
+        str(_DEMO),
+        "--hf-full-layer-batched-generation-plan",
+        "--json",
+    ]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_full_layer_batched_generation_plan"
+    plan = payload["hf_full_layer_batched_generation_plan"]
+    assert plan["full_layer_batched_padded_generation_plan_ready"] is True
+    assert plan["use_padded_lm_head"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
 def test_maca_qwen3_persistent_kernel_demo_hf_padded_plan():
     """Cloud-safe contract: padded lm_head 153600 plan."""
     env = os.environ.copy()
@@ -618,3 +671,7 @@ def test_maca_qwen3_persistent_kernel_demo_script_exists():
     assert "--hf-batched-generation-smoke" in text
     assert "--hf-full-layer-generation-plan" in text
     assert "--hf-full-layer-generation-smoke" in text
+    assert "--hf-divergent-batch-plan" in text
+    assert "--hf-divergent-generation-smoke" in text
+    assert "--hf-full-layer-batched-generation-plan" in text
+    assert "--hf-full-layer-batched-generation-smoke" in text

@@ -272,6 +272,14 @@ def test_qwen3_pk_hf_generation_plan_contract():
         "run_maca_pk_decode_loop" in step or "run_maca_pk_batched_decode_loop" in step
         for step in plan["implemented_steps"]
     )
+    assert any(
+        "prepare_maca_pk_batched_divergent_prompt_meta" in step
+        for step in plan["implemented_steps"]
+    )
+    assert any(
+        "maca_pk_hf_full_layer_batched_padded_generation_smoke" in step
+        for step in plan["implemented_steps"]
+    )
 
 
 def test_maca_pk_hf_tokenizer_generation_plan_contract():
@@ -299,6 +307,47 @@ def test_maca_pk_multi_request_batch_meta_cpu():
     assert summary["active_requests"] == 2
     assert summary["qo_indptr"] == [0, 1, 2]
     assert int(meta["step"][0].item()) == int(meta["step"][1].item()) == 2
+    assert summary["steps_aligned_at_prefill"] is True
+
+
+def test_maca_pk_divergent_batch_meta_cpu():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    import torch
+
+    scaffold = pk_utils.Qwen3PKScaffold()
+    meta = pk_utils.build_qwen3_pk_meta_tensors(scaffold, torch.device("cpu"))
+    summary = gen_utils.prepare_maca_pk_batched_divergent_prompt_meta(
+        meta, scaffold, [[11, 22], [33, 44, 55]]
+    )
+    assert summary["active_requests"] == 2
+    assert summary["prompt_lengths"] == [2, 3]
+    assert summary["steps_aligned_at_prefill"] is False
+    assert int(meta["step"][0].item()) == 1
+    assert int(meta["step"][1].item()) == 2
+    assert int(meta["tokens"][0, 0].item()) == 11
+    assert int(meta["tokens"][1, 2].item()) == 55
+
+
+def test_maca_pk_divergent_batch_plan_contract():
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    plan = gen_utils.inspect_maca_pk_divergent_batch_plan()
+    assert plan["divergent_batch_plan_ready"] is True
+    assert plan["prepare_entry"] == "prepare_maca_pk_batched_divergent_prompt_meta"
+
+
+def test_maca_pk_full_layer_batched_padded_generation_plan_contract():
+    gen_utils = _load_module(
+        "qwen3_pk_generation_utils", _REPO / "demo" / "maca" / "qwen3_pk_generation_utils.py"
+    )
+    plan = gen_utils.inspect_maca_pk_hf_full_layer_batched_padded_generation_plan()
+    assert plan["full_layer_batched_padded_generation_plan_ready"] is True
+    assert plan["use_padded_lm_head"] is True
+    assert plan["maca_entry"] == "maca_pk_hf_full_layer_batched_padded_generation_smoke"
 
 
 def test_compute_maca_pk_generation_latency():
@@ -416,7 +465,13 @@ def test_qwen3_persistent_kernel_demo_has_runtime_modes():
     assert "--hf-batched-generation-smoke" in text
     assert "--hf-full-layer-generation-plan" in text
     assert "--hf-full-layer-generation-smoke" in text
+    assert "--hf-divergent-batch-plan" in text
+    assert "--hf-divergent-generation-smoke" in text
+    assert "--hf-full-layer-batched-generation-plan" in text
+    assert "--hf-full-layer-batched-generation-smoke" in text
     assert "maca_pk_hf_batched_tokenizer_generation_smoke" in text
+    assert "maca_pk_hf_divergent_batched_tokenizer_generation_smoke" in text
+    assert "maca_pk_hf_full_layer_batched_padded_generation_smoke" in text
     assert "maca_pk_hf_full_layer_tokenizer_generation_smoke" in text
     assert "maca_pk_stack_runtime_smoke" in text
     assert "maca_pk_hf_stack_runtime_smoke" in text

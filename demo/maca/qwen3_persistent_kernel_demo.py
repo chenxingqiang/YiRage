@@ -19,6 +19,8 @@ Multi-step decode: ``--hf-decode-step-plan`` (Cloud) / ``--hf-generation-smoke``
 Tokenizer full-path: ``--hf-tokenizer-generation-plan`` (Cloud) / ``--hf-tokenizer-generation-smoke`` (MetaX).
 Batched decode: ``--hf-batched-decode-plan`` / ``--hf-batched-generation-smoke --active-requests 2``.
 Full-layer e2e: ``--hf-full-layer-generation-plan`` / ``--hf-full-layer-generation-smoke``.
+Divergent batched prompts: ``--hf-divergent-batch-plan`` / ``--hf-divergent-generation-smoke``.
+Full-layer batched padded: ``--hf-full-layer-batched-generation-plan`` / ``--hf-full-layer-batched-generation-smoke``.
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
@@ -43,6 +45,10 @@ MetaX VM:
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-batched-generation-smoke --active-requests 2
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-full-layer-generation-plan
   python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-full-layer-generation-smoke --decode-steps 4
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-divergent-batch-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-divergent-generation-smoke --chat-prompts "Hello,What is AI?"
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-full-layer-batched-generation-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --hf-full-layer-batched-generation-smoke --active-requests 2
 """
 
 from __future__ import annotations
@@ -65,6 +71,8 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     inspect_maca_pk_runtime_plan,
     inspect_qwen3_pk_scaffold,
     maca_pk_hf_batched_tokenizer_generation_smoke,
+    maca_pk_hf_divergent_batched_tokenizer_generation_smoke,
+    maca_pk_hf_full_layer_batched_padded_generation_smoke,
     maca_pk_hf_full_layer_tokenizer_generation_smoke,
     maca_pk_hf_generation_smoke,
     maca_pk_hf_tokenizer_generation_smoke,
@@ -83,6 +91,8 @@ from demo.maca.qwen3_pk_hf_utils import (  # noqa: E402
 from demo.maca.qwen3_pk_generation_utils import (  # noqa: E402
     inspect_maca_pk_batched_decode_plan,
     inspect_maca_pk_decode_step_contract,
+    inspect_maca_pk_divergent_batch_plan,
+    inspect_maca_pk_hf_full_layer_batched_padded_generation_plan,
     inspect_maca_pk_hf_full_layer_generation_plan,
     inspect_maca_pk_hf_tokenizer_generation_plan,
     inspect_maca_pk_multi_request_batch_plan,
@@ -266,6 +276,32 @@ def main() -> int:
         "--hf-full-layer-generation-smoke",
         action="store_true",
         help="MetaX: full pk_compile_layers stack tokenizer generation e2e",
+    )
+    parser.add_argument(
+        "--hf-divergent-batch-plan",
+        action="store_true",
+        help="Validate per-request distinct prompt batch contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--hf-divergent-generation-smoke",
+        action="store_true",
+        help="MetaX: batched generation with distinct per-request chat prompts",
+    )
+    parser.add_argument(
+        "--chat-prompts",
+        type=str,
+        default="Hello,What is AI?",
+        help="Comma-separated prompts for --hf-divergent-generation-smoke",
+    )
+    parser.add_argument(
+        "--hf-full-layer-batched-generation-plan",
+        action="store_true",
+        help="Validate full-layer batched padded-lm_head generation contract (no GPU)",
+    )
+    parser.add_argument(
+        "--hf-full-layer-batched-generation-smoke",
+        action="store_true",
+        help="MetaX: full-layer batched generation with padded lm_head (153600)",
     )
     parser.add_argument(
         "--hf-padded-plan",
@@ -515,6 +551,51 @@ def main() -> int:
             print("PASS — hf-full-layer-generation-plan (no MetaX GPU required)")
         return 0
 
+    if args.hf_divergent_batch_plan:
+        report["hf_divergent_batch_plan"] = inspect_maca_pk_divergent_batch_plan(scaffold)
+        report["status"] = "hf_divergent_batch_plan"
+        if not report["hf_divergent_batch_plan"]["divergent_batch_plan_ready"]:
+            print("✗ PK HF divergent batch plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF divergent batch plan")
+            print("=" * 70)
+            for key, val in report["hf_divergent_batch_plan"].items():
+                if key != "multi_request_batch_plan":
+                    print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-divergent-batch-plan (no MetaX GPU required)")
+        return 0
+
+    if args.hf_full_layer_batched_generation_plan:
+        report["hf_full_layer_batched_generation_plan"] = (
+            inspect_maca_pk_hf_full_layer_batched_padded_generation_plan(scaffold)
+        )
+        report["status"] = "hf_full_layer_batched_generation_plan"
+        plan = report["hf_full_layer_batched_generation_plan"]
+        if not plan["full_layer_batched_padded_generation_plan_ready"]:
+            print("✗ PK HF full-layer batched padded generation plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF full-layer batched padded generation plan")
+            print("=" * 70)
+            for key, val in plan.items():
+                if key not in ("full_layer_generation_plan", "batched_decode_plan"):
+                    print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-full-layer-batched-generation-plan (no MetaX GPU required)")
+        return 0
+
     if args.hf_padded_plan:
         report["hf_padded_plan"] = inspect_maca_pk_hf_padded_lm_head_plan(scaffold)
         report["status"] = "hf_padded_plan"
@@ -707,6 +788,70 @@ def main() -> int:
             print(
                 f"PASS — hf-full-layer-generation-smoke "
                 f"({scaffold.pk_compile_layers} layers, {args.decode_steps} decode step(s))"
+            )
+        return 0
+
+    if args.hf_divergent_generation_smoke:
+        if not _is_maca_device():
+            print("✗ MetaX MACA GPU required for --hf-divergent-generation-smoke", file=sys.stderr)
+            return 1
+        os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
+        chat_prompts = [p.strip() for p in args.chat_prompts.split(",") if p.strip()]
+        report["hf_divergent_generation"] = maca_pk_hf_divergent_batched_tokenizer_generation_smoke(
+            scaffold,
+            num_layers=args.pk_compile_layers,
+            active_requests=len(chat_prompts),
+            decode_steps=args.decode_steps,
+            chat_prompts=chat_prompts,
+            use_padded_lm_head=args.hf_padded_lm_head,
+        )
+        report["status"] = "hf_divergent_generation_smoke"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF divergent batched generation smoke")
+            print("=" * 70)
+            print(f"  hf_divergent_generation: {report['hf_divergent_generation']}")
+            print()
+            print(
+                f"PASS — hf-divergent-generation-smoke "
+                f"(requests={len(chat_prompts)}, steps={args.decode_steps})"
+            )
+        return 0
+
+    if args.hf_full_layer_batched_generation_smoke:
+        if not _is_maca_device():
+            print(
+                "✗ MetaX MACA GPU required for --hf-full-layer-batched-generation-smoke",
+                file=sys.stderr,
+            )
+            return 1
+        os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
+        report["hf_full_layer_batched_generation"] = (
+            maca_pk_hf_full_layer_batched_padded_generation_smoke(
+                scaffold,
+                active_requests=args.active_requests,
+                decode_steps=args.decode_steps,
+                chat_prompt=args.chat_prompt,
+            )
+        )
+        report["status"] = "hf_full_layer_batched_generation_smoke"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF full-layer batched padded generation smoke")
+            print("=" * 70)
+            print(
+                f"  hf_full_layer_batched_generation: "
+                f"{report['hf_full_layer_batched_generation']}"
+            )
+            print()
+            print(
+                f"PASS — hf-full-layer-batched-generation-smoke "
+                f"(layers={scaffold.pk_compile_layers}, requests={args.active_requests}, "
+                f"steps={args.decode_steps}, padded_lm_head=True)"
             )
         return 0
 

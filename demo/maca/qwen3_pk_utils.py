@@ -1075,13 +1075,16 @@ def inspect_maca_pk_hf_generation_plan(
             "prepare_maca_pk_runtime_meta (qo_indptr / paged_kv)",
             "prepare_maca_pk_prompt_meta (tokenizer prompt ids)",
             "prepare_maca_pk_batched_prompt_meta (multi-request)",
+            "prepare_maca_pk_batched_divergent_prompt_meta (per-request prompts)",
             "run_maca_pk_batched_decode_loop (multi-request ypk)",
             "encode_maca_pk_chat_prompt / decode_maca_pk_generated_tokens",
             "compute_maca_pk_generation_latency (per-token ms)",
             "maca_pk_hf_full_layer_tokenizer_generation_smoke",
+            "maca_pk_hf_full_layer_batched_padded_generation_smoke",
+            "maca_pk_hf_divergent_batched_tokenizer_generation_smoke",
         ],
         "backlog_steps": [
-            "MetaX VM full-layer + batched generation e2e validation",
+            "MetaX VM padded full-layer batched + divergent prompt e2e validation",
         ],
         "decode_step_contract": decode_contract,
         "tokenizer_generation_plan": tokenizer_plan,
@@ -1405,6 +1408,135 @@ def maca_pk_hf_full_layer_tokenizer_generation_smoke(
     }
 
 
+def maca_pk_hf_full_layer_batched_padded_generation_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+    active_requests: int = 2,
+    decode_steps: int = 4,
+    chat_prompt: str = "Hello",
+    local_files_only: bool = False,
+    ignore_eos: bool = False,
+) -> Dict[str, Any]:
+    """Full-layer batched generation with padded lm_head (CUDA 153600 argmax path)."""
+    scaffold = scaffold or Qwen3PKScaffold()
+    result = maca_pk_hf_batched_tokenizer_generation_smoke(
+        scaffold,
+        output_dir=output_dir,
+        num_layers=scaffold.pk_compile_layers,
+        active_requests=active_requests,
+        decode_steps=decode_steps,
+        chat_prompt=chat_prompt,
+        use_padded_lm_head=True,
+        local_files_only=local_files_only,
+        ignore_eos=ignore_eos,
+    )
+    return {
+        **result,
+        "full_layer_batched_padded_generation_smoke": True,
+        "pk_compile_layers": scaffold.pk_compile_layers,
+    }
+
+
+def maca_pk_hf_divergent_batched_tokenizer_generation_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+    num_layers: Optional[int] = None,
+    active_requests: Optional[int] = None,
+    decode_steps: int = 4,
+    chat_prompts: Optional[Sequence[str]] = None,
+    use_padded_lm_head: bool = False,
+    local_files_only: bool = False,
+    ignore_eos: bool = False,
+) -> Dict[str, Any]:
+    """Multi-request generation with distinct per-request chat prompts."""
+    from demo.maca.qwen3_pk_generation_utils import (
+        compute_maca_pk_generation_latency,
+        decode_maca_pk_batched_generated_tokens,
+        encode_maca_pk_chat_prompt,
+        prepare_maca_pk_batched_divergent_prompt_meta,
+        run_maca_pk_batched_decode_loop,
+    )
+    from transformers import AutoTokenizer
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    layers = num_layers if num_layers is not None else 1
+    prompts = list(chat_prompts or ["Hello", "What is AI?"])
+    if active_requests is None:
+        active_requests = len(prompts)
+    if active_requests < 2:
+        raise ValueError("active_requests must be >= 2 for divergent batched generation smoke")
+    if len(prompts) != active_requests:
+        raise ValueError("chat_prompts length must match active_requests")
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        scaffold.model, local_files_only=local_files_only
+    )
+    eos_token_id = None if ignore_eos else tokenizer.eos_token_id
+    prompt_token_ids_list = [
+        encode_maca_pk_chat_prompt(tokenizer, prompt) for prompt in prompts
+    ]
+
+    stack = _maca_pk_hf_init_compiled_stack(
+        scaffold,
+        output_dir=output_dir,
+        num_layers=layers,
+        vocab_smoke=128,
+        use_padded_lm_head=use_padded_lm_head,
+        local_files_only=local_files_only,
+    )
+    ypk = stack["ypk"]
+    meta = stack["meta"]
+    hf_bundle = stack["hf_bundle"]
+
+    meta_summary = prepare_maca_pk_batched_divergent_prompt_meta(
+        meta, scaffold, prompt_token_ids_list
+    )
+    decode_result = run_maca_pk_batched_decode_loop(
+        ypk,
+        meta,
+        scaffold,
+        active_requests=active_requests,
+        max_decode_steps=decode_steps,
+        eos_token_id=eos_token_id,
+    )
+    ypk.finalize()
+
+    decoded_responses = decode_maca_pk_batched_generated_tokens(
+        tokenizer, meta, active_requests=active_requests
+    )
+    prompt_len = int(meta_summary["prompt_len"])
+    return {
+        **stack["compile_result"],
+        "launched": True,
+        "launch_ms": decode_result["launch_ms"],
+        "pk_compile_layers": layers,
+        "meta_summary": meta_summary,
+        "weight_source": "hf",
+        "model_name": hf_bundle.model_name,
+        "vocab_smoke": hf_bundle.vocab_smoke,
+        "use_padded_lm_head": hf_bundle.use_padded_lm_head,
+        "divergent_batched_tokenizer_generation_smoke": True,
+        "active_requests": active_requests,
+        "chat_prompts": prompts,
+        "generation_steps": decode_result["decode_steps"],
+        "generated_tokens": decode_result["generated_tokens"],
+        "generated_tokens_req0": decode_result["generated_tokens_req0"],
+        "final_steps": decode_result["final_steps"],
+        "steps_aligned": decode_result["steps_aligned"],
+        "steps_aligned_at_prefill": meta_summary["steps_aligned_at_prefill"],
+        "stopped_on_eos": decode_result["stopped_on_eos"],
+        "decoded_responses": decoded_responses,
+        "eos_token_id": eos_token_id,
+        "latency": compute_maca_pk_generation_latency(
+            launch_ms=decode_result["launch_ms"],
+            prompt_len=prompt_len,
+            final_step=decode_result["final_step"],
+        ),
+    }
+
+
 def maca_pk_hf_stack_runtime_smoke(
     scaffold: Optional[Qwen3PKScaffold] = None,
     *,
@@ -1565,6 +1697,8 @@ __all__ = [
     "maca_pk_hf_generation_smoke",
     "maca_pk_hf_tokenizer_generation_smoke",
     "maca_pk_hf_batched_tokenizer_generation_smoke",
+    "maca_pk_hf_divergent_batched_tokenizer_generation_smoke",
+    "maca_pk_hf_full_layer_batched_padded_generation_smoke",
     "maca_pk_hf_full_layer_tokenizer_generation_smoke",
     "maca_pk_hf_stack_runtime_smoke",
     "maca_pk_runtime_smoke",
