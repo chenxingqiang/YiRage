@@ -31,6 +31,7 @@ if _REPO_ROOT not in sys.path:
 
 from demo.maca.qwen3_pk_utils import (  # noqa: E402
     Qwen3PKScaffold,
+    inspect_maca_pk_compile_contract,
     inspect_qwen3_pk_scaffold,
     maca_pk_runtime_smoke,
     resolve_maca_pk_workers_schedulers,
@@ -78,6 +79,11 @@ def main() -> int:
     parser.add_argument("--max-num-pages", type=int, default=Qwen3PKScaffold.max_num_pages)
     parser.add_argument("--max-seq-length", type=int, default=Qwen3PKScaffold.max_seq_length)
     parser.add_argument(
+        "--compile-inspect",
+        action="store_true",
+        help="Validate mxcc PK compile contract (no GPU required)",
+    )
+    parser.add_argument(
         "--inspect-only",
         action="store_true",
         help="Print scaffold JSON and exit (no GPU required)",
@@ -107,6 +113,26 @@ def main() -> int:
     )
 
     report: dict = {"scaffold": inspect_qwen3_pk_scaffold(scaffold)}
+
+    if args.compile_inspect:
+        report["compile_contract"] = inspect_maca_pk_compile_contract(scaffold)
+        report["status"] = "compile_inspect"
+        if not report["compile_contract"]["compile_ready"]:
+            print("✗ PK compile contract failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK mxcc compile contract")
+            print("=" * 70)
+            for key, val in report["compile_contract"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — compile-inspect (no MetaX GPU required)")
+        return 0
 
     if args.inspect_only:
         report["status"] = "inspect_only"

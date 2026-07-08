@@ -112,7 +112,7 @@ MACA 无限闭环的**首要优化目标**是：在 MetaX 真卡上，使 YiRage
 | **KN 原语 kernel** | `src/kernel/cuda/*.cu` | `src/kernel/maca/*.maca`（matmul、elementwise、reduction…） | `benchmark/maca_native_benchmark.py` |
 | **TB customized / 融合** | customized CUDA kernel | `customized_kernel.maca` + TB interpreter 回退 | `maca_superopt_test.py`；`maca_vs_pytorch.py` |
 | **RMSNorm + matmul 融合** | CUDA fused µGraph | 同构图 `backend=maca` superoptimize | `maca_vs_pytorch.py`（rms  workload） |
-| **Attention / softmax tile** | CUDA attention kernel 路径 | `attention_kernel.maca`、`softmax_kernel.maca` | e2e / bench 待补项记入 backlog |
+| **Attention / softmax tile** | CUDA attention kernel 路径 | `attention_kernel.maca`、`softmax_kernel.maca` | `demo/maca/attention_smoke.py --inspect-only`（Cloud）；MetaX `--quick` superoptimize |
 | **Persistent kernel** | CUDA PK backend | `maca_pk_backend.cc` + `demo/maca/qwen3_persistent_kernel_demo.py` | `qwen3_persistent_kernel_demo.py --inspect-only`（Cloud）；MetaX `--quick` |
 | **Verifier** | CUDA fingerprint | MACA GPU fingerprint | `superoptimize(backend="maca")` 无 abort |
 | **融合 vs 库基线** | fused vs `torch` CUDA | fused vs **mcPytorch** on MACA | `benchmark/maca_vs_pytorch.py --quick` |
@@ -156,7 +156,7 @@ MACA 无限闭环的**首要优化目标**是：在 MetaX 真卡上，使 YiRage
 | **Qwen3 PK** | `demo/qwen3/demo.py --use-yirage` | `demo/maca/qwen3_persistent_kernel_demo.py`（PK runtime smoke；`PersistentKernel.compile()` mxcc when `YIRAGE_BACKEND=maca`） |
 | **真卡验证** | NVIDIA GPU | **MetaX VM** `--quick` smoke；`tests/integration/test_maca_qwen_inference_demo.py` |
 
-**尚未对标（backlog）**：`demo/qwen3/demo.py --use-yirage` 全量 qwen3 task-graph e2e on MetaX（R15 已接 mxcc compile + PK smem 64KB；e2e 真卡闭合待 R16）。
+**尚未对标（backlog）**：`demo/qwen3/demo.py --use-yirage` 全量 qwen3 task-graph e2e on MetaX（R15/R16 已接 mxcc compile + PK smem 64KB + compile-inspect 契约；真卡 ypk.compile e2e 待 R17）。
 
 
 #### 对齐策略（每轮策略层）
@@ -485,7 +485,8 @@ pytest tests/python/test_backends.py -k maca -v
 - **Loop R12（2026-07-08，HF from_pretrained + modeling_qwen2_maca，PR #152）**：闸门：图级/正确性（闭合 R11 HF 全权重 backlog）。`demo/maca/qwen_kernel_utils.py`（共享 MACA superoptimize）；`demo/maca/models/modeling_qwen2_maca.py`（无 flashinfer，`superoptimize_kernels` → `backend=maca`）；`demo/maca/qwen_from_pretrained_demo.py`（对齐 `demo/qwen2.5/demo.py`）；`qwen_inference_demo` 复用 kernel utils；`test_maca_qwen_hf_contract` 扩展。验证：pytest 契约（可无卡）；MetaX VM `qwen_from_pretrained_demo.py --model Qwen/Qwen3-8B --max-layers 1 --quick`。下一轮：**R13** — CUDA Graph decode on MACA；`demo/qwen3` PersistentKernel 路径；VM `maca_rebuild_core.sh` smem 闭合。
 - **Loop R13（2026-07-08，CUDA Graph decode on MACA，PR #152）**：闸门：图级/正确性（闭合 R12 CUDA Graph backlog）。`demo/maca/qwen_decode_loop.py`（prefill eager + decode CUDA Graph capture/replay，对齐 `demo/qwen2.5/demo.py`）；`qwen_from_pretrained_demo.py` 默认 CUDA Graph + `--no-cuda-graph`；`test_maca_qwen_from_pretrained_demo.py`。验证：pytest 契约（可无卡）；MetaX VM `qwen_from_pretrained_demo.py --max-layers 1 --quick --max-tokens 16`。下一轮：**R14** — `demo/qwen3` PersistentKernel MACA 路径；VM `maca_rebuild_core.sh` smem 闭合。
 - **Loop R14（2026-07-08，Qwen3 PersistentKernel MACA scaffold，PR #152）**：闸门：图级/契约层（闭合 R13 qwen3 PK backlog 的可 Cloud 落地部分）。`demo/maca/qwen3_pk_utils.py` + `qwen3_persistent_kernel_demo.py`（对齐 `demo/qwen3/demo.py --use-yirage`；`--inspect-only` Cloud 契约 + MetaX `--quick` PKRuntime offline smoke）；`get_available_backends()` MetaX 检测；`BACKEND_CAPABILITIES` MACA smem 64KB；`test_maca_qwen3_persistent_kernel_demo.py`。验证：pytest 契约（可无卡）；MetaX VM `qwen3_persistent_kernel_demo.py --quick` + `maca_rebuild_core.sh`。下一轮：**R15** — 全量 `ypk.compile()` mxcc task-graph；VM smem 98304 警告闭合。
-- **Loop R15（2026-07-08，PK smem 64KB + mxcc compile path，PR #152）**：闸门：执行/图级层（闭合 R14 mxcc compile + smem 98304 backlog）。`maca_pk_backend.cc` `get_shared_memory_size`→`maca::MAX_SMEM_SIZE`；`PersistentKernel.compile()` 增 `get_maca_pk_compile_command` + `_resolve_persistent_kernel_compiler`；`maca_rebuild_core.sh` PK smem 源码闸门；`test_maca_pk_smem_contract.py`。验证：pytest 契约（可无卡）；MetaX VM `bash scripts/maca_rebuild_core.sh` + qwen3 PK e2e smoke。下一轮：**R16** — 全量 qwen3 task-graph MetaX e2e；attention/PK 真卡 bench。
+- **Loop R15（2026-07-08，PK smem 64KB + mxcc compile path，PR #152）**：闸门：执行/图级层（闭合 R14 mxcc compile + smem 98304 backlog）。`maca_pk_backend.cc` `get_shared_memory_size`→`maca::MAX_SMEM_SIZE`；`PersistentKernel.compile()` 增 `get_maca_pk_compile_command` + `_resolve_persistent_kernel_compiler`；`maca_rebuild_core.sh` PK smem 源码闸门；`test_maca_pk_smem_contract.py`。验证：pytest 契约（可无卡）；MetaX VM `bash scripts/maca_rebuild_core.sh` + qwen3 PK e2e smoke。下一轮：**R16** — attention smoke + qwen3 PK compile-inspect。
+- **Loop R16（2026-07-08，attention smoke + PK compile-inspect，PR #152）**：闸门：图级/契约层（闭合 attention matrix backlog 与 R15 qwen3 PK e2e 前置）。`demo/maca/attention_utils.py` + `attention_smoke.py`（chameleon attention superoptimize；`--inspect-only` Cloud + MetaX `--quick`）；`inspect_maca_pk_compile_contract()` + `qwen3_persistent_kernel_demo.py --compile-inspect`；`test_maca_attention_contract.py` + `test_maca_attention_smoke.py`。验证：pytest 契约（可无卡）；MetaX VM `attention_smoke.py --quick` + `qwen3_persistent_kernel_demo.py --compile-inspect`。下一轮：**R17** — 全量 qwen3 task-graph MetaX ypk.compile e2e。
 
 - **协议（2026-07-07）**：MACA 改动须在 MetaX GPU VM 验证通过后合并；禁止用 CPU cert/loop-close 替代。
 - **协议（2026-07-08，CUDA 对标）**：MACA 算子/融合/搜索须逐项对齐 CUDA 后端能力；每项能力须有 MetaX **真卡**验证入口；性能同后端对 mcPytorch，**功能**以 CUDA 正式路径为参照。

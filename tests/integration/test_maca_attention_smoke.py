@@ -1,4 +1,4 @@
-"""Subprocess smoke for MACA Qwen3 PersistentKernel scaffold demo."""
+"""Subprocess smoke for MACA attention demo."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
-_DEMO = _REPO / "demo" / "maca" / "qwen3_persistent_kernel_demo.py"
+_DEMO = _REPO / "demo" / "maca" / "attention_smoke.py"
 
 
 def _maca_vm_available() -> bool:
@@ -29,31 +29,7 @@ def _maca_vm_available() -> bool:
 
 @pytest.mark.integration
 @pytest.mark.maca
-def test_maca_qwen3_persistent_kernel_demo_compile_inspect():
-    """Cloud-safe contract: compile-inspect validates mxcc PK flags without GPU."""
-    env = os.environ.copy()
-    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
-    env.setdefault("YIRAGE_BACKEND", "maca")
-
-    cmd = [sys.executable, str(_DEMO), "--compile-inspect", "--json"]
-    result = subprocess.run(
-        cmd,
-        cwd=str(_REPO),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert result.returncode == 0, result.stderr + result.stdout
-    payload = json.loads(result.stdout)
-    assert payload["status"] == "compile_inspect"
-    assert payload["compile_contract"]["compile_ready"] is True
-
-
-@pytest.mark.integration
-@pytest.mark.maca
-def test_maca_qwen3_persistent_kernel_demo_inspect_only():
-    """Cloud-safe contract: inspect-only exits 0 without MetaX GPU."""
+def test_maca_attention_smoke_inspect_only():
     env = os.environ.copy()
     env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
     env.setdefault("YIRAGE_BACKEND", "maca")
@@ -70,13 +46,13 @@ def test_maca_qwen3_persistent_kernel_demo_inspect_only():
     assert result.returncode == 0, result.stderr + result.stdout
     payload = json.loads(result.stdout)
     assert payload["status"] == "inspect_only"
-    assert payload["scaffold"]["cuda_reference"] == "demo/qwen3/demo.py --use-yirage"
+    assert payload["scaffold"]["kernel_file_exists"] is True
 
 
 @pytest.mark.integration
 @pytest.mark.maca
 @pytest.mark.slow
-def test_maca_qwen3_persistent_kernel_demo_quick():
+def test_maca_attention_smoke_quick():
     if not _maca_vm_available():
         pytest.skip("MetaX MACA GPU not available (set YIRAGE_MACA_INTEGRATION=1 to force)")
 
@@ -97,11 +73,4 @@ def test_maca_qwen3_persistent_kernel_demo_quick():
     assert result.returncode == 0, result.stderr + result.stdout
     payload = json.loads(result.stdout)
     assert payload["status"] == "pass"
-    assert payload["pk_runtime"]["backend"] == "maca"
-
-
-def test_maca_qwen3_persistent_kernel_demo_script_exists():
-    assert _DEMO.is_file()
-    text = _DEMO.read_text(encoding="utf-8")
-    assert "qwen3_pk_utils" in text
-    assert "--inspect-only" in text
+    assert payload["superoptimize"]["backend"] == "maca"
