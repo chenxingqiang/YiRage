@@ -222,7 +222,7 @@ BACKEND_CAPABILITIES = {
         supports_tma=False,
         supports_tensor_cores=True,
         supports_async_copy=True,
-        max_shared_memory=128 * 1024,
+        max_shared_memory=64 * 1024,  # MetaX C500 64 KB/block (see maca::MAX_SMEM_SIZE)
         supported_modes=[PKMode.OFFLINE, PKMode.ONLINE, PKMode.ONEPASS],
     ),
     PKBackendType.MPS: PKCapabilities(
@@ -532,12 +532,18 @@ def get_available_backends() -> List[PKBackendType]:
     """Get list of available backends on this system."""
     available = [PKBackendType.CPU]  # CPU always available
 
-    # Check CUDA
+    # Check CUDA / MACA (mcPytorch exposes torch.cuda API on MetaX)
     try:
+        import os
+
         import torch
 
         if torch.cuda.is_available():
-            available.append(PKBackendType.CUDA)
+            device_name = torch.cuda.get_device_name(0)
+            if "MetaX" in device_name or os.environ.get("YIRAGE_BACKEND", "").lower() == "maca":
+                available.append(PKBackendType.MACA)
+            else:
+                available.append(PKBackendType.CUDA)
     except ImportError:
         pass
 

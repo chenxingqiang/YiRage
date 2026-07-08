@@ -106,6 +106,34 @@ def test_qwen_kernel_utils_maca_search_contract():
     assert "superoptimize_mlp_gate_up" in text
 
 
+def test_qwen3_persistent_kernel_demo_exists_and_aligns_cuda_qwen3():
+    demo = _REPO / "demo" / "maca" / "qwen3_persistent_kernel_demo.py"
+    assert demo.is_file()
+    text = demo.read_text(encoding="utf-8")
+    assert "demo/qwen3/demo.py" in text
+    assert "--inspect-only" in text
+    assert "qwen3_pk_utils" in text
+    assert "PKRuntime" in text or "maca_pk_runtime_smoke" in text
+
+
+def test_qwen3_pk_utils_scaffold_contract():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    report = pk_utils.inspect_qwen3_pk_scaffold()
+    assert report["cuda_reference"] == "demo/qwen3/demo.py --use-yirage"
+    assert report["mode"] == "offline"
+    assert report["hidden_size"] == 4096
+    assert report["compile_path"] == "experimental"
+
+
+def test_qwen3_pk_runtime_smoke_offline():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    result = pk_utils.maca_pk_runtime_smoke(num_workers=4, num_schedulers=1)
+    assert result["initialized"] is True
+    assert result["backend"] == "maca"
+    assert result["mode"] == "offline"
+    assert result["max_shared_memory"] == 64 * 1024
+
+
 @pytest.mark.skipif(
     not (_REPO / "demo" / "maca" / "qwen_hf_utils.py").is_file(),
     reason="qwen_hf_utils missing",
