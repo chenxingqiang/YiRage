@@ -73,9 +73,9 @@ def maca_rl_ray_capability_matrix() -> list[dict]:
         {
             "id": "bench_ray_search",
             "cuda": "N/A",
-            "maca": "scripts/bench_ray_search.py cpu-only",
-            "maca_vm_test": "bench_ray_search backend=maca variant (planned)",
-            "tier": "gap",
+            "maca": "scripts/bench_ray_search.py --backend maca [--quick]",
+            "maca_vm_test": "PYTHONPATH=. python3 scripts/bench_ray_search.py --backend maca --quick",
+            "tier": "partial",
         },
     ]
 
