@@ -13,6 +13,7 @@ MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
   python3 demo/maca/qwen_from_pretrained_demo.py --model Qwen/Qwen3-8B --max-tokens 32
   python3 demo/maca/qwen_from_pretrained_demo.py --model Qwen/Qwen3-8B --max-layers 1 --quick
+  python3 demo/maca/qwen_from_pretrained_demo.py --model Qwen/Qwen3-8B --cuda-graph --max-tokens 32
 """
 
 from __future__ import annotations
@@ -20,7 +21,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import time
 
 import torch
 
@@ -28,7 +28,8 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from demo._maca_utils import apply_maca_demo_env, sync_device  # noqa: E402
+from demo._maca_utils import apply_maca_demo_env  # noqa: E402
+from demo.maca.qwen_decode_loop import run_qwen_decode_loop  # noqa: E402
 from demo.maca.qwen_hf_utils import DEFAULT_QWEN_MODEL  # noqa: E402
 
 
@@ -78,7 +79,13 @@ def main() -> int:
         action="store_true",
         help="Load model + fuse only; skip superoptimize and generation",
     )
+    parser.add_argument(
+        "--no-cuda-graph",
+        action="store_true",
+        help="Eager decode only (default uses torch.cuda.CUDAGraph like CUDA qwen2.5/demo.py)",
+    )
     args = parser.parse_args()
+    args.cuda_graph = not args.no_cuda_graph
 
     apply_maca_demo_env()
     os.environ.setdefault("YIRAGE_BACKEND", "maca")
@@ -150,42 +157,25 @@ def main() -> int:
     prompt_len = model_inputs.input_ids.shape[-1]
     positions = torch.arange(max_seq_len).unsqueeze(0).to(device)
     position_embeddings = model.model.rotary_emb(positions)
-    prev_pos = 0
 
-    starter = torch.cuda.Event(enable_timing=True)
-    ender = torch.cuda.Event(enable_timing=True)
     warmup = args.warmup
     output_len = args.max_tokens
-    step = torch.tensor([0], dtype=torch.int32, device=device)
 
-    print(f"\nGenerating up to {output_len} tokens (prompt length: {prompt_len})...")
+    mode = "CUDA Graph" if args.cuda_graph else "eager"
+    print(f"\nGenerating up to {output_len} tokens (prompt length: {prompt_len}, decode={mode})...")
 
-    cur_pos = prompt_len
-    for cur_pos in range(prompt_len, prompt_len + output_len):
-        step.fill_(cur_pos - 1)
-        input_ids = tokens[:, prev_pos:cur_pos]
-        cos_embeddings = position_embeddings[0][:, prev_pos:cur_pos]
-        sin_embeddings = position_embeddings[1][:, prev_pos:cur_pos]
-        logits = model.forward(
-            input_ids=input_ids,
-            position_embeddings=(cos_embeddings, sin_embeddings),
-            step=step,
-        )
-
-        next_token = logits.argmax(dim=-1)[0, -1]
-        tokens[0, cur_pos] = next_token
-        prev_pos = cur_pos
-
-        if next_token == model.config.eos_token_id:
-            break
-
-        if cur_pos == prompt_len + warmup:
-            sync_device(device)
-            starter.record()
-
-    ender.record()
-    sync_device(device)
-    run_time = starter.elapsed_time(ender) if cur_pos >= prompt_len + warmup else 0.0
+    decode_result = run_qwen_decode_loop(
+        model,
+        tokens=tokens,
+        prompt_len=prompt_len,
+        position_embeddings=position_embeddings,
+        max_tokens=output_len,
+        warmup=warmup,
+        device=device,
+        use_cuda_graph=args.cuda_graph,
+    )
+    cur_pos = decode_result.cur_pos
+    run_time = decode_result.run_time_ms
 
     generated_ids = tokens[:, : prev_pos + 1]
     response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
@@ -196,16 +186,18 @@ def main() -> int:
     print(response)
     print("=" * 70)
 
-    tokens_generated = max(cur_pos - prompt_len - warmup + 1, 0)
+    tokens_generated = decode_result.tokens_generated
     if tokens_generated > 0 and run_time > 0:
         latency_per_token = run_time / tokens_generated
         print(f"\nPerformance:")
         print(f"  Prompt length: {prompt_len} tokens")
         print(f"  Generated: {cur_pos + 1 - prompt_len} tokens")
+        print(f"  Decode mode: {mode}")
+        print(f"  CUDA Graph captured: {decode_result.used_cuda_graph}")
         print(f"  Per-token latency: {latency_per_token:.2f} ms")
         print(f"  Throughput: {1000 / latency_per_token:.2f} tokens/sec")
 
-    print("PASS: MACA Qwen from_pretrained full-chain smoke")
+    print(f"PASS: MACA Qwen from_pretrained full-chain smoke ({mode})")
     return 0
 
 

@@ -74,6 +74,18 @@ def test_qwen_from_pretrained_demo_exists_and_uses_maca_modeling():
     assert "superoptimize_kernels" in text
     assert "demo/qwen2.5/demo.py" in text
     assert "--max-layers" in text
+    assert "--no-cuda-graph" in text
+    assert "qwen_decode_loop" in text
+
+
+def test_qwen_decode_loop_cuda_graph_contract():
+    loop_py = _REPO / "demo" / "maca" / "qwen_decode_loop.py"
+    assert loop_py.is_file()
+    text = loop_py.read_text(encoding="utf-8")
+    assert "torch.cuda.CUDAGraph" in text
+    assert "graph.replay" in text
+    assert "torch.cuda.graph" in text
+    assert "used_cuda_graph" in text
 
 
 def test_modeling_qwen2_maca_superoptimize_uses_maca_backend():
