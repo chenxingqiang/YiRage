@@ -11,8 +11,9 @@ nvcc, and runs LLM serving. This MACA demo closes the **smoke/contract** gap:
 
 Full ``ypk.compile()`` task-graph: ``--compile-plan`` (Cloud) /
 ``--compile-only`` embed (MetaX) / ``--compile-one-layer`` decoder block /
-``--compile-stack`` N layers + lm_head/argmax (MetaX). Full HF-weight multi-layer
-runtime e2e remains backlog.
+``--compile-stack`` N layers + lm_head/argmax (MetaX). Stack runtime launch:
+``--runtime-plan`` (Cloud) / ``--runtime-stack`` (MetaX). HF-weight multi-layer
+runtime e2e remains backlog (see ``--hf-runtime-plan``).
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
@@ -22,6 +23,8 @@ MetaX VM:
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-only
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-one-layer
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-stack --pk-compile-layers 2
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --runtime-plan --runtime-plan-variant stack
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --runtime-stack --pk-compile-layers 1
 """
 
 from __future__ import annotations
@@ -39,11 +42,14 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     Qwen3PKScaffold,
     inspect_maca_pk_compile_contract,
     inspect_maca_pk_compile_plan,
+    inspect_maca_pk_hf_runtime_plan,
+    inspect_maca_pk_runtime_plan,
     inspect_qwen3_pk_scaffold,
     maca_pk_minimal_compile_smoke,
     maca_pk_one_layer_compile_smoke,
     maca_pk_runtime_smoke,
     maca_pk_stack_compile_smoke,
+    maca_pk_stack_runtime_smoke,
     resolve_maca_pk_workers_schedulers,
 )
 
@@ -122,6 +128,28 @@ def main() -> int:
         help="MetaX: build N-layer stack + lm_head/argmax PK graph and ypk.compile()",
     )
     parser.add_argument(
+        "--runtime-plan",
+        action="store_true",
+        help="Validate PK runtime launch plan (no GPU required)",
+    )
+    parser.add_argument(
+        "--runtime-plan-variant",
+        type=str,
+        choices=("stack", "one_layer"),
+        default="stack",
+        help="Runtime plan variant for --runtime-plan (default: stack)",
+    )
+    parser.add_argument(
+        "--hf-runtime-plan",
+        action="store_true",
+        help="Validate HF-weight PK runtime backlog contract (no GPU required)",
+    )
+    parser.add_argument(
+        "--runtime-stack",
+        action="store_true",
+        help="MetaX: compile N-layer stack, fill meta tensors, and ypk() launch",
+    )
+    parser.add_argument(
         "--compile-inspect",
         action="store_true",
         help="Validate mxcc PK compile contract (no GPU required)",
@@ -183,6 +211,47 @@ def main() -> int:
             print("PASS — compile-plan (no MetaX GPU required)")
         return 0
 
+    if args.runtime_plan:
+        layers = 1 if args.runtime_plan_variant == "one_layer" else args.pk_compile_layers
+        report["runtime_plan"] = inspect_maca_pk_runtime_plan(
+            scaffold, variant=args.runtime_plan_variant, num_layers=layers
+        )
+        report["status"] = "runtime_plan"
+        if not report["runtime_plan"]["runtime_plan_ready"]:
+            print("✗ PK runtime plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print(
+                "MACA Qwen3 PK runtime plan "
+                f"(variant={args.runtime_plan_variant}, layers={layers})"
+            )
+            print("=" * 70)
+            for key, val in report["runtime_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — runtime-plan (no MetaX GPU required)")
+        return 0
+
+    if args.hf_runtime_plan:
+        report["hf_runtime_plan"] = inspect_maca_pk_hf_runtime_plan(scaffold)
+        report["status"] = "hf_runtime_plan"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK HF runtime plan (backlog contract)")
+            print("=" * 70)
+            for key, val in report["hf_runtime_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — hf-runtime-plan (no MetaX GPU required)")
+        return 0
+
     if args.compile_inspect:
         report["compile_contract"] = inspect_maca_pk_compile_contract(scaffold)
         report["status"] = "compile_inspect"
@@ -201,6 +270,28 @@ def main() -> int:
                 print(f"  {key}: {val}")
             print()
             print("PASS — compile-inspect (no MetaX GPU required)")
+        return 0
+
+    if args.runtime_stack:
+        if not _is_maca_device():
+            print("✗ MetaX MACA GPU required for --runtime-stack", file=sys.stderr)
+            return 1
+        os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
+        report["runtime"] = maca_pk_stack_runtime_smoke(
+            scaffold, num_layers=args.pk_compile_layers
+        )
+        report["status"] = "runtime_stack"
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA Qwen3 PK stack runtime smoke")
+            print("=" * 70)
+            print(f"  runtime: {report['runtime']}")
+            print()
+            print(
+                f"PASS — runtime-stack ({args.pk_compile_layers} layer(s) compile + ypk() launch)"
+            )
         return 0
 
     if args.compile_only or args.compile_one_layer or args.compile_stack:

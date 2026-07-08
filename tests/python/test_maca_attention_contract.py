@@ -40,6 +40,22 @@ def test_attention_utils_scaffold_contract():
     assert report["head_dim"] == 128
 
 
+def test_attention_bench_plan_contract():
+    utils = _load_module("attention_utils", _REPO / "demo" / "maca" / "attention_utils.py")
+    plan = utils.inspect_maca_attention_bench_plan()
+    assert plan["plan_kind"] == "bench"
+    assert plan["bench_plan_ready"] is True
+    assert plan["bench_entry"] == "maca_attention_native_bench_quick"
+
+
+def test_attention_smoke_demo_has_bench_flags():
+    demo = _REPO / "demo" / "maca" / "attention_smoke.py"
+    text = demo.read_text(encoding="utf-8")
+    assert "--bench" in text
+    assert "--bench-plan" in text
+    assert "maca_attention_native_bench_quick" in text
+
+
 def test_attention_kernel_maca_has_warp64():
     kernel = _REPO / "src" / "kernel" / "maca" / "attention_kernel.maca"
     text = kernel.read_text(encoding="utf-8")

@@ -51,6 +51,55 @@ def test_maca_attention_smoke_inspect_only():
 
 @pytest.mark.integration
 @pytest.mark.maca
+def test_maca_attention_smoke_bench_plan():
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--bench-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "bench_plan"
+    assert payload["bench_plan"]["bench_plan_ready"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+@pytest.mark.slow
+def test_maca_attention_smoke_bench():
+    if not _maca_vm_available():
+        pytest.skip("MetaX MACA GPU not available (set YIRAGE_MACA_INTEGRATION=1 to force)")
+
+    env = os.environ.copy()
+    env.setdefault("YIRAGE_BACKEND", "maca")
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_MACA_SEARCH_QUICK", "1")
+
+    cmd = [sys.executable, str(_DEMO), "--bench", "--quick", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=900,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "bench"
+    assert payload["bench"]["bench_ok"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
 @pytest.mark.slow
 def test_maca_attention_smoke_quick():
     if not _maca_vm_available():

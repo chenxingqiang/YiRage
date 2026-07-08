@@ -118,6 +118,62 @@ def test_maca_qwen3_persistent_kernel_demo_compile_plan_stack():
 
 @pytest.mark.integration
 @pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_runtime_plan():
+    """Cloud-safe contract: runtime-plan validates launch prerequisites."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [
+        sys.executable,
+        str(_DEMO),
+        "--runtime-plan",
+        "--runtime-plan-variant",
+        "stack",
+        "--pk-compile-layers",
+        "1",
+        "--json",
+    ]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "runtime_plan"
+    assert payload["runtime_plan"]["runtime_plan_ready"] is True
+    assert payload["runtime_plan"]["pk_runtime_layers"] == 1
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_hf_runtime_plan():
+    """Cloud-safe contract: HF runtime backlog plan."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [sys.executable, str(_DEMO), "--hf-runtime-plan", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "hf_runtime_plan"
+    assert payload["hf_runtime_plan"]["hf_runtime_ready"] is False
+
+
+@pytest.mark.integration
+@pytest.mark.maca
 def test_maca_qwen3_persistent_kernel_demo_compile_inspect():
     """Cloud-safe contract: compile-inspect validates mxcc PK flags without GPU."""
     env = os.environ.copy()
@@ -262,6 +318,42 @@ def test_maca_qwen3_persistent_kernel_demo_compile_stack():
 @pytest.mark.integration
 @pytest.mark.maca
 @pytest.mark.slow
+def test_maca_qwen3_persistent_kernel_demo_runtime_stack():
+    if not _maca_vm_available():
+        pytest.skip("MetaX MACA GPU not available (set YIRAGE_MACA_INTEGRATION=1 to force)")
+
+    env = os.environ.copy()
+    env.setdefault("YIRAGE_BACKEND", "maca")
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_MACA_SEARCH_QUICK", "1")
+    env.setdefault("YIRAGE_HOME", str(_REPO))
+
+    cmd = [
+        sys.executable,
+        str(_DEMO),
+        "--runtime-stack",
+        "--pk-compile-layers",
+        "1",
+        "--json",
+    ]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=3600,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "runtime_stack"
+    assert payload["runtime"]["compiled"] is True
+    assert payload["runtime"]["launched"] is True
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+@pytest.mark.slow
 def test_maca_qwen3_persistent_kernel_demo_quick():
     if not _maca_vm_available():
         pytest.skip("MetaX MACA GPU not available (set YIRAGE_MACA_INTEGRATION=1 to force)")
@@ -293,3 +385,5 @@ def test_maca_qwen3_persistent_kernel_demo_script_exists():
     assert "--inspect-only" in text
     assert "--compile-one-layer" in text
     assert "--compile-stack" in text
+    assert "--runtime-stack" in text
+    assert "--runtime-plan" in text

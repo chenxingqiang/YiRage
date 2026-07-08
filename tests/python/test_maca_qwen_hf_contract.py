@@ -207,6 +207,44 @@ def test_qwen3_pk_runtime_smoke_offline():
     assert result["max_shared_memory"] == 64 * 1024
 
 
+def test_qwen3_pk_runtime_plan_contract():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    plan = pk_utils.inspect_maca_pk_runtime_plan(variant="stack", num_layers=1)
+    assert plan["plan_kind"] == "runtime"
+    assert plan["runtime_plan_ready"] is True
+    assert "ypk() launch" in plan["runtime_steps"][-1]
+    assert "qo_indptr_buffer" in plan["meta_tensors"]
+
+
+def test_qwen3_pk_hf_runtime_plan_contract():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    plan = pk_utils.inspect_maca_pk_hf_runtime_plan()
+    assert plan["hf_runtime_ready"] is False
+    assert plan["weight_injection_status"] == "backlog"
+    assert "qwen_from_pretrained_demo.py" in plan["maca_pretrained_demo"]
+
+
+def test_qwen3_pk_prepare_runtime_meta_shapes():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    import torch
+
+    scaffold = pk_utils.Qwen3PKScaffold()
+    meta = pk_utils.build_qwen3_pk_meta_tensors(scaffold, torch.device("cpu"))
+    summary = pk_utils.prepare_maca_pk_runtime_meta(meta, scaffold, prompt_len=4, num_tokens=1)
+    assert summary["qo_indptr"] == [0, 1]
+    assert int(meta["qo_indptr_buffer"][1].item()) == 1
+    assert int(meta["paged_kv_last_page_len_buffer"][0].item()) == 4
+
+
+def test_qwen3_persistent_kernel_demo_has_runtime_modes():
+    demo = _REPO / "demo" / "maca" / "qwen3_persistent_kernel_demo.py"
+    text = demo.read_text(encoding="utf-8")
+    assert "--runtime-plan" in text
+    assert "--runtime-stack" in text
+    assert "--hf-runtime-plan" in text
+    assert "maca_pk_stack_runtime_smoke" in text
+
+
 @pytest.mark.skipif(
     not (_REPO / "demo" / "maca" / "qwen_hf_utils.py").is_file(),
     reason="qwen_hf_utils missing",

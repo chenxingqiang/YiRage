@@ -4,11 +4,13 @@ MACA attention smoke — aligned to ``benchmark/end-to-end/maca/chameleon_maca.p
 
   - ``--inspect-only``: Cloud/CI scaffold report (no GPU, no yirage.core).
   - Default / ``--quick``: MetaX mcPytorch + ``superoptimize(backend=maca, config=attention)``.
+  - ``--bench``: MetaX mugraph vs mcPytorch reference timing (``--quick`` tractable).
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
   python3 demo/maca/attention_smoke.py --inspect-only
   python3 demo/maca/attention_smoke.py --quick
+  python3 demo/maca/attention_smoke.py --bench --quick
 """
 
 from __future__ import annotations
@@ -24,7 +26,9 @@ if _REPO_ROOT not in sys.path:
 
 from demo.maca.attention_utils import (  # noqa: E402
     AttentionScaffold,
+    inspect_maca_attention_bench_plan,
     inspect_maca_attention_scaffold,
+    maca_attention_native_bench_quick,
     maca_attention_superoptimize_smoke,
 )
 
@@ -54,6 +58,16 @@ def main() -> int:
         "--inspect-only",
         action="store_true",
         help="Print scaffold JSON and exit (no GPU required)",
+    )
+    parser.add_argument(
+        "--bench-plan",
+        action="store_true",
+        help="Validate attention bench plan (no GPU required)",
+    )
+    parser.add_argument(
+        "--bench",
+        action="store_true",
+        help="MetaX: YiRage mugraph vs mcPytorch reference bench",
     )
     parser.add_argument(
         "--quick",
@@ -87,6 +101,26 @@ def main() -> int:
             print("PASS — inspect-only (no MetaX GPU required)")
         return 0
 
+    if args.bench_plan:
+        report["bench_plan"] = inspect_maca_attention_bench_plan(scaffold)
+        report["status"] = "bench_plan"
+        if not report["bench_plan"]["bench_plan_ready"]:
+            print("✗ attention bench plan failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA attention bench plan")
+            print("=" * 70)
+            for key, val in report["bench_plan"].items():
+                print(f"  {key}: {val}")
+            print()
+            print("PASS — bench-plan (no MetaX GPU required)")
+        return 0
+
     if not _is_maca_device():
         print("✗ MetaX MACA GPU not detected; use --inspect-only on Cloud VM", file=sys.stderr)
         return 1
@@ -99,6 +133,26 @@ def main() -> int:
         "device_name": torch.cuda.get_device_name(0),
         "sm_count": torch.cuda.get_device_properties(0).multi_processor_count,
     }
+    if args.bench:
+        report["bench"] = maca_attention_native_bench_quick(scaffold, quick=args.quick)
+        report["status"] = "bench"
+        if not report["bench"].get("bench_ok"):
+            print("✗ MACA attention bench failed", file=sys.stderr)
+            if args.json:
+                print(json.dumps(report, indent=2))
+            return 1
+        if args.json:
+            print(json.dumps(report, indent=2))
+        else:
+            print("=" * 70)
+            print("MACA attention native bench (YiRage vs mcPytorch)")
+            print("=" * 70)
+            print(f"  device: {report['gpu']['device_name']}")
+            print(f"  bench: {report['bench']}")
+            print()
+            print("PASS — MACA attention bench")
+        return 0
+
     report["superoptimize"] = maca_attention_superoptimize_smoke(scaffold, quick=args.quick)
     report["status"] = "pass"
 

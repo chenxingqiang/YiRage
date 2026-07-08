@@ -800,6 +800,192 @@ def inspect_maca_pk_compile_contract(
     }
 
 
+def prepare_maca_pk_runtime_meta(
+    meta: Dict[str, "torch.Tensor"],
+    scaffold: Qwen3PKScaffold,
+    *,
+    prompt_len: int = 4,
+    num_tokens: int = 1,
+    active_requests: int = 1,
+    base_token_id: int = 100,
+) -> Dict[str, Any]:
+    """Fill offline PK meta tensors for a minimal single-request decode launch."""
+    import torch
+
+    if prompt_len < 1:
+        raise ValueError("prompt_len must be >= 1")
+    if num_tokens < 1:
+        raise ValueError("num_tokens must be >= 1")
+    if active_requests < 1:
+        raise ValueError("active_requests must be >= 1")
+    if active_requests > scaffold.max_num_batched_requests:
+        raise ValueError("active_requests exceeds max_num_batched_requests")
+    if num_tokens > scaffold.max_num_batched_tokens:
+        raise ValueError("num_tokens exceeds max_num_batched_tokens")
+
+    device = meta["tokens"].device
+    prompt_ids = torch.arange(base_token_id, base_token_id + prompt_len, device=device, dtype=torch.long)
+
+    meta["tokens"].zero_()
+    meta["input_tokens"].zero_()
+    meta["output_tokens"].zero_()
+    meta["step"].zero_()
+    meta["num_new_tokens"].zero_()
+    meta["prompt_lengths"].zero_()
+
+    for req in range(active_requests):
+        meta["tokens"][req, :prompt_len] = prompt_ids
+        meta["prompt_lengths"][req] = prompt_len
+        meta["step"][req] = prompt_len - 1
+        meta["num_new_tokens"][req] = num_tokens
+
+    meta["input_tokens"][:num_tokens, 0] = prompt_ids[-1]
+    meta["qo_indptr_buffer"].zero_()
+    meta["paged_kv_indptr_buffer"].zero_()
+    meta["paged_kv_indices_buffer"].zero_()
+    meta["paged_kv_last_page_len_buffer"].zero_()
+
+    meta["qo_indptr_buffer"][0] = 0
+    meta["qo_indptr_buffer"][1] = num_tokens
+    meta["paged_kv_indptr_buffer"][0] = 0
+    meta["paged_kv_indptr_buffer"][1] = 1
+    meta["paged_kv_indices_buffer"][0] = 0
+    meta["paged_kv_last_page_len_buffer"][0] = prompt_len
+
+    return {
+        "prompt_len": prompt_len,
+        "num_tokens": num_tokens,
+        "active_requests": active_requests,
+        "qo_indptr": [0, num_tokens],
+        "paged_kv_indptr": [0, 1],
+        "paged_kv_indices_head": [0],
+        "paged_kv_last_page_len": [prompt_len],
+    }
+
+
+def inspect_maca_pk_runtime_plan(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    variant: str = "stack",
+    num_layers: int = 1,
+) -> Dict[str, Any]:
+    """Cloud-safe runtime plan: compile + meta fill + ``ypk()`` launch prerequisites."""
+    scaffold = scaffold or Qwen3PKScaffold()
+    compile_plan = inspect_maca_pk_compile_plan(scaffold, variant=variant)
+    layers = num_layers if variant == "stack" else 1
+    return {
+        **compile_plan,
+        "plan_kind": "runtime",
+        "variant": variant,
+        "pk_runtime_layers": layers,
+        "cuda_reference": "demo/qwen3/demo.py --use-yirage (ypk.compile + ypk())",
+        "runtime_steps": [
+            "build_maca_pk_stack_graph (synthetic weights)",
+            "ypk.compile() via mxcc",
+            "prepare_maca_pk_runtime_meta (qo_indptr / paged_kv_*)",
+            "ypk() launch",
+        ],
+        "meta_tensors": [
+            "step",
+            "tokens",
+            "input_tokens",
+            "output_tokens",
+            "num_new_tokens",
+            "prompt_lengths",
+            "qo_indptr_buffer",
+            "paged_kv_indptr_buffer",
+            "paged_kv_indices_buffer",
+            "paged_kv_last_page_len_buffer",
+        ],
+        "runtime_plan_ready": compile_plan["compile_plan_ready"],
+        "requires_metax_gpu": True,
+        "weight_source": "synthetic",
+    }
+
+
+def inspect_maca_pk_hf_runtime_plan(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+) -> Dict[str, Any]:
+    """Cloud-safe HF-weight PK runtime backlog contract (weights not injected yet)."""
+    scaffold = scaffold or Qwen3PKScaffold()
+    runtime_plan = inspect_maca_pk_runtime_plan(scaffold, variant="stack", num_layers=1)
+    return {
+        "cuda_reference": "demo/qwen3/demo.py --use-yirage (HF model weights)",
+        "maca_pretrained_demo": "demo/maca/qwen_from_pretrained_demo.py",
+        "maca_pk_runtime_entry": "maca_pk_stack_runtime_smoke",
+        "weight_injection_status": "backlog",
+        "weight_injection_note": (
+            "maca_pk_stack_runtime_smoke uses synthetic randn attach_input weights; "
+            "HF from_pretrained attach_input is deferred to R21+."
+        ),
+        "hf_runtime_ready": False,
+        "synthetic_runtime_ready": runtime_plan["runtime_plan_ready"],
+        "model": scaffold.model,
+        "pk_compile_layers": scaffold.pk_compile_layers,
+        "requires": runtime_plan["requires"] + ["transformers", "HF hub access"],
+        "next_steps": [
+            "load Qwen3 HF weights on MetaX",
+            "replace synthetic attach_input with model tensors",
+            "multi-layer stack runtime e2e vs CUDA demo",
+        ],
+    }
+
+
+def maca_pk_stack_runtime_smoke(
+    scaffold: Optional[Qwen3PKScaffold] = None,
+    *,
+    output_dir: Optional[str] = None,
+    num_layers: Optional[int] = None,
+    prompt_len: int = 4,
+    num_tokens: int = 1,
+) -> Dict[str, Any]:
+    """Build N-layer PK stack, compile via mxcc, fill meta tensors, and ``ypk()`` launch."""
+    import torch
+
+    scaffold = scaffold or Qwen3PKScaffold()
+    layers = num_layers if num_layers is not None else 1
+    ypk, meta, dims, device, num_workers, num_schedulers, yr = _init_maca_pk_yirage(scaffold)
+    _build_maca_pk_stack_graph(
+        ypk,
+        meta,
+        scaffold,
+        dims,
+        device=device,
+        yr=yr,
+        num_layers=layers,
+        lm_head=True,
+    )
+    compile_result = _maca_pk_compile_result(
+        ypk,
+        output_dir=output_dir,
+        num_workers=num_workers,
+        num_schedulers=num_schedulers,
+        tasks=_maca_pk_stack_tasks(lm_head=True),
+    )
+    meta_summary = prepare_maca_pk_runtime_meta(
+        meta, scaffold, prompt_len=prompt_len, num_tokens=num_tokens
+    )
+
+    starter = torch.cuda.Event(enable_timing=True)
+    ender = torch.cuda.Event(enable_timing=True)
+    torch.cuda.synchronize()
+    starter.record()
+    ypk()
+    ender.record()
+    torch.cuda.synchronize()
+    launch_ms = starter.elapsed_time(ender)
+    ypk.finalize()
+
+    return {
+        **compile_result,
+        "launched": True,
+        "launch_ms": launch_ms,
+        "pk_compile_layers": layers,
+        "meta_summary": meta_summary,
+        "weight_source": "synthetic",
+    }
+
+
 def inspect_qwen3_pk_scaffold(scaffold: Optional[Qwen3PKScaffold] = None) -> Dict[str, Any]:
     """Return inspect-only scaffold report (no GPU / no model weights)."""
     scaffold = scaffold or Qwen3PKScaffold()
@@ -836,12 +1022,16 @@ __all__ = [
     "inspect_maca_pk_compile_contract",
     "inspect_maca_pk_compile_plan",
     "inspect_maca_pk_compile_plan_embed_only",
+    "inspect_maca_pk_hf_runtime_plan",
     "inspect_maca_pk_one_layer_compile_plan",
+    "inspect_maca_pk_runtime_plan",
     "inspect_maca_pk_stack_compile_plan",
     "inspect_qwen3_pk_scaffold",
     "maca_pk_minimal_compile_smoke",
     "maca_pk_one_layer_compile_smoke",
     "maca_pk_stack_compile_smoke",
+    "maca_pk_stack_runtime_smoke",
     "maca_pk_runtime_smoke",
+    "prepare_maca_pk_runtime_meta",
     "resolve_maca_pk_workers_schedulers",
 ]
