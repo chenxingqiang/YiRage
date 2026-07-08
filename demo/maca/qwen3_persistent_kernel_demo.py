@@ -9,14 +9,17 @@ nvcc, and runs LLM serving. This MACA demo closes the **smoke/contract** gap:
   - Default / ``--quick``: MetaX mcPytorch device + MACA ``PKRuntime`` offline init +
     worker/scheduler counts from ``get_configurations_from_gpu``.
 
-Full ``ypk.compile()`` minimal embed task-graph: ``--compile-plan`` (Cloud) /
-``--compile-only`` (MetaX). Full multi-layer qwen3 e2e remains backlog.
+Full ``ypk.compile()`` task-graph: ``--compile-plan`` (Cloud) /
+``--compile-only`` embed (MetaX) / ``--compile-one-layer`` decoder block (MetaX).
+Full multi-layer qwen3 e2e remains backlog.
 
 MetaX VM:
   export MACA_PATH=/opt/maca YIRAGE_BACKEND=maca PYTHONPATH=.
   python3 demo/maca/qwen3_persistent_kernel_demo.py --inspect-only
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-plan
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-plan --compile-plan-variant one_layer
   python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-only
+  python3 demo/maca/qwen3_persistent_kernel_demo.py --compile-one-layer
 """
 
 from __future__ import annotations
@@ -36,6 +39,7 @@ from demo.maca.qwen3_pk_utils import (  # noqa: E402
     inspect_maca_pk_compile_plan,
     inspect_qwen3_pk_scaffold,
     maca_pk_minimal_compile_smoke,
+    maca_pk_one_layer_compile_smoke,
     maca_pk_runtime_smoke,
     resolve_maca_pk_workers_schedulers,
 )
@@ -84,12 +88,24 @@ def main() -> int:
     parser.add_argument(
         "--compile-plan",
         action="store_true",
-        help="Validate minimal PK compile plan (no GPU required)",
+        help="Validate PK compile plan (no GPU required)",
+    )
+    parser.add_argument(
+        "--compile-plan-variant",
+        type=str,
+        choices=("embed_only", "one_layer"),
+        default="embed_only",
+        help="Compile plan variant for --compile-plan (default: embed_only)",
     )
     parser.add_argument(
         "--compile-only",
         action="store_true",
         help="MetaX: build minimal embed PK graph and ypk.compile() via mxcc",
+    )
+    parser.add_argument(
+        "--compile-one-layer",
+        action="store_true",
+        help="MetaX: build one-layer Qwen3 PK graph (embed+attn+mlp) and ypk.compile()",
     )
     parser.add_argument(
         "--compile-inspect",
@@ -128,7 +144,9 @@ def main() -> int:
     report: dict = {"scaffold": inspect_qwen3_pk_scaffold(scaffold)}
 
     if args.compile_plan:
-        report["compile_plan"] = inspect_maca_pk_compile_plan(scaffold)
+        report["compile_plan"] = inspect_maca_pk_compile_plan(
+            scaffold, variant=args.compile_plan_variant
+        )
         report["status"] = "compile_plan"
         if not report["compile_plan"]["compile_plan_ready"]:
             print("✗ PK compile plan failed", file=sys.stderr)
@@ -139,7 +157,10 @@ def main() -> int:
             print(json.dumps(report, indent=2))
         else:
             print("=" * 70)
-            print("MACA Qwen3 PK compile plan (minimal embed task-graph)")
+            print(
+                "MACA Qwen3 PK compile plan "
+                f"(variant={args.compile_plan_variant})"
+            )
             print("=" * 70)
             for key, val in report["compile_plan"].items():
                 print(f"  {key}: {val}")
@@ -167,22 +188,31 @@ def main() -> int:
             print("PASS — compile-inspect (no MetaX GPU required)")
         return 0
 
-    if args.compile_only:
+    if args.compile_only or args.compile_one_layer:
         if not _is_maca_device():
-            print("✗ MetaX MACA GPU required for --compile-only", file=sys.stderr)
+            flag = "--compile-one-layer" if args.compile_one_layer else "--compile-only"
+            print(f"✗ MetaX MACA GPU required for {flag}", file=sys.stderr)
             return 1
         os.environ.setdefault("YIRAGE_HOME", _REPO_ROOT)
-        report["compile"] = maca_pk_minimal_compile_smoke(scaffold)
-        report["status"] = "compile_only"
+        if args.compile_one_layer:
+            report["compile"] = maca_pk_one_layer_compile_smoke(scaffold)
+            report["status"] = "compile_one_layer"
+            pass_msg = "PASS — compile-one-layer (decoder block via mxcc)"
+            title = "MACA Qwen3 PK one-layer compile smoke"
+        else:
+            report["compile"] = maca_pk_minimal_compile_smoke(scaffold)
+            report["status"] = "compile_only"
+            pass_msg = "PASS — compile-only (minimal embed task-graph via mxcc)"
+            title = "MACA Qwen3 PK minimal compile smoke"
         if args.json:
             print(json.dumps(report, indent=2))
         else:
             print("=" * 70)
-            print("MACA Qwen3 PK minimal compile smoke")
+            print(title)
             print("=" * 70)
             print(f"  compile: {report['compile']}")
             print()
-            print("PASS — compile-only (minimal embed task-graph via mxcc)")
+            print(pass_msg)
         return 0
 
     if args.inspect_only:

@@ -137,9 +137,35 @@ def test_qwen3_pk_compile_plan_contract():
     pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
     plan = pk_utils.inspect_maca_pk_compile_plan()
     assert plan["compile_plan_ready"] is True
+    assert plan["variant"] == "embed_only"
     assert plan["minimal_task_graph"] == "embed_layer"
     assert plan["hidden_size"] == 4096
     assert "yirage.core" in plan["requires"]
+
+
+def test_qwen3_pk_one_layer_compile_plan_contract():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    plan = pk_utils.inspect_maca_pk_one_layer_compile_plan()
+    assert plan["compile_plan_ready"] is True
+    assert plan["variant"] == "one_layer"
+    assert "layer[0]" in plan["minimal_task_graph"]
+    assert plan["tasks"] == [
+        "embedding",
+        "rms_norm",
+        "linear",
+        "paged_attention",
+        "linear_with_residual",
+        "silu_mul",
+    ]
+
+
+def test_qwen3_pk_grid_for_rmsnorm_linear_layer():
+    pk_utils = _load_module("qwen3_pk_utils", _REPO / "demo" / "maca" / "qwen3_pk_utils.py")
+    from demo.maca.qwen_hf_utils import default_qwen_dims
+
+    gated_up = 2 * default_qwen_dims().intermediate_size
+    assert pk_utils.grid_for_rmsnorm_linear_layer(gated_up) == 96
+    assert pk_utils.grid_for_rmsnorm_linear_layer(4096) == 64
 
 
 def test_qwen3_pk_meta_tensors_shapes():

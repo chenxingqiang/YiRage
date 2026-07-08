@@ -47,7 +47,39 @@ def test_maca_qwen3_persistent_kernel_demo_compile_plan():
     assert result.returncode == 0, result.stderr + result.stdout
     payload = json.loads(result.stdout)
     assert payload["status"] == "compile_plan"
+    assert payload["compile_plan"]["variant"] == "embed_only"
     assert payload["compile_plan"]["minimal_task_graph"] == "embed_layer"
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+def test_maca_qwen3_persistent_kernel_demo_compile_plan_one_layer():
+    """Cloud-safe contract: one-layer PK compile plan prerequisites."""
+    env = os.environ.copy()
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_BACKEND", "maca")
+
+    cmd = [
+        sys.executable,
+        str(_DEMO),
+        "--compile-plan",
+        "--compile-plan-variant",
+        "one_layer",
+        "--json",
+    ]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "compile_plan"
+    assert payload["compile_plan"]["variant"] == "one_layer"
+    assert "layer[0]" in payload["compile_plan"]["minimal_task_graph"]
 
 
 @pytest.mark.integration
@@ -128,6 +160,36 @@ def test_maca_qwen3_persistent_kernel_demo_compile_only():
 @pytest.mark.integration
 @pytest.mark.maca
 @pytest.mark.slow
+def test_maca_qwen3_persistent_kernel_demo_compile_one_layer():
+    if not _maca_vm_available():
+        pytest.skip("MetaX MACA GPU not available (set YIRAGE_MACA_INTEGRATION=1 to force)")
+
+    env = os.environ.copy()
+    env.setdefault("YIRAGE_BACKEND", "maca")
+    env.setdefault("PYTHONPATH", str(_REPO / "python") + os.pathsep + str(_REPO))
+    env.setdefault("YIRAGE_MACA_SEARCH_QUICK", "1")
+    env.setdefault("YIRAGE_HOME", str(_REPO))
+
+    cmd = [sys.executable, str(_DEMO), "--compile-one-layer", "--json"]
+    result = subprocess.run(
+        cmd,
+        cwd=str(_REPO),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=1800,
+    )
+    assert result.returncode == 0, result.stderr + result.stdout
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "compile_one_layer"
+    assert payload["compile"]["compiled"] is True
+    assert payload["compile"]["compiler"] == "mxcc"
+    assert "paged_attention" in payload["compile"]["tasks"]
+
+
+@pytest.mark.integration
+@pytest.mark.maca
+@pytest.mark.slow
 def test_maca_qwen3_persistent_kernel_demo_quick():
     if not _maca_vm_available():
         pytest.skip("MetaX MACA GPU not available (set YIRAGE_MACA_INTEGRATION=1 to force)")
@@ -157,3 +219,4 @@ def test_maca_qwen3_persistent_kernel_demo_script_exists():
     text = _DEMO.read_text(encoding="utf-8")
     assert "qwen3_pk_utils" in text
     assert "--inspect-only" in text
+    assert "--compile-one-layer" in text
