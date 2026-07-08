@@ -99,10 +99,11 @@ def inspect_qwen3_pk_scaffold(scaffold: Optional[Qwen3PKScaffold] = None) -> Dic
         "hidden_size": dims.hidden_size,
         "intermediate_size": dims.intermediate_size,
         "fused_qkv_outdim": dims.fused_qkv_outdim,
-        "compile_path": "experimental",
+        "compile_path": "mxcc_partial",
         "compile_note": (
-            "Full yirage.PersistentKernel.compile() still emits nvcc/CUDA; "
-            "mxcc PK task-graph compile is backlog (C++ maca_pk_backend.cc ready)."
+            "PersistentKernel.compile() selects mxcc when YIRAGE_BACKEND=maca "
+            "(get_maca_pk_compile_command). Full qwen3 task-graph e2e on MetaX VM "
+            "remains experimental backlog."
         ),
         "yirage_backend": os.environ.get("YIRAGE_BACKEND", "maca"),
     }

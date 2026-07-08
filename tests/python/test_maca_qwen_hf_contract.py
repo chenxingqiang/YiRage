@@ -122,7 +122,7 @@ def test_qwen3_pk_utils_scaffold_contract():
     assert report["cuda_reference"] == "demo/qwen3/demo.py --use-yirage"
     assert report["mode"] == "offline"
     assert report["hidden_size"] == 4096
-    assert report["compile_path"] == "experimental"
+    assert report["compile_path"] == "mxcc_partial"
 
 
 def test_qwen3_pk_runtime_smoke_offline():

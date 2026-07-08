@@ -26,4 +26,11 @@ assert cap == 65536, f"expected 65536, got {cap}"
 print(f"[maca_rebuild_core] get_shared_memory_capacity(70)={cap} OK")
 PY
 
+# Source contract: MACA PK backend must not use Volta 96 KB smem fallback.
+if grep -q 'return 96 \* 1024' src/persistent_kernel/maca_pk_backend.cc 2>/dev/null; then
+  echo "[maca_rebuild_core] FAIL: maca_pk_backend.cc still has 96*1024 smem fallback" >&2
+  exit 1
+fi
+echo "[maca_rebuild_core] maca_pk_backend smem source contract OK"
+
 echo "[maca_rebuild_core] PASS — rerun demo/maca_superopt_test.py to confirm smem warnings gone"

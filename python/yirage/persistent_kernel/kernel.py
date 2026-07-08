@@ -222,6 +222,127 @@ def get_compile_command(
     return common_cmd + specific_cmd + flags
 
 
+def _detect_maca_sdk_path():
+    from yirage.kernel.graph import _detect_maca_sdk_path as _detect
+
+    return _detect()
+
+
+def _resolve_persistent_kernel_compiler():
+    """Resolve nvcc (CUDA) or mxcc (MetaX MACA) for persistent-kernel compile."""
+    backend = os.environ.get("YIRAGE_BACKEND", "").lower()
+    maca_path = _detect_maca_sdk_path()
+    if backend == "maca" or maca_path:
+        mxcc = shutil.which("mxcc")
+        if mxcc is None and maca_path:
+            candidate = os.path.join(maca_path, "mxgpu_llvm", "bin", "mxcc")
+            if os.path.isfile(candidate):
+                mxcc = candidate
+        if mxcc is not None:
+            return mxcc, "mxcc", maca_path or os.environ.get("MACA_PATH", "/opt/maca")
+    nvcc = shutil.which("nvcc")
+    if nvcc is not None:
+        return nvcc, "nvcc", None
+    raise RuntimeError(
+        "No persistent-kernel compiler found. Install CUDA (nvcc) or MetaX MACA SDK (mxcc)."
+    )
+
+
+def get_maca_pk_compile_command(
+    ypk,
+    target_cc,
+    mxcc,
+    maca_path,
+    file_name,
+    py_include_dir,
+    yirage_home_path,
+    yirage_inc_path,
+    yirage_deps_path,
+    py_so_path,
+    profiling,
+    num_workers=None,
+    num_local_schedulers=None,
+    num_remote_schedulers=None,
+    use_cutlass_kernel=True,
+):
+    """mxcc compile line for MACA persistent kernel (aligned to transpiler get_mxcc_cc_cmd)."""
+    max_worker_per_scheduler = 128
+    if num_workers is not None and num_local_schedulers is not None and num_remote_schedulers is not None:
+        min_schedulers = num_local_schedulers if num_remote_schedulers == 0 else min(
+            num_local_schedulers, num_remote_schedulers
+        )
+        max_worker_per_scheduler = (num_workers // min_schedulers) + 1
+
+    maca_compat = os.path.join(yirage_inc_path, "transpiler/runtime/maca_compat")
+    runtime_inc = os.path.join(yirage_inc_path, "transpiler/runtime")
+    include_dirs = [
+        maca_compat,
+        py_include_dir,
+        runtime_inc,
+        yirage_inc_path,
+        os.path.join(yirage_inc_path, "persistent_kernel"),
+        os.path.join(yirage_deps_path, "cutlass/include"),
+        os.path.join(yirage_deps_path, "cutlass/tools/util/include"),
+        os.path.join(yirage_home_path, "deps/json/include"),
+    ]
+    if maca_path:
+        include_dirs.extend(
+            [
+                f"{maca_path}/include/common",
+                f"{maca_path}/include/mcr",
+                f"{maca_path}/include/mcblas",
+            ]
+        )
+
+    cmd = [mxcc, "-x", "maca", file_name, "-O3"]
+    for inc in include_dirs:
+        cmd.append(f"-I{inc}")
+
+    flags = [
+        f"-DMAX_WORKER_PER_SCHEDULER={max_worker_per_scheduler}",
+        f"-DYIRAGE_USE_CUTLASS_KERNEL={'1' if use_cutlass_kernel else '0'}",
+        "-DYIRAGE_BACKEND_USE_CUDA",
+        "-DYIRAGE_BACKEND_MACA_ENABLED",
+        "-DYIRAGE_MACA_SOFTWARE_MMA=1",
+        "-D__CUDACC__",
+        "-D__NVCC__",
+        "-shared",
+        "-std=c++17",
+        "-fPIC",
+        f"-DYPK_TARGET_CC={target_cc}",
+    ]
+
+    if ypk.mode == "offline":
+        flags.append("-DMODE_OFFLINE")
+    elif ypk.mode == "online":
+        flags.append("-DMODE_ONLINE")
+    elif ypk.mode == "onepass":
+        flags.append("-DMODE_ONEPASS")
+    else:
+        raise ValueError(f"Invalid persistent kernel mode: {ypk.mode}")
+
+    flags.extend(
+        [
+            f"-DYPK_MAX_NUM_BATCHED_REQUESTS={ypk.max_num_batched_requests}",
+            f"-DYPK_MAX_NUM_BATCHED_TOKENS={ypk.max_num_batched_tokens}",
+            f"-DYPK_MAX_NUM_PAGES={ypk.max_num_pages}",
+            f"-DYPK_PAGE_SIZE={ypk.page_size}",
+            f"-DYPK_MAX_SEQ_LENGTH={ypk.max_seq_length}",
+        ]
+    )
+    if profiling:
+        flags.append("-DYPK_ENABLE_PROFILING")
+        flags.append("-DYIRAGE_ENABLE_PROFILER")
+
+    cmd.extend(flags)
+    cmd.extend(["-o", py_so_path])
+    if maca_path:
+        cmd.append(f"--maca-path={maca_path}")
+        cmd.append(f"-L{maca_path}/lib")
+    cmd.extend(["-lmcruntime", "-lmcblas"])
+    return cmd
+
+
 class PersistentKernel:
     def __init__(
         self,
@@ -279,6 +400,8 @@ class PersistentKernel:
             torch.cuda.get_device_properties(0).major * 10
             + torch.cuda.get_device_properties(0).minor
         )
+        if os.environ.get("YIRAGE_BACKEND", "").lower() == "maca":
+            self.target_cc = min(self.target_cc, 70)
         # Check tensor shapes
         qo_indptr_buffer = self.meta_tensors["qo_indptr_buffer"]
         assert qo_indptr_buffer.shape == (self.max_num_batched_requests + 1,)
@@ -1208,9 +1331,11 @@ class PersistentKernel:
                 json_file_path, os.path.join(output_dir, f"task_graph_rank{self.mpi_rank}.json")
             )
 
-        cc = shutil.which("nvcc")
-        if cc is None:
-            raise RuntimeError("nvcc not found. Please make sure you have installed CUDA.")
+        cc, compiler_kind, maca_path = _resolve_persistent_kernel_compiler()
+        if self.use_nvshmem and compiler_kind == "mxcc":
+            raise RuntimeError(
+                "NVSHMEM multi-GPU persistent kernel is not supported on MACA backend"
+            )
         # This function was renamed and made public in Python 3.10
         if hasattr(sysconfig, "get_default_scheme"):
             scheme = sysconfig.get_default_scheme()
@@ -1296,27 +1421,46 @@ class PersistentKernel:
                         f"Cannot find libmpi.so, please set environment variable MPI_LIB_PATH"
                     )
 
-        cc_cmd = get_compile_command(
-            ypk=self,
-            target_cc=self.target_cc,
-            cc=cc,
-            file_name=cuda_code_path,
-            py_include_dir=py_include_dir,
-            yirage_home_path=YIRAGE_HOME_PATH,
-            yirage_inc_path=INCLUDE_PATH,
-            yirage_deps_path=DEPS_PATH,
-            nvshmem_inc_path=NVSHMEM_INC_PATH,
-            nvshmem_lib_path=NVSHMEM_LIB_PATH,
-            mpi_inc_path=MPI_INC_PATH,
-            mpi_lib_path=MPI_LIB_PATH,
-            py_so_path=so_path,
-            profiling=True if self.profiler_tensor is not None else False,
-            use_nvshmem=self.use_nvshmem,
-            num_workers=self.num_workers,
-            num_local_schedulers=self.num_local_schedulers,
-            num_remote_schedulers=self.num_remote_schedulers,
-            use_cutlass_kernel=self.use_cutlass_kernel,
-        )
+        if compiler_kind == "mxcc":
+            cc_cmd = get_maca_pk_compile_command(
+                ypk=self,
+                target_cc=self.target_cc,
+                mxcc=cc,
+                maca_path=maca_path,
+                file_name=cuda_code_path,
+                py_include_dir=py_include_dir,
+                yirage_home_path=YIRAGE_HOME_PATH,
+                yirage_inc_path=INCLUDE_PATH,
+                yirage_deps_path=DEPS_PATH,
+                py_so_path=so_path,
+                profiling=True if self.profiler_tensor is not None else False,
+                num_workers=self.num_workers,
+                num_local_schedulers=self.num_local_schedulers,
+                num_remote_schedulers=self.num_remote_schedulers,
+                use_cutlass_kernel=self.use_cutlass_kernel,
+            )
+        else:
+            cc_cmd = get_compile_command(
+                ypk=self,
+                target_cc=self.target_cc,
+                cc=cc,
+                file_name=cuda_code_path,
+                py_include_dir=py_include_dir,
+                yirage_home_path=YIRAGE_HOME_PATH,
+                yirage_inc_path=INCLUDE_PATH,
+                yirage_deps_path=DEPS_PATH,
+                nvshmem_inc_path=NVSHMEM_INC_PATH,
+                nvshmem_lib_path=NVSHMEM_LIB_PATH,
+                mpi_inc_path=MPI_INC_PATH,
+                mpi_lib_path=MPI_LIB_PATH,
+                py_so_path=so_path,
+                profiling=True if self.profiler_tensor is not None else False,
+                use_nvshmem=self.use_nvshmem,
+                num_workers=self.num_workers,
+                num_local_schedulers=self.num_local_schedulers,
+                num_remote_schedulers=self.num_remote_schedulers,
+                use_cutlass_kernel=self.use_cutlass_kernel,
+            )
         print("Compiling megakernel using the following command line:")
         print(cc_cmd)
         subprocess.check_call(cc_cmd)

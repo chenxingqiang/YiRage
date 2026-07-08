@@ -14,6 +14,7 @@
  */
 
 #include "persistent_kernel/backends/maca_pk_backend.h"
+#include "config.h"
 #include <atomic>
 #include <cstring>
 #include <sstream>
@@ -237,11 +238,12 @@ void MacaTaskExecutor::execute(const PKTaskDesc& desc,
 }
 
 size_t MacaTaskExecutor::get_shared_memory_size(PKTaskType type) const {
-    // MACA shared memory similar to CUDA
-    if (compute_capability_ >= 80) {
-        return 163 * 1024 - 3 * 1024;
-    }
-    return 96 * 1024;
+    (void)type;
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+    return maca::MAX_SMEM_SIZE;
+#else
+    return 64 * 1024;
+#endif
 }
 
 const char* MacaTaskExecutor::get_task_name(PKTaskType type) const {
@@ -346,6 +348,9 @@ PKCapabilities MacaPKBackend::get_capabilities() const {
     mcDeviceProp prop;
     mcGetDeviceProperties(&prop, device_id_);
     caps.max_shared_memory = prop.sharedMemPerBlockOptin;
+    if (caps.max_shared_memory > maca::MAX_SMEM_SIZE) {
+        caps.max_shared_memory = maca::MAX_SMEM_SIZE;
+    }
     caps.max_global_memory = prop.totalGlobalMem;
     caps.max_threads_per_block = prop.maxThreadsPerBlock;
     caps.max_blocks_per_sm = prop.maxBlocksPerMultiProcessor;
