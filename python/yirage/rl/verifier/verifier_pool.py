@@ -23,6 +23,7 @@ Provides:
 
 from typing import List, Optional, Any, Union
 from dataclasses import dataclass
+import os
 import threading
 import queue
 
@@ -56,6 +57,7 @@ class VerifierPool:
         verifiers_per_gpu: int = 2,
         gpu_fraction: float = 0.5,
         use_ray: bool = True,
+        backend: Optional[str] = None,
     ):
         """
         Initialize verifier pool.
@@ -65,11 +67,14 @@ class VerifierPool:
             verifiers_per_gpu: Verifiers per GPU (for async)
             gpu_fraction: GPU memory fraction per verifier
             use_ray: Whether to use Ray actors
+            backend: YiRage backend for fingerprint/profile (cuda, maca, …).
+                Defaults to ``YIRAGE_BACKEND`` env or ``cuda``.
         """
         self.num_gpus = num_gpus
         self.verifiers_per_gpu = verifiers_per_gpu
         self.gpu_fraction = gpu_fraction
         self.use_ray = use_ray
+        self.backend = (backend or os.environ.get("YIRAGE_BACKEND") or "cuda").lower()
 
         self.verifiers: List[Any] = []
         self.current_idx = 0
@@ -96,7 +101,7 @@ class VerifierPool:
                     for _ in range(self.verifiers_per_gpu):
                         verifier = GPUVerifierActor.remote(
                             gpu_id=gpu_id,
-                            backend="cuda",
+                            backend=self.backend,
                         )
                         self.verifiers.append(verifier)
 
@@ -114,7 +119,7 @@ class VerifierPool:
             # Local verifiers (no Ray)
             for gpu_id in range(self.num_gpus):
                 for _ in range(self.verifiers_per_gpu):
-                    verifier = LocalGPUVerifier(gpu_id=gpu_id)
+                    verifier = LocalGPUVerifier(gpu_id=gpu_id, backend=self.backend)
                     self.verifiers.append(verifier)
 
             self._initialized = True

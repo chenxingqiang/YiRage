@@ -17,7 +17,9 @@
 #include "persistent_kernel/backends/cuda_pk_backend.h"
 #include "persistent_kernel/backends/cpu_pk_backend.h"
 #include "persistent_kernel/backends/ascend_pk_backend.h"
+#ifdef YIRAGE_PK_MACA_BACKEND_ENABLED
 #include "persistent_kernel/backends/maca_pk_backend.h"
+#endif
 #include "persistent_kernel/backends/mps_pk_backend.h"
 
 namespace yirage {
@@ -132,7 +134,11 @@ std::unique_ptr<PKBackendInterface> create_pk_backend(
             return std::make_unique<AscendPKBackend>(device_id);
             
         case PKBackendType::MACA:
+#ifdef YIRAGE_PK_MACA_BACKEND_ENABLED
             return std::make_unique<MacaPKBackend>(device_id);
+#else
+            return nullptr;
+#endif
             
         case PKBackendType::MPS:
             return std::make_unique<MpsPKBackend>(device_id);
@@ -162,12 +168,14 @@ std::vector<PKBackendType> get_available_pk_backends() {
     }
     
     // Check MACA availability
+#ifdef YIRAGE_PK_MACA_BACKEND_ENABLED
     {
         auto maca = create_pk_backend(PKBackendType::MACA, 0);
         if (maca && maca->is_available()) {
             available.push_back(PKBackendType::MACA);
         }
     }
+#endif
     
     // Check Ascend availability
     {

@@ -23,7 +23,11 @@
 // backends use our manual definitions.
 // ============================================================================
 
-#if defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_BACKEND_CUDA_ENABLED)
+#if defined(YIRAGE_BACKEND_MACA_ENABLED)
+// MetaX MACA - CUDA-compatible vector types via mc_runtime_api (before CUDA branch)
+#include <mcr/mc_runtime_api.h>
+
+#elif defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_BACKEND_CUDA_ENABLED)
 // NVIDIA CUDA - native vector types
 #include <vector_types.h>
 
@@ -31,10 +35,6 @@
 // AMD ROCm/HIP - provides CUDA-compatible vector types
 #include <hip/hip_runtime.h>
 // HIP defines dim3, int2, int3, int4, float2, float3, float4, etc.
-
-#elif defined(YIRAGE_BACKEND_MACA_ENABLED)
-// MetaX MACA - provides CUDA-compatible vector types
-#include <mcr/mc_runtime_api.h>
 
 #elif defined(YIRAGE_BACKEND_XPU_ENABLED)
 // Intel/Baidu XPU - use SYCL or manual definitions

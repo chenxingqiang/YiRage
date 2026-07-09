@@ -97,6 +97,104 @@ def get_maca_search_config() -> Dict[str, Any]:
     }
 
 
+def get_maca_search_config_quick() -> Dict[str, Any]:
+    """
+    Tractable MACA search space for demos, smoke tests, and quick benchmarks.
+
+    Single grid × single block × one forloop range keeps superoptimize finishable
+    on C500 while still exercising 64-thread warp constraints.
+    """
+    base = get_maca_search_config()
+    return {
+        **base,
+        "grid_dims_to_explore": [(4, 1, 1)],
+        "block_dims_to_explore": [(256, 1, 1)],
+        "fmaps_to_explore": [-1],
+        "franges_to_explore": [8],
+    }
+
+
+def resolve_maca_search_config(*, quick: Optional[bool] = None) -> Dict[str, Any]:
+    """Return full or quick MACA search config (env: ``YIRAGE_MACA_SEARCH_QUICK``)."""
+    if quick is None:
+        quick = os.environ.get("YIRAGE_MACA_SEARCH_QUICK", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+    return get_maca_search_config_quick() if quick else get_maca_search_config()
+
+
+def resolve_maca_use_ray(*, default: bool = False) -> bool:
+    """Opt-in Ray for MACA superoptimize (default off for tractable smoke demos).
+
+    Set ``YIRAGE_MACA_USE_RAY=1`` to enable distributed search on MetaX VM.
+    """
+    raw = os.environ.get("YIRAGE_MACA_USE_RAY", "")
+    if raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def maca_superoptimize_ray_kwargs(*, default: bool = False) -> Dict[str, bool]:
+    """``use_ray`` kwarg for ``graph.superoptimize(backend="maca", ...)``."""
+    return {"use_ray": resolve_maca_use_ray(default=default)}
+
+
+def is_maca_torch_device_available() -> bool:
+    """True when mcPytorch exposes a MetaX GPU (or integration smoke overrides)."""
+    if os.environ.get("YIRAGE_MACA_INTEGRATION", "").strip() == "1":
+        return True
+    try:
+        import torch
+    except ImportError:
+        return False
+    if not torch.cuda.is_available():
+        return False
+    try:
+        if "MetaX" in torch.cuda.get_device_name(0):
+            return True
+    except Exception:
+        pass
+    if os.environ.get("YIRAGE_MACA_ALLOW_NON_METAX", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return True
+    return False
+
+
+def resolve_maca_gpus_per_worker(
+    *,
+    requested: Optional[float] = None,
+    default: float = 1.0,
+) -> float:
+    """Ray ``gpus_per_worker`` for ``backend=maca`` (0 on hosts without MetaX GPU)."""
+    if requested is not None and requested <= 0:
+        return 0.0
+    target = requested if requested is not None else default
+    return target if is_maca_torch_device_available() else 0.0
+
+
+def maca_ray_gpu_placement_kwargs(
+    *,
+    cpus_per_worker: float = 1.0,
+    gpus_per_worker: Optional[float] = None,
+    strategy: str = "PACK",
+    memory_per_worker_mb: int = 4096,
+) -> Dict[str, Any]:
+    """Kwargs for ``GPUPlacementConfig`` when ``DistributedConfig.backend='maca'``."""
+    return {
+        "cpus_per_worker": cpus_per_worker,
+        "gpus_per_worker": resolve_maca_gpus_per_worker(requested=gpus_per_worker),
+        "strategy": strategy,
+        "memory_per_worker_mb": memory_per_worker_mb,
+    }
+
+
 def get_maca_matmul_config() -> Dict[str, Any]:
     """
     Get optimized matrix multiplication configuration for MACA
@@ -341,6 +439,13 @@ __all__ = [
     "MACA_REGISTERS_PER_SM",
     "MACA_SM_COUNT_C500",
     "get_maca_search_config",
+    "get_maca_search_config_quick",
+    "resolve_maca_search_config",
+    "resolve_maca_use_ray",
+    "maca_superoptimize_ray_kwargs",
+    "is_maca_torch_device_available",
+    "resolve_maca_gpus_per_worker",
+    "maca_ray_gpu_placement_kwargs",
     "get_maca_matmul_config",
     "get_maca_memory_config",
     "get_maca_device_info",

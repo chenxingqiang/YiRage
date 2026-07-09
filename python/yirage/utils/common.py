@@ -40,9 +40,34 @@ def get_nvcc_compiler() -> Optional[str]:
     return None
 
 
+def _is_maca_runtime() -> bool:
+    """True when running on MetaX MACA (mxcc / YIRAGE_BACKEND=maca)."""
+    if os.environ.get("YIRAGE_BACKEND", "").lower() == "maca":
+        return True
+    if os.environ.get("MACA_PATH"):
+        return True
+    if shutil.which("mxcc"):
+        return True
+    maca_path = os.environ.get("MACA_PATH", "/opt/maca")
+    mxcc = os.path.join(maca_path, "mxgpu_llvm", "bin", "mxcc")
+    return os.path.isfile(mxcc)
+
+
+def _maca_shared_memory_capacity() -> int:
+    try:
+        from yirage.backends.maca.config import MACA_SHARED_MEM_PER_BLOCK
+
+        return int(MACA_SHARED_MEM_PER_BLOCK)
+    except ImportError:
+        return 64 * 1024
+
+
 # This function returns the shared memory limit (in bytes)
 # for the given GPU hardware architecture
 def get_shared_memory_capacity(target_cc):
+    # MetaX C500: 64 KB/block regardless of capped target_cc (often 70 for mxcc).
+    if _is_maca_runtime():
+        return _maca_shared_memory_capacity()
     if target_cc == 70:
         # V100 GPUs (Volta)
         return 96 * 1024

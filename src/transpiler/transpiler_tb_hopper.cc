@@ -441,7 +441,7 @@ CustomOPTranspileResult
       // Swizzled layouts optimize shared memory bank access patterns
       bool use_tma = use_async_copy && (stensor.num_dims >= 2);
       bool use_swizzled = (stensor.num_dims >= 2) && 
-                          (stensor_meta.swizzle_mode != 0);
+                          stensor_meta.is_xor_swizzled;
       
       if (use_tma && use_chunked_copy) {
         // TMA copy path for Hopper

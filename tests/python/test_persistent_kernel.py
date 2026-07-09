@@ -65,6 +65,8 @@ class TestPKBackendType:
         assert PKBackendType.from_name("cpu") == PKBackendType.CPU
         assert PKBackendType.from_name("mps") == PKBackendType.MPS
         assert PKBackendType.from_name("CUDA") == PKBackendType.CUDA  # Case insensitive
+        assert PKBackendType.from_name("maca") == PKBackendType.MACA
+        assert PKBackendType.from_name("MACA") == PKBackendType.MACA
 
     def test_backend_type_to_name(self, pk_runtime_module):
         """Test backend type to string conversion."""

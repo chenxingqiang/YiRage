@@ -121,6 +121,7 @@ file(GLOB PK_EXCLUDE_SRCS
   src/persistent_kernel/nki_pk_backend.cc
   src/persistent_kernel/triton_pk_backend.cc
   src/persistent_kernel/mlir_pk_backend.cc
+  src/persistent_kernel/maca_pk_backend.cc
 )
 if(PK_EXCLUDE_SRCS)
   list(REMOVE_ITEM YIRAGE_SRCS ${PK_EXCLUDE_SRCS})
@@ -199,6 +200,16 @@ if ("${USE_CUDA}" STREQUAL "ON")
   )
   list(APPEND YIRAGE_SRCS ${YIRAGE_CUDA_SRCS})
   message(STATUS "CUDA backend enabled, including .cu files and transpiler")
+elseif ("${USE_MACA}" STREQUAL "ON")
+  # MACA: CUDA-compatible transpiler (host C++) + mxcc JIT; no nvcc .cu objects
+  # C500 uses baseline transpiler only (exclude NVIDIA Hopper/Blackwell TB emitters).
+  set(_YIRAGE_MACA_TRANSPILER_EXCLUDE
+    ${CMAKE_SOURCE_DIR}/src/transpiler/ascend_transpiler.cc
+    ${CMAKE_SOURCE_DIR}/src/transpiler/ascend_transpiler_stub.cc
+  )
+  list(REMOVE_ITEM YIRAGE_SRCS ${_YIRAGE_MACA_TRANSPILER_EXCLUDE})
+  list(APPEND YIRAGE_SRCS src/kernel/graph_cuda_api_stubs.cc)
+  message(STATUS "MACA backend enabled, including CUDA transpiler (mxcc JIT)")
 else()
   # CUDA disabled: exclude transpiler, triton_transpiler, and nki_transpiler
   file(GLOB_RECURSE YIRAGE_EXCLUDE_SRCS
@@ -243,8 +254,10 @@ endif()
 
 if ("${USE_MACA}" STREQUAL "ON")
   message(STATUS "MACA backend enabled (requires MetaX MACA SDK)")
-  # Host uses MACA-specific memory manager (.maca kernels built separately); omit generic .cc
-  list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
+  include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
+  if(MACA_COMPILE_KERNELS)
+    list(REMOVE_ITEM YIRAGE_SRCS ${CMAKE_SOURCE_DIR}/src/kernel/device_memory_manager.cc)
+  endif()
 elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
   # Ascend implementation is src/kernel/ascend/device_memory_manager.cc (already in KERNEL_OPT_SRCS).
   # Omit generic CPU stub .cc before add_library (post-add_library list edits do not change the target).
@@ -399,6 +412,7 @@ if ("${USE_CUDA}" STREQUAL "ON")
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_CUDA_ENABLED)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_USE_CUDA)  # Backward compatibility
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CUDA)
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_HOST_TRANSPILER_ENABLED)
   
   # Enable OpenMP for parallel search with CUDA
   find_package(OpenMP)
@@ -408,9 +422,10 @@ if ("${USE_CUDA}" STREQUAL "ON")
     message(STATUS "OpenMP enabled for CUDA parallel search (YIRAGE_ENABLE_PARALLEL_SEARCH defined)")
   endif()
 elseif ("${USE_MACA}" STREQUAL "ON")
-  # MACA is CUDA-compatible, use MACA fingerprint (enables parallel search)
-  # Don't define YIRAGE_FINGERPRINT_USE_CPU here - it disables OpenMP
-  message(STATUS "Using MACA fingerprint (parallel search enabled)")
+  # MACA: host CUDA-compatible transpiler for generate_cuda_program; mxcc compiles emitted code.
+  # Do NOT define YIRAGE_BACKEND_CUDA_ENABLED (no cuda_runtime.h on MACA hosts).
+  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_HOST_TRANSPILER_ENABLED)
+  message(STATUS "MACA host transpiler enabled (mxcc JIT)")
 elseif (NOT "${USE_ASCEND}" STREQUAL "OFF")
   # Ascend NPU - don't define CPU fingerprint, Ascend has its own
   message(STATUS "Using Ascend fingerprint (parallel search enabled)")
@@ -661,8 +676,6 @@ if ("${USE_MACA}" STREQUAL "ON")
   # Include MACA configuration
   include(${CMAKE_CURRENT_SOURCE_DIR}/config.maca.cmake)
   target_compile_definitions(yirage_runtime PUBLIC YIRAGE_BACKEND_MACA_ENABLED)
-  # MACA uses GPU fingerprint for verification (compiled with mxcc)
-  target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
   
   # Enable OpenMP for parallel search with MACA
   find_package(OpenMP)
@@ -696,9 +709,13 @@ if ("${USE_MACA}" STREQUAL "ON")
   
   if(MXCC_COMPILER)
     message(STATUS "Found MACA compiler: ${MXCC_COMPILER}")
-    
-    # Collect MACA GPU kernel source files (.maca files)
-    file(GLOB MACA_GPU_KERNEL_SRCS src/kernel/maca/*.maca)
+
+    if(MACA_COMPILE_KERNELS)
+      target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_MACA)
+      target_compile_definitions(yirage_runtime PUBLIC YIRAGE_PK_MACA_BACKEND_ENABLED)
+
+      # Collect MACA GPU kernel source files (.maca files)
+      file(GLOB MACA_GPU_KERNEL_SRCS src/kernel/maca/*.maca)
     
     # Compile each MACA GPU kernel file with mxcc
     set(MACA_KERNEL_OBJS "")
@@ -745,7 +762,11 @@ if ("${USE_MACA}" STREQUAL "ON")
     else()
       message(STATUS "No MACA GPU kernel files (.maca) found")
     endif()
-    
+    else()
+      message(STATUS "MACA native .maca kernels skipped (MACA_COMPILE_KERNELS=OFF)")
+      target_compile_definitions(yirage_runtime PUBLIC YIRAGE_FINGERPRINT_USE_CPU)
+    endif()
+
     # Link MACA runtime library
     list(APPEND YIRAGE_LINK_LIBS mcruntime)
   else()

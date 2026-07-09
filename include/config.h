@@ -55,6 +55,13 @@ constexpr int MAX_TMA_DESC_PER_TENSOR = 3;
 // Multi-backend configuration
 // Each backend has its own memory limits, defined in backend-specific namespaces
 
+#ifdef YIRAGE_BACKEND_MACA_ENABLED
+namespace maca {
+size_t const MAX_DMEM_SIZE = (size_t)2 * 1024 * 1024 * 1024;    // 2 GB
+size_t const MAX_SMEM_SIZE = 64 * 1024;                         // 64 KB (C500 per-block limit)
+}
+#endif
+
 #if defined(YIRAGE_BACKEND_CUDA_ENABLED) || defined(YIRAGE_BACKEND_USE_CUDA)
 namespace cuda {
 size_t const MAX_DMEM_SIZE = (size_t)2 * 1024 * 1024 * 1024;    // 2 GB
@@ -95,7 +102,10 @@ size_t const MAX_SMEM_SIZE = 512 * 1024;                        // 512 KB (AI Co
 #endif
 
 // Global constants based on primary backend (with fallback)
-#if defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_BACKEND_CUDA_ENABLED)
+#if defined(YIRAGE_BACKEND_MACA_ENABLED)
+size_t const MAX_DMEM_SIZE = maca::MAX_DMEM_SIZE;
+size_t const MAX_SMEM_SIZE = maca::MAX_SMEM_SIZE;
+#elif defined(YIRAGE_BACKEND_USE_CUDA) || defined(YIRAGE_BACKEND_CUDA_ENABLED)
 size_t const MAX_DMEM_SIZE = cuda::MAX_DMEM_SIZE;
 size_t const MAX_SMEM_SIZE = cuda::MAX_SMEM_SIZE;
 #elif defined(YIRAGE_BACKEND_USE_NKI) || defined(YIRAGE_BACKEND_NKI_ENABLED)

@@ -458,15 +458,32 @@ class RayDistributedEngine:
             ray.init(ignore_reinit_error=True, logging_level="WARNING")
             self._ray_initialized = True
 
-    def _create_placement_group(self):
+    def _effective_gpus_per_worker(self) -> float:
         gpu_config = self.config.gpu_placement
         gpus_per_worker = gpu_config.gpus_per_worker
-        if gpus_per_worker > 0 and TORCH_AVAILABLE and not torch.cuda.is_available():
+        if gpus_per_worker <= 0:
+            return 0.0
+        if self.config.backend == "maca":
+            from yirage.backends.maca.config import resolve_maca_gpus_per_worker
+
+            effective = resolve_maca_gpus_per_worker(requested=gpus_per_worker)
+            if effective <= 0:
+                logger.warning(
+                    "gpus_per_worker=%s but MetaX MACA GPU unavailable; using CPU-only placement",
+                    gpus_per_worker,
+                )
+            return effective
+        if TORCH_AVAILABLE and not torch.cuda.is_available():
             logger.warning(
                 "gpus_per_worker=%s but CUDA is unavailable; using CPU-only placement",
                 gpus_per_worker,
             )
-            gpus_per_worker = 0
+            return 0.0
+        return gpus_per_worker
+
+    def _create_placement_group(self):
+        gpu_config = self.config.gpu_placement
+        gpus_per_worker = self._effective_gpus_per_worker()
 
         bundles = [
             (
@@ -489,12 +506,13 @@ class RayDistributedEngine:
     def _create_workers(self):
         SearchWorker = _create_search_worker_class()
         gpu_config = self.config.gpu_placement
+        gpus_per_worker = self._effective_gpus_per_worker()
 
         workers = []
         for i in range(self.config.num_workers):
             options = {"num_cpus": gpu_config.cpus_per_worker}
-            if gpu_config.gpus_per_worker > 0:
-                options["num_gpus"] = gpu_config.gpus_per_worker
+            if gpus_per_worker > 0:
+                options["num_gpus"] = gpus_per_worker
 
             if self.placement_group and PlacementGroupSchedulingStrategy is not None:
                 options["scheduling_strategy"] = PlacementGroupSchedulingStrategy(
@@ -504,7 +522,7 @@ class RayDistributedEngine:
 
             worker = SearchWorker.options(**options).remote(
                 worker_id=i,
-                gpu_id=i % max(1, int(gpu_config.gpus_per_worker * self.config.num_workers)),
+                gpu_id=i % max(1, int(gpus_per_worker * self.config.num_workers)),
                 backend=self.config.backend,
                 checkpoint_dir=self.config.checkpoint_dir,
             )
@@ -568,7 +586,7 @@ class RayDistributedEngine:
         self._ensure_ray()
         start_time = time.time()
 
-        if self.config.gpu_placement.gpus_per_worker > 0:
+        if self._effective_gpus_per_worker() > 0:
             self.placement_group = self._create_placement_group()
 
         try:
@@ -851,12 +869,22 @@ def create_engine(
     Returns:
         Configured RayDistributedEngine
     """
-    config = DistributedConfig(
-        num_workers=num_workers,
-        gpu_placement=GPUPlacementConfig(
+    if backend == "maca":
+        from yirage.backends.maca.config import maca_ray_gpu_placement_kwargs
+
+        placement_kwargs = maca_ray_gpu_placement_kwargs(
             gpus_per_worker=gpus_per_worker,
             strategy="PACK" if use_nvlink else "SPREAD",
-        ),
+        )
+    else:
+        placement_kwargs = {
+            "gpus_per_worker": gpus_per_worker,
+            "strategy": "PACK" if use_nvlink else "SPREAD",
+        }
+
+    config = DistributedConfig(
+        num_workers=num_workers,
+        gpu_placement=GPUPlacementConfig(**placement_kwargs),
         backend=backend,
         checkpoint_dir=checkpoint_dir,
     )
