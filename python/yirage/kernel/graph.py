@@ -2330,6 +2330,8 @@ class KNGraph:
         See Also:
             CPU FAST_PATH registry: ``conv2d_separable_bias_fast``,
             ``conv2d_separable_bias_op_fast``, ``kn_conv2d_separable_bias_fast``,
+            ``kn_conv2d_separable_bias_batch1_fast``,
+            ``kn_conv2d_separable_bias_batch2_fast``,
             ``conv2d_separable_bias_relu_fast``.
         """
         if input.num_dims != 4:
@@ -2374,7 +2376,9 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_separable_bias_relu_fast``,
-            ``kn_conv2d_separable_bias_relu_fast``.
+            ``kn_conv2d_separable_bias_relu_fast``,
+            ``kn_conv2d_separable_bias_relu_batch1_fast``,
+            ``kn_conv2d_separable_bias_relu_batch2_fast``.
         """
         return self.relu(
             self.conv2d_separable_bias(
@@ -2407,7 +2411,9 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_separable_bias_gelu_fast``,
-            ``kn_conv2d_separable_bias_gelu_fast``.
+            ``kn_conv2d_separable_bias_gelu_fast``,
+            ``kn_conv2d_separable_bias_gelu_batch1_fast``,
+            ``kn_conv2d_separable_bias_gelu_batch2_fast``.
         """
         return self.gelu(
             self.conv2d_separable_bias(
@@ -2440,7 +2446,9 @@ class KNGraph:
 
         See Also:
             CPU FAST_PATH registry: ``conv2d_separable_bias_silu_fast``,
-            ``kn_conv2d_separable_bias_silu_fast``.
+            ``kn_conv2d_separable_bias_silu_fast``,
+            ``kn_conv2d_separable_bias_silu_batch1_fast``,
+            ``kn_conv2d_separable_bias_silu_batch2_fast``.
         """
         return self.silu(
             self.conv2d_separable_bias(
