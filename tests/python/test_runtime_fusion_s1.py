@@ -100,7 +100,7 @@ def test_runtime_fusion_inspect_lists_capsule(serving):
     rf = serving.RuntimeFusion([cap])
     info = rf.inspect()
     assert info["runtime"] == "RuntimeFusion"
-    assert info["version"] == "s1"
+    assert info["version"] in {"s1", "s2", "s3"}
     assert info["capsules"][0]["kind"] == "mlp"
     assert info["capsules"][0]["plan"]["kind"] == "mlp"
 

@@ -12,6 +12,19 @@ this package is the public RF identity.
 """
 
 from .capsule import FusionCapsule
+from .engine_stub import (
+    EngineAttentionMeta,
+    EngineDecoderLayerStub,
+    EngineModelStub,
+    QWEN2_MLP_HF_ATTACH,
+)
+from .hybrid_model import HybridModelOverride, resolve_rf_mlp_layer_ids
+from .layer_override import (
+    LayerForwardResult,
+    RuntimeFusionMlpLayerOverride,
+    build_layer_mlp_capsule,
+    capsule_name_for_layer,
+)
 from .mlp_capsule import MlpFusionCapsule, mlp_eager_numpy
 from .plan import FusionPlan
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
@@ -24,4 +37,14 @@ __all__ = [
     "RuntimeFusion",
     "StepMeta",
     "StepResult",
+    "QWEN2_MLP_HF_ATTACH",
+    "EngineAttentionMeta",
+    "EngineDecoderLayerStub",
+    "EngineModelStub",
+    "RuntimeFusionMlpLayerOverride",
+    "LayerForwardResult",
+    "build_layer_mlp_capsule",
+    "capsule_name_for_layer",
+    "HybridModelOverride",
+    "resolve_rf_mlp_layer_ids",
 ]
