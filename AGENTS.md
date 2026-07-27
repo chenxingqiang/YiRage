@@ -195,7 +195,8 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **S7** | 多 Capsule / 大段 Decoder Override | `capsule_orchestration.py`；`split_mlp_capsule.py`；`segment_override.py` | `test_runtime_fusion_s7_multi_capsule.py` | **done** |
 | **S8** | vLLM Qwen2 MLP 插件契约 + segment torch 实测 bench 归档 | `torch_plugin.py`；`vllm_plugin.py`（须安装 vllm） | `test_runtime_fusion_s8_*`；`segment_torch_bench.py` | **done** |
 | **S9** | **SGLang ForwardBatch meta 桥**（`extend_seq_lens` → Radix skip/shrink + KV） | `radix_meta.build_sglang_rf_step_meta` | `test_runtime_fusion_s9_sglang_meta.py` | **done** |
-| **S10** | **SGLang model MLP hook**（ForwardBatch → RF meta + Qwen2 layer hook） | `sglang_plugin.rf_step_meta_from_forward_batch`；`SglangQwen2MlpRfHook` | `test_runtime_fusion_s10_sglang_plugin.py` | **done（本轮）** |
+| **S10** | **SGLang model MLP hook**（ForwardBatch → RF meta + Qwen2 layer hook） | `sglang_plugin.rf_step_meta_from_forward_batch`；`SglangQwen2MlpRfHook` | `test_runtime_fusion_s10_sglang_plugin.py` | **done** |
+| **S11** | **vLLM 全链路 MLP RF e2e**（单层 hook + 多层 hybrid + 可选真实 vllm） | `vllm_e2e.run_torch_vllm_*` / `run_vllm_qwen2_mlp_rf_e2e` | `test_runtime_fusion_s11_vllm_e2e.py`；`vllm_mlp_e2e.py` | **done（本轮）** |
 
 **明确不做什么（反模式）**：
 
@@ -215,12 +216,12 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **`demo/serving/*smoke*.py`** | 任何带 `smoke` 后缀的 Serving demo；能力须写入 `tests/python/test_runtime_fusion_s*.py` |
 | **`--contract-only` / NumPy stub cert** | 无 torch 的「契约-only」cert 分支；`EngineModelStub` + `BACKEND_NUMPY_REF` **不得**作为 cert/pytest 主路径 |
 | **Mock / duck-typed vLLM 层** | 如 `_MockVllmQwen2Layer`；vLLM 路径须真实 `pip install vllm` 或测负路径 `pytest.skip` |
-| **重复验证脚本** | 与 pytest 同义的 one-off demo；仅保留 **`real_torch_e2e.py`**、**`segment_torch_bench.py`**（实测 e2e/bench），以及可选 **`yirage_superopt_e2e.py`**（yirage-core tier） |
+| **重复验证脚本** | 与 pytest 同义的 one-off demo；仅保留 **`real_torch_e2e.py`**、**`segment_torch_bench.py`**、**`vllm_mlp_e2e.py`**（实测 e2e/bench），以及可选 **`yirage_superopt_e2e.py`**（yirage-core tier） |
 
 **唯一认可的 Serving 验证栈**：
 
 ```bash
-make test-serving-cpu-cert-pytest   # S1–S10 real torch pytest
+make test-serving-cpu-cert-pytest   # S1–S11 real torch pytest
 make test-serving-cpu-cert          # 上式 + real_torch_e2e + segment_torch_bench
 ```
 
@@ -242,7 +243,7 @@ make test-serving-cpu-cert          # 上式 + real_torch_e2e + segment_torch_be
 | **Radix skip** | SGLang RadixAttention | `radix_meta` + `build_sglang_rf_step_meta` + `sglang_plugin` | `test_runtime_fusion_s6_radix.py`；`test_runtime_fusion_s9_sglang_meta.py`；`test_runtime_fusion_s10_sglang_plugin.py` | **partial（S6/S9/S10）** |
 | **SGLang MLP 插件** | SGLang Qwen2 layer hook | `SglangQwen2MlpRfHook`（**须安装 sglang**）；实测 `SglangBatchTorchMlpRfHook` | `test_runtime_fusion_s10_sglang_plugin.py` | **partial（S10）** |
 | **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py` | **partial（S7）** |
-| **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测默认 `TorchDecoderMlpRfHook` | `test_runtime_fusion_s8_*`；`segment_torch_bench.py` | **partial（S8）** |
+| **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测 `TorchDecoderMlpRfHook` + `vllm_e2e` | `test_runtime_fusion_s8_*`；`test_runtime_fusion_s11_vllm_e2e.py`；`vllm_mlp_e2e.py` | **partial（S8/S11）** |
 | **Segment torch bench** | 实测 latency JSON | `run_segment_torch_bench_archive` | `segment_torch_bench.py`；cert | **partial（S8）** |
 | **MACA / vLLM-metax** | MetaX vLLM fork | maca pk backend + scaffold | MetaX 上 S2+ | backlog |
 
@@ -271,7 +272,7 @@ make test-serving-cpu-cert          # 上式 + real_torch_e2e + segment_torch_be
 - 复用 `persistent_kernel/`、搜索缓存作 backend，**不**在叙事上称 MPK
 - MACA：仅当 Capsule 在 C500 需 mxcc 时改支撑轨
 
-**验证**：**`make test-serving-cpu-cert`** = S1–S10 **real torch pytest** + `real_torch_e2e` + `segment_torch_bench`；见 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)。可选 **`--yirage-core`** tier。
+**验证**：**`make test-serving-cpu-cert`** = S1–S11 **real torch pytest** + `real_torch_e2e` + `segment_torch_bench`；见 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)。可选 **`--yirage-core`** tier。
 
 ---
 
@@ -646,7 +647,8 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S8d（2026-07-27，验证禁令入 AGENTS）**：闸门：协议层。写入 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)；禁止再写 smoke/contract-only/stub cert。
 - **Agent Protocol（2026-07-27，TDD + Production 开发协议）**：闸门：文档/协议层。新增 [Agent Development Protocol](#agent-development-protocolmandatory)（TDD、分阶段、设计冻结、最小改动、真实环境、少建文件、README/AGENTS 分工、人工审批门）。
 - **Serving Loop S9（2026-07-27，SGLang meta bridge）**：闸门：图级/meta 层。`radix_hit_mask_from_sglang_extend_lens` + `build_sglang_rf_step_meta`（`extend_seq_lens`→Radix + 可选 KV 桥）；RF version **s9**。验证：`test_runtime_fusion_s9_sglang_meta.py` + cert。
-- **Serving Loop S10（2026-07-27，SGLang model hook）**：闸门：图级/model 层。`rf_step_meta_from_forward_batch` + `SglangBatchTorchMlpRfHook` / `SglangQwen2MlpRfHook`（须安装 sglang）；RF version **s10**。验证：`test_runtime_fusion_s10_sglang_plugin.py` + cert。下一轮：**S11** — vLLM 全链路 e2e（须安装 vllm）或 SGLang 真机 ForwardBatch e2e。
+- **Serving Loop S10（2026-07-27，SGLang model hook）**：闸门：图级/model 层。`rf_step_meta_from_forward_batch` + `SglangBatchTorchMlpRfHook` / `SglangQwen2MlpRfHook`（须安装 sglang）；RF version **s10**。验证：`test_runtime_fusion_s10_sglang_plugin.py` + cert。
+- **Serving Loop S11（2026-07-27，vLLM full-path e2e）**：闸门：图级/e2e 层。`vllm_e2e.run_torch_vllm_mlp_rf_e2e` + `run_torch_vllm_hybrid_full_e2e` + 可选 `run_vllm_qwen2_mlp_rf_e2e`（须 vllm+transformers）；RF version **s11**。验证：`test_runtime_fusion_s11_vllm_e2e.py` + `vllm_mlp_e2e.py`。下一轮：**S12** — SGLang 真机 ForwardBatch e2e 或 vLLM+PagedAttention 全层 hook。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。

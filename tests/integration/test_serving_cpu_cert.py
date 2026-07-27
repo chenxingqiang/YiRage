@@ -40,7 +40,7 @@ def test_serving_cpu_cert_quick_passes():
     run_cert, _ = _bootstrap()
     report = run_cert(quick=True)
     assert report.bootstrap_ok is True
-    assert report.serving_version == "s10"
+    assert report.serving_version == "s11"
     assert report.torch_device in {"cpu", "cuda"}
     failed = [(s.name, s.returncode, s.stderr_tail) for s in report.stages if not s.ok]
     assert report.ok is True, failed

@@ -93,4 +93,4 @@ def test_hybrid_partial_radix_shrink_matches_manual(serving, torch):
 
 
 def test_rf_inspect_version_s6(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s10"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s11"

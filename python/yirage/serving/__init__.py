@@ -46,6 +46,15 @@ from .sglang_plugin import (
     rf_step_meta_from_forward_batch,
 )
 from .torch_plugin import TorchDecoderMlpRfHook, build_torch_mlp_rf_hook
+from .vllm_e2e import (
+    VllmHybridE2EReport,
+    VllmMlpRfE2EReport,
+    build_minimal_vllm_qwen2_decoder_layer,
+    run_torch_vllm_hybrid_full_e2e,
+    run_torch_vllm_mlp_rf_e2e,
+    run_vllm_mlp_rf_e2e_auto,
+    run_vllm_qwen2_mlp_rf_e2e,
+)
 from .vllm_plugin import (
     VLLM_QWEN2_MLP_ATTACH,
     VllmMlpWeightView,
@@ -194,6 +203,13 @@ __all__ = [
     "VllmQwen2MlpRfHook",
     "build_vllm_qwen2_mlp_rf_hook",
     "extract_qwen2_mlp_weights",
+    "VllmMlpRfE2EReport",
+    "VllmHybridE2EReport",
+    "build_minimal_vllm_qwen2_decoder_layer",
+    "run_torch_vllm_mlp_rf_e2e",
+    "run_torch_vllm_hybrid_full_e2e",
+    "run_vllm_qwen2_mlp_rf_e2e",
+    "run_vllm_mlp_rf_e2e_auto",
     "HybridModelOverride",
     "resolve_rf_mlp_layer_ids",
     "PagedKvMeta",
