@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S8 contracts: vLLM plugin duck-type + torch segment bench archive."""
+"""S8 contracts: real torch MLP RF hook + segment bench archive (no mock)."""
 
 from __future__ import annotations
 
@@ -33,72 +33,37 @@ def serving():
     return _import_serving()
 
 
-class _Lin:
-    def __init__(self, w):
-        self.weight = w
-
-
-class _Norm:
-    def __init__(self, w):
-        self.weight = w
-
-
-class _Mlp:
-    def __init__(self, g, u, d):
-        self.gate_proj = _Lin(g)
-        self.up_proj = _Lin(u)
-        self.down_proj = _Lin(d)
-
-    def __call__(self, hidden):
-        import torch.nn.functional as F
-
-        gate = hidden @ self.gate_proj.weight.t()
-        up = hidden @ self.up_proj.weight.t()
-        mid = F.silu(gate) * up
-        return mid @ self.down_proj.weight.t()
-
-
-class _MockVllmLayer:
-    def __init__(self):
-        import torch
-
-        h, i = 16, 32
-        self.post_attention_layernorm = _Norm(torch.ones(h))
-        self.mlp = _Mlp(
-            torch.randn(i, h) * 0.02,
-            torch.randn(i, h) * 0.02,
-            torch.randn(h, i) * 0.02,
-        )
-
-
 def test_is_vllm_available_bool(serving):
     assert isinstance(serving.is_vllm_available(), bool)
 
 
-def test_extract_qwen2_mlp_weights_mock(serving):
-    mock = _MockVllmLayer()
-    view = serving.extract_qwen2_mlp_weights(mock, layer_id=1)
-    assert view.hidden_size == 16
-    assert view.intermediate_size == 32
-    assert view.w_gate.shape == (16, 32)
-
-
-def test_vllm_hook_forward_mlp_only(serving):
+def test_torch_mlp_rf_hook_real_forward(serving):
     serving.require_torch()
     import torch
 
-    mock = _MockVllmLayer()
-    hook = serving.build_vllm_qwen2_mlp_rf_hook(mock, layer_id=0)
-    x = torch.randn(2, 16)
-    ref = serving.mlp_torch(
-        x,
-        rms_weight=mock.post_attention_layernorm.weight,
-        w_gate=mock.mlp.gate_proj.weight.t(),
-        w_up=mock.mlp.up_proj.weight.t(),
-        w_down=mock.mlp.down_proj.weight.t(),
-    )
-    got = hook.forward_mlp(x, rf_meta={"enabled": {hook.override.capsule_name}})
+    layer = serving.TorchDecoderLayer(0, hidden_size=16, intermediate_size=32, seed=1)
+    hook = serving.build_torch_mlp_rf_hook(layer)
+    x = torch.randn(2, 16, device=layer.device)
+    with torch.no_grad():
+        h_attn = layer.attention_forward(x)
+        ref = layer.mlp_forward(h_attn)
+        got = hook.forward_mlp(h_attn, rf_meta={"enabled": {hook.override.capsule_name}})
     assert got.used_rf_mlp
+    assert torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-5)
+
+
+def test_torch_mlp_rf_hook_skip_uses_engine_mlp(serving):
+    serving.require_torch()
+    import torch
+
+    layer = serving.TorchDecoderLayer(1, hidden_size=16, intermediate_size=32, seed=2)
+    hook = serving.build_torch_mlp_rf_hook(layer)
+    x = torch.randn(2, 16, device=layer.device)
+    with torch.no_grad():
+        h_attn = layer.attention_forward(x)
+        ref = layer.mlp_forward(h_attn)
+        got = hook.forward_mlp(h_attn, rf_meta={"force_skip_all": True})
+    assert not got.used_rf_mlp
     assert torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-5)
 
 
@@ -120,15 +85,20 @@ def test_segment_torch_bench_archive_parity(serving):
     assert hybrid.mean_ms > 0
 
 
-def test_forward_mlp_only_skip_fallback(serving):
-    serving.require_torch()
-    import torch
+@pytest.mark.skipif(
+    not __import__("yirage.serving.vllm_plugin", fromlist=["is_vllm_available"]).is_vllm_available(),
+    reason="requires installed vllm",
+)
+def test_vllm_plugin_requires_real_package(serving):
+    serving.require_vllm()
+    assert serving.is_vllm_available()
 
-    mock = _MockVllmLayer()
-    hook = serving.build_vllm_qwen2_mlp_rf_hook(mock, layer_id=0)
-    x = torch.randn(2, 16)
-    got = hook.forward_mlp(x, rf_meta={"force_skip_all": True})
-    assert not got.used_rf_mlp
+
+def test_vllm_hook_raises_without_package(serving):
+    if serving.is_vllm_available():
+        pytest.skip("vllm installed; skip negative test")
+    with pytest.raises(RuntimeError, match="vllm"):
+        serving.build_vllm_qwen2_mlp_rf_hook(object())
 
 
 def test_rf_inspect_version_s8(serving):

@@ -45,9 +45,16 @@ def serving_cpu_cert_manifest(
         CertStage("s5_contract", "pytest", "tests/python/test_runtime_fusion_s5_sm.py"),
         CertStage("s6_contract", "pytest", "tests/python/test_runtime_fusion_s6_radix.py"),
         CertStage("s7_contract", "pytest", "tests/python/test_runtime_fusion_s7_multi_capsule.py"),
-        CertStage("s8_contract", "pytest", "tests/python/test_runtime_fusion_s8_vllm_bench.py"),
     ]
     if real:
+        stages.append(
+            CertStage(
+                "s8_contract",
+                "pytest",
+                "tests/python/test_runtime_fusion_s8_vllm_bench.py",
+                real=True,
+            )
+        )
         stages.extend(
             [
                 CertStage(
@@ -69,9 +76,9 @@ def serving_cpu_cert_manifest(
                     real=True,
                 ),
                 CertStage(
-                    "vllm_plugin_smoke",
+                    "torch_mlp_rf_hook_smoke",
                     "smoke",
-                    "demo/serving/vllm_plugin_smoke.py",
+                    "demo/serving/torch_mlp_rf_hook_smoke.py",
                     real=True,
                 ),
             ]
@@ -97,13 +104,6 @@ def serving_cpu_cert_manifest(
                     "multi_capsule_segment_smoke",
                     "smoke",
                     "demo/serving/multi_capsule_segment_smoke.py",
-                ),
-                CertStage("vllm_plugin_smoke", "smoke", "demo/serving/vllm_plugin_smoke.py"),
-                CertStage(
-                    "segment_torch_bench",
-                    "smoke",
-                    "demo/serving/segment_torch_bench.py",
-                    real=True,
                 ),
             ]
         )

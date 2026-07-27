@@ -149,7 +149,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **S5** | **SM 预算**与 Sampler/NCCL 共驻 | `sm_budget.py`；`RF.step` 超预算 skip + engine fallback | `test_runtime_fusion_s5_sm.py`；`sm_budget_coresidence_smoke.py`；`make test-serving-cpu-cert` | **done** |
 | **S6** | SGLang **Radix**：hit meta → 跳过/收缩 Capsule | `radix_meta.py`；`RF.step` all-hit skip + shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **done** |
 | **S7** | 多 Capsule / 大段 Decoder Override（仍非「整网独占死刑」）；引擎管 KV 与调度 | `capsule_orchestration.py`；`split_mlp_capsule.py`；`segment_override.py` | `test_runtime_fusion_s7_multi_capsule.py`；`multi_capsule_segment_smoke.py` | **done** |
-| **S8** | vLLM Qwen2 MLP 插件契约 + segment torch 实测 bench 归档 | `vllm_plugin.py`；`bench_archive.py` | `test_runtime_fusion_s8_vllm_bench.py`；`vllm_plugin_smoke.py`；`segment_torch_bench.py` | **done（本轮）** |
+| **S8** | vLLM Qwen2 MLP 插件契约 + segment torch 实测 bench 归档 | `torch_plugin.py`（实测）；`vllm_plugin.py`（须安装 vllm） | `test_runtime_fusion_s8_*`；`torch_mlp_rf_hook_smoke.py`；`segment_torch_bench.py` | **done（本轮）** |
 
 **明确不做什么（反模式）**：
 
@@ -174,7 +174,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **SM 配额共驻** | 引擎多流 | `resolve_sm_worker_quota` + `RF.step` 超预算 skip；layer engine fallback | `test_runtime_fusion_s5_sm.py`；`sm_budget_coresidence_smoke.py` | **partial（S5）** |
 | **Radix skip** | SGLang RadixAttention | `radix_meta` + `RF.step` skip/shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **partial（S6）** |
 | **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py`；`multi_capsule_segment_smoke.py` | **partial（S7）** |
-| **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook` + `forward_mlp_only`（duck-type；真 vLLM opt-in） | `test_runtime_fusion_s8_vllm_bench.py`；`vllm_plugin_smoke.py` | **partial（S8）** |
+| **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测默认 `TorchDecoderMlpRfHook` | `torch_mlp_rf_hook_smoke.py`；vllm opt-in pytest | **partial（S8）** |
 | **Segment torch bench** | 实测 latency JSON | `run_segment_torch_bench_archive` | `segment_torch_bench.py`；cert `--real` | **partial（S8）** |
 | **MACA / vLLM-metax** | MetaX vLLM fork | maca pk backend + scaffold | MetaX 上 S2+ | backlog |
 
@@ -572,7 +572,7 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S5b（2026-07-27，实测路径：PyTorch real）**：闸门：拒绝 mock 默认。新增 `torch_engine.TorchEngineModel` / `torch_exec.mlp_torch` / `bench_forward`；`MlpFusionCapsule` 默认 `backend=torch`；cert 默认 `--real`（`real_torch_e2e` + latency ms）；`engine_stub` 仅 `--contract-only` 参考。验证：`make test-serving-cpu-cert` 6 stage real PASS（含 bench）。下一轮：**S5c** yirage.core tier。
 - **Serving Loop S6（2026-07-27，Radix hit skip/shrink）**：闸门：SGLang Radix meta 驱动 Capsule 调度。`radix_meta.RadixHitMeta` + `RF.step` all-hit skip（`skipped_radix`）+ partial `apply_radix_shrink`；layer override all-hit → post-attn identity。验证：7 pytest + `radix_hit_smoke` + cert 8 stage PASS。下一轮：**S7** 多 Capsule 编排。
 - **Serving Loop S7（2026-07-27，multi-Capsule segment override）**：闸门：图级编排层。每层 MLP 拆成 gate_up→down 两 Capsule；`StepMeta.pipeline` + `resolve_capsule_pipeline`；`DecoderSegmentOverride` / `SegmentHybridModelOverride` 大段 override（Attention/KV 仍引擎）。验证：7 pytest + `multi_capsule_segment_smoke` + cert。下一轮：**S8** — 真 vLLM 插件 / torch 实测 bench 归档。
-- **Serving Loop S8（2026-07-27，vLLM plugin + segment torch bench）**：闸门：引擎插件 + 实测归档。`VllmQwen2MlpRfHook`（duck-type Qwen2 MLP 权重抽取 + `forward_mlp_only`）；`run_segment_torch_bench_archive` JSON ms 归档；cert 增 s8 + `segment_torch_bench`。验证：6 pytest + smokes + cert。PR #160/#161 待 main 合并（分支保护）。下一轮：**S9** — 真 vLLM 包 e2e / SGLang meta 适配。
+- **Serving Loop S8（2026-07-27，vLLM plugin + segment torch bench）**：闸门：引擎插件 + 实测归档。`TorchDecoderMlpRfHook`（真实 torch 权重/forward，**禁止 mock**）；`VllmQwen2MlpRfHook` 仅当 `vllm` 已安装；`run_segment_torch_bench_archive` JSON ms。验证：`--real` cert + smokes。PR #161 待 main 合并。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。

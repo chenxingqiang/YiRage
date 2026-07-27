@@ -31,6 +31,7 @@ from .radix_meta import (
     attach_radix_to_step_meta,
     parse_radix_hit_mask,
 )
+from .torch_plugin import TorchDecoderMlpRfHook, build_torch_mlp_rf_hook
 from .vllm_plugin import (
     VLLM_QWEN2_MLP_ATTACH,
     VllmMlpWeightView,
@@ -38,6 +39,7 @@ from .vllm_plugin import (
     build_vllm_qwen2_mlp_rf_hook,
     extract_qwen2_mlp_weights,
     is_vllm_available,
+    require_vllm,
 )
 from .bootstrap import bootstrap_yirage_stub, import_serving, repo_root, require_numpy
 from .cpu_cert import (
@@ -160,6 +162,9 @@ __all__ = [
     "ServingBenchArchive",
     "ServingBenchArchiveRow",
     "is_vllm_available",
+    "require_vllm",
+    "TorchDecoderMlpRfHook",
+    "build_torch_mlp_rf_hook",
     "VLLM_QWEN2_MLP_ATTACH",
     "VllmMlpWeightView",
     "VllmQwen2MlpRfHook",

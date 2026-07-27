@@ -32,7 +32,9 @@ def test_serving_cpu_cert_manifest_has_core_stages():
     assert "s7_contract" in real_names
     assert "s8_contract" in real_names
     assert "real_torch_e2e" in real_names
+    assert "torch_mlp_rf_hook_smoke" in real_names
     contract_names = [s.name for s in manifest_fn(quick=True, real=False)]
+    assert "s8_contract" not in contract_names
     assert "sm_budget_coresidence_smoke" in contract_names
 
 
