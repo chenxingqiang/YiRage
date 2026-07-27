@@ -164,7 +164,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 
 | 能力域 | 工业参照 | YiRage 落点（现状） | 真机验证入口（目标） | tier |
 |--------|----------|--------------------|---------------------|------|
-| **FusionPlan 搜索/缓存** | Execution plan + cache | `superoptimize` + store（legacy mugraph API） | 现有 superopt/bench；文档称 FusionPlan | partial |
+| **FusionPlan 搜索/缓存** | Execution plan + cache | `FusionPlan` API（S1）；存储仍 legacy mugraph | `test_runtime_fusion_s1` plan 契约；cache chore 另开 | partial |
 | **MLP FusionCapsule** | Fused MLP block | `yirage.serving.MlpFusionCapsule`（S1 eager_numpy） | `pytest tests/python/test_runtime_fusion_s1.py`；`demo/serving/mlp_capsule_smoke.py` | **partial（S1）** |
 | **RF.step 钩子** | Dynamic fusion runtime | `yirage.serving.RuntimeFusion.step`（select/skip） | 同上 | **partial（S1）** |
 | **Model 层 Override** | `vllm/.../models/qwen2.py` | **无** | S2 vLLM + Capsule | **gap** |
