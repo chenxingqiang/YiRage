@@ -8,18 +8,20 @@ Semantics (Qwen-style gated MLP with pre-RMSNorm + residual)::
     mid = silu(h @ W_gate) * (h @ W_up)
     y = x + mid @ W_down
 
-S1 uses an eager NumPy executor so Cloud CPU can verify RF select/skip without
-``yirage.core`` / PersistentKernel. GPU backends can later swap the executor.
+S1 default backend is ``torch`` when PyTorch is available (real execution).
+``numpy_ref`` remains for offline reference parity only.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple, Union
 
 import numpy as np
 
 from .capsule import FusionCapsule
+from .exec_backend import BACKEND_NUMPY_REF, BACKEND_TORCH, default_serving_backend
 from .plan import FusionPlan
+from .torch_exec import mlp_torch, require_torch, to_numpy, to_torch
 
 
 def _silu(x: np.ndarray) -> np.ndarray:
@@ -80,20 +82,34 @@ class MlpFusionCapsule(FusionCapsule):
         self,
         plan: FusionPlan,
         *,
-        rms_weight: np.ndarray,
-        w_gate: np.ndarray,
-        w_up: np.ndarray,
-        w_down: np.ndarray,
+        rms_weight: Any,
+        w_gate: Any,
+        w_up: Any,
+        w_down: Any,
         eps: float = 1e-6,
+        device: Optional[str] = None,
     ):
         if plan.kind != "mlp":
             raise ValueError(f"MlpFusionCapsule requires plan.kind=='mlp', got {plan.kind!r}")
         super().__init__(plan)
-        self.rms_weight = np.asarray(rms_weight)
-        self.w_gate = np.asarray(w_gate)
-        self.w_up = np.asarray(w_up)
-        self.w_down = np.asarray(w_down)
         self.eps = float(eps)
+        self._device = device
+        backend = plan.backend
+        if backend == BACKEND_TORCH:
+            require_torch()
+            import torch
+
+            dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
+            self._device = dev
+            self.rms_weight = to_torch(rms_weight, device=dev, dtype=torch.float32)
+            self.w_gate = to_torch(w_gate, device=dev, dtype=torch.float32)
+            self.w_up = to_torch(w_up, device=dev, dtype=torch.float32)
+            self.w_down = to_torch(w_down, device=dev, dtype=torch.float32)
+        else:
+            self.rms_weight = np.asarray(rms_weight)
+            self.w_gate = np.asarray(w_gate)
+            self.w_up = np.asarray(w_up)
+            self.w_down = np.asarray(w_down)
         self._validate_shapes()
 
     def _validate_shapes(self) -> None:
@@ -101,14 +117,25 @@ class MlpFusionCapsule(FusionCapsule):
         i = self.plan.intermediate_size
         if i is None:
             raise ValueError("MLP FusionPlan requires intermediate_size")
-        if self.rms_weight.shape != (h,):
-            raise ValueError(f"rms_weight shape {self.rms_weight.shape} != ({h},)")
-        if self.w_gate.shape != (h, i):
-            raise ValueError(f"w_gate shape {self.w_gate.shape} != ({h}, {i})")
-        if self.w_up.shape != (h, i):
-            raise ValueError(f"w_up shape {self.w_up.shape} != ({h}, {i})")
-        if self.w_down.shape != (i, h):
-            raise ValueError(f"w_down shape {self.w_down.shape} != ({i}, {h})")
+        if self.plan.backend == BACKEND_TORCH:
+            import torch
+
+            def _shape(t):
+                return tuple(t.shape)
+
+            rw, wg, wu, wd = self.rms_weight, self.w_gate, self.w_up, self.w_down
+            assert isinstance(rw, torch.Tensor)
+        else:
+            _shape = lambda t: t.shape  # noqa: E731
+            rw, wg, wu, wd = self.rms_weight, self.w_gate, self.w_up, self.w_down
+        if _shape(rw) != (h,):
+            raise ValueError(f"rms_weight shape {_shape(rw)} != ({h},)")
+        if _shape(wg) != (h, i):
+            raise ValueError(f"w_gate shape {_shape(wg)} != ({h}, {i})")
+        if _shape(wu) != (h, i):
+            raise ValueError(f"w_up shape {_shape(wu)} != ({h}, {i})")
+        if _shape(wd) != (i, h):
+            raise ValueError(f"w_down shape {_shape(wd)} != ({i}, {h})")
 
     @classmethod
     def from_random(
@@ -120,14 +147,18 @@ class MlpFusionCapsule(FusionCapsule):
         name: str = "mlp_rms_gated_residual",
         dtype=np.float32,
         plan: Optional[FusionPlan] = None,
+        backend: Optional[str] = None,
+        device: Optional[str] = None,
     ) -> "MlpFusionCapsule":
         rng = np.random.default_rng(seed)
+        be = backend or default_serving_backend()
         if plan is None:
             plan = FusionPlan.mlp(
                 name=name,
                 hidden_size=hidden_size,
                 intermediate_size=intermediate_size,
                 dtype=np.dtype(dtype).name,
+                backend=be,
             )
         scale = 0.02
         return cls(
@@ -136,6 +167,7 @@ class MlpFusionCapsule(FusionCapsule):
             w_gate=rng.normal(0.0, scale, size=(hidden_size, intermediate_size)).astype(dtype),
             w_up=rng.normal(0.0, scale, size=(hidden_size, intermediate_size)).astype(dtype),
             w_down=rng.normal(0.0, scale, size=(intermediate_size, hidden_size)).astype(dtype),
+            device=device,
         )
 
     def execute(
@@ -146,9 +178,21 @@ class MlpFusionCapsule(FusionCapsule):
         del meta  # reserved for future RF meta (e.g. sm_budget hints)
         if "hidden" not in inputs:
             raise KeyError("MlpFusionCapsule.execute requires inputs['hidden']")
-        hidden = np.asarray(inputs["hidden"])
+        hidden = inputs["hidden"]
+        if self.plan.backend == BACKEND_TORCH:
+            h = to_torch(hidden, device=self._device)
+            out = mlp_torch(
+                h,
+                rms_weight=self.rms_weight,
+                w_gate=self.w_gate,
+                w_up=self.w_up,
+                w_down=self.w_down,
+                eps=self.eps,
+            )
+            return {"hidden": out}
+        hidden_np = np.asarray(hidden)
         out = mlp_eager_numpy(
-            hidden,
+            hidden_np,
             rms_weight=self.rms_weight,
             w_gate=self.w_gate,
             w_up=self.w_up,
@@ -157,5 +201,5 @@ class MlpFusionCapsule(FusionCapsule):
         )
         return {"hidden": out}
 
-    def weights(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    def weights(self) -> Tuple[Any, Any, Any, Any]:
         return self.rms_weight, self.w_gate, self.w_up, self.w_down

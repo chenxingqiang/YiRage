@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Integration: Serving Loop CPU cert runner (no yirage.core)."""
+"""Integration: Serving Loop cert runner (real torch default)."""
 
 from __future__ import annotations
 
@@ -25,16 +25,20 @@ def _bootstrap():
 
 def test_serving_cpu_cert_manifest_has_core_stages():
     _, manifest_fn = _bootstrap()
-    names = [s.name for s in manifest_fn(quick=True)]
-    assert "s1_contract" in names
-    assert "s5_contract" in names
-    assert "sm_budget_coresidence_smoke" in names
+    real_names = [s.name for s in manifest_fn(quick=True, real=True)]
+    assert "s1_contract" in real_names
+    assert "s5_contract" in real_names
+    assert "real_torch_e2e" in real_names
+    contract_names = [s.name for s in manifest_fn(quick=True, real=False)]
+    assert "sm_budget_coresidence_smoke" in contract_names
 
 
 def test_serving_cpu_cert_quick_passes():
     run_cert, _ = _bootstrap()
-    report = run_cert(quick=True)
+    report = run_cert(quick=True, real=True)
     assert report.bootstrap_ok is True
+    assert report.real is True
     assert report.serving_version == "s5"
+    assert report.torch_device in {"cpu", "cuda"}
     failed = [(s.name, s.returncode, s.stderr_tail) for s in report.stages if not s.ok]
     assert report.ok is True, failed

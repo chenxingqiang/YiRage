@@ -42,6 +42,17 @@ from .sm_budget import (
     capsule_sm_cost,
     resolve_sm_worker_quota,
 )
+from .exec_backend import BACKEND_NUMPY_REF, BACKEND_TORCH, default_serving_backend, is_real_backend
+from .torch_engine import TorchAttentionMeta, TorchDecoderLayer, TorchEngineModel
+from .torch_exec import (
+    BenchResult,
+    bench_forward,
+    default_device,
+    mlp_torch,
+    require_torch,
+    to_numpy,
+    to_torch,
+)
 from .layer_override import (
     LayerForwardResult,
     RuntimeFusionMlpLayerOverride,
@@ -90,4 +101,18 @@ __all__ = [
     "DEFAULT_TOTAL_SMS",
     "DEFAULT_RESERVED_AUX_SMS",
     "DEFAULT_CAPSULE_SM_COST",
+    "BACKEND_TORCH",
+    "BACKEND_NUMPY_REF",
+    "default_serving_backend",
+    "is_real_backend",
+    "TorchEngineModel",
+    "TorchDecoderLayer",
+    "TorchAttentionMeta",
+    "require_torch",
+    "default_device",
+    "mlp_torch",
+    "bench_forward",
+    "BenchResult",
+    "to_torch",
+    "to_numpy",
 ]

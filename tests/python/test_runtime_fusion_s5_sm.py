@@ -146,6 +146,8 @@ def test_hybrid_forward_respects_sm_budget_skip(serving):
 
 
 def test_serving_cpu_cert_manifest_includes_s5(serving):
-    names = [s.name for s in serving.serving_cpu_cert_manifest(quick=True)]
+    names = [s.name for s in serving.serving_cpu_cert_manifest(quick=True, real=True)]
     assert "s5_contract" in names
-    assert "sm_budget_coresidence_smoke" in names
+    assert "real_torch_e2e" in names
+    contract_names = [s.name for s in serving.serving_cpu_cert_manifest(quick=True, real=False)]
+    assert "sm_budget_coresidence_smoke" in contract_names

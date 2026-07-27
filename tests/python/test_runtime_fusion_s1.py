@@ -53,7 +53,9 @@ def test_fusion_plan_mlp_dict_has_standard_identity(serving):
 
 
 def test_mlp_capsule_matches_unfused_oracle(serving):
-    cap = serving.MlpFusionCapsule.from_random(hidden_size=48, intermediate_size=96, seed=7)
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=48, intermediate_size=96, seed=7, backend=serving.BACKEND_NUMPY_REF
+    )
     x = np.random.default_rng(1).normal(0, 1, size=(4, 48)).astype(np.float32)
     out = cap.execute({"hidden": x})["hidden"]
     rms_w, w_g, w_u, w_d = cap.weights()
@@ -64,7 +66,9 @@ def test_mlp_capsule_matches_unfused_oracle(serving):
 
 
 def test_rf_step_selects_mlp_capsule(serving):
-    cap = serving.MlpFusionCapsule.from_random(hidden_size=32, intermediate_size=64, seed=3)
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=32, intermediate_size=64, seed=3, backend=serving.BACKEND_NUMPY_REF
+    )
     rf = serving.RuntimeFusion([cap])
     x = np.random.default_rng(0).normal(0, 1, size=(2, 32)).astype(np.float32)
     result = rf.step({"hidden": x}, meta={"enabled": {cap.name}})
@@ -75,7 +79,9 @@ def test_rf_step_selects_mlp_capsule(serving):
 
 
 def test_rf_step_can_skip_capsule_identity(serving):
-    cap = serving.MlpFusionCapsule.from_random(hidden_size=32, intermediate_size=64, seed=3)
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=32, intermediate_size=64, seed=3, backend=serving.BACKEND_NUMPY_REF
+    )
     rf = serving.RuntimeFusion([cap])
     x = np.random.default_rng(0).normal(0, 1, size=(2, 32)).astype(np.float32)
     result = rf.step({"hidden": x}, meta={"force_skip_all": True})
@@ -86,7 +92,7 @@ def test_rf_step_can_skip_capsule_identity(serving):
 
 def test_rf_step_disabled_list(serving):
     cap = serving.MlpFusionCapsule.from_random(
-        hidden_size=16, intermediate_size=32, seed=1, name="mlp_a"
+        hidden_size=16, intermediate_size=32, seed=1, name="mlp_a", backend=serving.BACKEND_NUMPY_REF
     )
     rf = serving.RuntimeFusion([cap])
     x = np.zeros((1, 16), dtype=np.float32)

@@ -200,7 +200,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 - 复用 `persistent_kernel/`、搜索缓存作 backend，**不**在叙事上称 MPK
 - MACA：仅当 Capsule 在 C500 需 mxcc 时改支撑轨
 
-**验证**：契约 pytest +（有卡时）Capsule/RF smoke；Cloud CPU 绿不能宣称 RF/Serving 完成。
+**验证**：`make test-serving-cpu-cert`（S1–S5 pytest + demo smokes，无 `yirage.core`）；有卡时再跑 Capsule/RF GPU smoke。Cloud CPU 绿 **仅** 覆盖契约层，不得宣称真机 Serving 完成。
 
 ---
 

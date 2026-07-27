@@ -129,7 +129,10 @@ test-cpu-demos:
 	python3 -m pytest tests/integration/test_cpu_demos.py tests/integration/test_cpu_demo_loop.py tests/integration/test_cpu_loop_close.py -v --tb=short
 
 test-serving-cpu-cert:
-	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --quick
+	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --real
+
+test-serving-cpu-cert-contract:
+	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --contract-only
 
 test-serving-cpu-cert-full:
 	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --full

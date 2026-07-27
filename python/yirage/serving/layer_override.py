@@ -17,21 +17,33 @@ import numpy as np
 from .engine_stub import EngineAttentionMeta, EngineDecoderLayerStub
 from .mlp_capsule import MlpFusionCapsule
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
+from .torch_exec import to_numpy
 
 
 def capsule_name_for_layer(layer_id: int) -> str:
     return f"mlp_layer_{layer_id}"
 
 
-def build_layer_mlp_capsule(layer: EngineDecoderLayerStub) -> MlpFusionCapsule:
+def build_layer_mlp_capsule(
+    layer,
+    *,
+    backend: Optional[str] = None,
+) -> MlpFusionCapsule:
     """Build an MLP FusionCapsule sharing the engine layer's MLP weights."""
+    from .exec_backend import BACKEND_NUMPY_REF, default_serving_backend
     from .plan import FusionPlan
 
+    be = backend or (
+        BACKEND_NUMPY_REF
+        if isinstance(layer, EngineDecoderLayerStub)
+        else default_serving_backend()
+    )
     plan = FusionPlan.mlp(
         name=capsule_name_for_layer(layer.layer_id),
         hidden_size=layer.hidden_size,
         intermediate_size=layer.intermediate_size,
-        dtype=str(layer.rms_weight.dtype),
+        dtype="float32",
+        backend=be,
     )
     return MlpFusionCapsule(
         plan,
@@ -39,6 +51,7 @@ def build_layer_mlp_capsule(layer: EngineDecoderLayerStub) -> MlpFusionCapsule:
         w_gate=layer.w_gate,
         w_up=layer.w_up,
         w_down=layer.w_down,
+        device=getattr(layer, "device", None),
     )
 
 
@@ -104,7 +117,7 @@ class RuntimeFusionMlpLayerOverride:
             }
             result = self.rf.step({"hidden": h}, meta=step_meta)
             if self.capsule_name in result.ran:
-                out = np.asarray(result.outputs["hidden"])
+                out = result.outputs["hidden"]
                 return LayerForwardResult(
                     hidden=out, rf=result, used_rf_mlp=True, layer_id=self.layer.layer_id
                 )
