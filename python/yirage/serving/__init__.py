@@ -33,6 +33,18 @@ from .radix_meta import (
     parse_radix_hit_mask,
     radix_hit_mask_from_sglang_extend_lens,
 )
+from .sglang_plugin import (
+    SGLANG_QWEN2_MLP_ATTACH,
+    SglangBatchTorchMlpRfHook,
+    SglangMlpWeightView,
+    SglangQwen2MlpRfHook,
+    build_sglang_batch_torch_mlp_rf_hook,
+    build_sglang_qwen2_mlp_rf_hook,
+    extract_qwen2_mlp_weights as extract_sglang_qwen2_mlp_weights,
+    is_sglang_available,
+    require_sglang,
+    rf_step_meta_from_forward_batch,
+)
 from .torch_plugin import TorchDecoderMlpRfHook, build_torch_mlp_rf_hook
 from .vllm_plugin import (
     VLLM_QWEN2_MLP_ATTACH,
@@ -163,6 +175,16 @@ __all__ = [
     "run_segment_torch_bench_archive",
     "ServingBenchArchive",
     "ServingBenchArchiveRow",
+    "is_sglang_available",
+    "require_sglang",
+    "rf_step_meta_from_forward_batch",
+    "SGLANG_QWEN2_MLP_ATTACH",
+    "SglangMlpWeightView",
+    "SglangBatchTorchMlpRfHook",
+    "SglangQwen2MlpRfHook",
+    "build_sglang_batch_torch_mlp_rf_hook",
+    "build_sglang_qwen2_mlp_rf_hook",
+    "extract_sglang_qwen2_mlp_weights",
     "is_vllm_available",
     "require_vllm",
     "TorchDecoderMlpRfHook",
