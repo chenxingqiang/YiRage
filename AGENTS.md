@@ -14,6 +14,50 @@
 
 **不要**为此闭环新增独立编排脚本（例如一键跑完全部阶段的 orchestrator），除非用户明确要求。闭环由 Agent 按层执行现有脚本与测试，并把经验沉淀进文档。
 
+## Agent Development Protocol（Mandatory）
+
+> Cloud Agent 与人类协作者均须遵守。与 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)、[Agent 行为性价比审查](#agent-行为性价比审查每步必做) 冲突时，**本协议优先**。
+
+### Core principles
+
+| # | Principle | Requirement |
+|---|-----------|-------------|
+| 1 | **Test-Driven Development (TDD)** | Write tests first, then code. Requirements must be verifiable before implementation lands. |
+| 2 | **Phased development** | Work strictly in **Design → Development → Testing → Verification**. Each phase has a clear objective; do not blur phases. |
+| 3 | **Design-first precision** | The Design phase must be detailed and unambiguous. Do not arbitrarily change Design decisions in later phases; any change needs explicit justification and **human confirmation**. |
+| 4 | **Minimal change** | Verification-phase edits must be minimal and targeted—fix what tests expose, not broad refactors. |
+| 5 | **Production-targeted development** | See [Production standards](#production-standards) below. |
+| 6 | **Real-environment validation** | Validate on the actual target system or a strictly identical environment. Cloud CPU green **does not** substitute GPU/MACA Serving gates. |
+| 7 | **Minimize file creation** | **Modify, don't create.** New files are last resort; require clear architectural justification and **human approval** before adding. |
+| 8 | **Lean documentation** | No superfluous summary reports. After feature completion, update **`README.md`** for user-facing changes; update **`AGENTS.md`** for agent protocol, gates, and loop notes. |
+| 9 | **Pre-modification review** | Before any change, review existing code, tests, and docs. Changes must be minimal, necessary, and applied to existing artifacts where possible. |
+| 10 | **Human approval gate** | Critical design choices, scope changes, new files, and merge-to-main require review and approval by the human programmer unless the user explicitly delegates. |
+| 11 | **Collaborative iteration** | Iterate Design → Development → Testing → Verification → Refinement with the human; declare the current phase in PR notes or conversation when material. |
+
+### Production standards
+
+- **English-only artifacts**: Code, comments, commit messages, and documentation added or modified by Agent must be clear, professional **English** (existing non-English user docs may stay; do not expand Chinese in new agent-authored artifacts unless the user asks).
+- **No mocking / simulation for core logic**: Do not use mocks, stubs, or simulated engines for Serving/RF **verification** paths. Real PyTorch (`TorchEngineModel`), real `vllm` when testing vLLM hooks, and MetaX VM for MACA are required. Legacy offline modules (e.g. `engine_stub.py`) must not be re-wired into cert or pytest.
+- **Production-ready focus**: Every change must be concise, maintainable, and suitable for production integration—not throwaway demos, smoke scripts, or contract-only shortcuts.
+
+### Phase checklist (Agent)
+
+```
+Design       → Requirements clear; test plan drafted; human approves design before coding.
+Development  → Implement to approved design; unit/integration tests written per TDD.
+Testing      → Run tests; report failures; no silent edits during test execution.
+Verification → Minimal fixes from test evidence; human sign-off before merge.
+Refinement   → Update README.md (user-facing) + AGENTS.md (protocol/loop notes); commit per phase.
+```
+
+### Explicit prohibitions (Serving / RF)
+
+These reinforce item 5–6 and [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效):
+
+- No `demo/serving/*smoke*.py`, `--contract-only`, or NumPy stub cert paths.
+- No mock vLLM layers or torch fallbacks posing as RuntimeFusion parity.
+- No new verification files when extending `tests/python/test_runtime_fusion_s*.py` suffices.
+
 ### 概念对照（Legacy → YiRage 标准）
 
 | 维度 | 遗留概念（Legacy，勿作对外身份） | **YiRage 标准概念** | 工业界语义对齐 |
@@ -597,6 +641,7 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S8b（2026-07-27，移除 contract-only / numpy stub cert）**：闸门：测试契约层。删除 `--contract-only` manifest；S1–S7 pytest 统一 real torch。验证：`make test-serving-cpu-cert-pytest` + `make test-serving-cpu-cert`。
 - **Serving Loop S8c（2026-07-27，删除 serving smoke 脚本）**：闸门：工具层。删除 `demo/serving/*smoke*.py`；cert manifest 同步。
 - **Serving Loop S8d（2026-07-27，验证禁令入 AGENTS）**：闸门：协议层。写入 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)；禁止再写 smoke/contract-only/stub cert。
+- **Agent Protocol（2026-07-27，TDD + Production 开发协议）**：闸门：文档/协议层。新增 [Agent Development Protocol](#agent-development-protocolmandatory)（TDD、分阶段、设计冻结、最小改动、真实环境、少建文件、README/AGENTS 分工、人工审批门）。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
