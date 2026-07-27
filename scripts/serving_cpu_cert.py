@@ -5,7 +5,7 @@
 
 Usage::
 
-    PYTHONPATH=python python3 scripts/serving_cpu_cert.py --quick
+    PYTHONPATH=python python3 scripts/serving_cpu_cert.py
     make test-serving-cpu-cert
 """
 

@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU certification runner for RuntimeFusion Serving Loops (S1–Sn).
 
-**Default (--real)**: PyTorch real tensor execution + latency bench (no mock engine).
-**--contract-only**: NumPy reference contracts only (no torch required).
+All stages use **real PyTorch** tensor execution (no NumPy stub engine, no mock).
 
 Use from Cloud Agent merge gates::
 
-    PYTHONPATH=python python3 scripts/serving_cpu_cert.py --real
+    PYTHONPATH=python python3 scripts/serving_cpu_cert.py
 """
 
 from __future__ import annotations
@@ -19,7 +18,7 @@ import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from .bootstrap import import_serving, repo_root, require_numpy
 
@@ -30,14 +29,13 @@ class CertStage:
     kind: str  # "pytest" | "smoke"
     target: str
     quick: bool = True
-    real: bool = False  # requires torch real execution
     yirage_core: bool = False  # requires built yirage.core
 
 
 def serving_cpu_cert_manifest(
-    *, quick: bool = True, real: bool = True, yirage_core: bool = False
+    *, quick: bool = True, yirage_core: bool = False
 ) -> List[CertStage]:
-    """Ordered stages for Serving Loop verification."""
+    """Ordered stages for Serving Loop verification (real torch only)."""
     stages: List[CertStage] = [
         CertStage("s1_contract", "pytest", "tests/python/test_runtime_fusion_s1.py"),
         CertStage("s2_s3_contract", "pytest", "tests/python/test_runtime_fusion_s2_s3.py"),
@@ -45,68 +43,24 @@ def serving_cpu_cert_manifest(
         CertStage("s5_contract", "pytest", "tests/python/test_runtime_fusion_s5_sm.py"),
         CertStage("s6_contract", "pytest", "tests/python/test_runtime_fusion_s6_radix.py"),
         CertStage("s7_contract", "pytest", "tests/python/test_runtime_fusion_s7_multi_capsule.py"),
+        CertStage(
+            "s8_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s8_vllm_bench.py",
+        ),
+        CertStage(
+            "real_torch_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_real_torch.py",
+        ),
+        CertStage("real_torch_e2e", "smoke", "demo/serving/real_torch_e2e.py"),
+        CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
+        CertStage(
+            "torch_mlp_rf_hook_smoke",
+            "smoke",
+            "demo/serving/torch_mlp_rf_hook_smoke.py",
+        ),
     ]
-    if real:
-        stages.append(
-            CertStage(
-                "s8_contract",
-                "pytest",
-                "tests/python/test_runtime_fusion_s8_vllm_bench.py",
-                real=True,
-            )
-        )
-        stages.extend(
-            [
-                CertStage(
-                    "real_torch_contract",
-                    "pytest",
-                    "tests/python/test_runtime_fusion_real_torch.py",
-                    real=True,
-                ),
-                CertStage(
-                    "real_torch_e2e",
-                    "smoke",
-                    "demo/serving/real_torch_e2e.py",
-                    real=True,
-                ),
-                CertStage(
-                    "segment_torch_bench",
-                    "smoke",
-                    "demo/serving/segment_torch_bench.py",
-                    real=True,
-                ),
-                CertStage(
-                    "torch_mlp_rf_hook_smoke",
-                    "smoke",
-                    "demo/serving/torch_mlp_rf_hook_smoke.py",
-                    real=True,
-                ),
-            ]
-        )
-    else:
-        stages.extend(
-            [
-                CertStage("mlp_capsule_smoke", "smoke", "demo/serving/mlp_capsule_smoke.py"),
-                CertStage(
-                    "vllm_mlp_override_smoke", "smoke", "demo/serving/vllm_mlp_override_smoke.py"
-                ),
-                CertStage(
-                    "hybrid_first_k_smoke", "smoke", "demo/serving/hybrid_first_k_smoke.py --k 2"
-                ),
-                CertStage("kv_meta_bridge_smoke", "smoke", "demo/serving/kv_meta_bridge_smoke.py"),
-                CertStage(
-                    "sm_budget_coresidence_smoke",
-                    "smoke",
-                    "demo/serving/sm_budget_coresidence_smoke.py",
-                ),
-                CertStage("radix_hit_smoke", "smoke", "demo/serving/radix_hit_smoke.py"),
-                CertStage(
-                    "multi_capsule_segment_smoke",
-                    "smoke",
-                    "demo/serving/multi_capsule_segment_smoke.py",
-                ),
-            ]
-        )
     if yirage_core:
         stages.extend(
             [
@@ -153,7 +107,6 @@ class StageResult:
 class CertReport:
     ok: bool
     quick: bool
-    real: bool
     yirage_core: bool = False
     stages: List[StageResult] = field(default_factory=list)
     bootstrap_ok: bool = False
@@ -164,7 +117,6 @@ class CertReport:
         return {
             "ok": self.ok,
             "quick": self.quick,
-            "real": self.real,
             "yirage_core": self.yirage_core,
             "bootstrap_ok": self.bootstrap_ok,
             "serving_version": self.serving_version,
@@ -191,22 +143,19 @@ def _run_shell(command: str, *, cwd: Path, env: Dict[str, str]) -> subprocess.Co
     )
 
 
-def run_serving_cpu_cert(
-    *, quick: bool = True, real: bool = True, yirage_core: bool = False
-) -> CertReport:
+def run_serving_cpu_cert(*, quick: bool = True, yirage_core: bool = False) -> CertReport:
     """Execute manifest stages; return structured report."""
     require_numpy()
     root = repo_root()
-    report = CertReport(ok=True, quick=quick, real=real, yirage_core=yirage_core)
+    report = CertReport(ok=True, quick=quick, yirage_core=yirage_core)
 
     try:
         serving = import_serving(force_reload=True)
         info = serving.RuntimeFusion([]).inspect()
         report.bootstrap_ok = True
         report.serving_version = str(info.get("version"))
-        if real:
-            serving.require_torch()
-            report.torch_device = serving.default_device()
+        serving.require_torch()
+        report.torch_device = serving.default_device()
     except Exception as e:
         report.ok = False
         report.bootstrap_ok = False
@@ -224,7 +173,7 @@ def run_serving_cpu_cert(
         return report
 
     env = dict(**{k: v for k, v in __import__("os").environ.items()})
-    env["PYTHONPATH"] = f"{root / 'python'}:{root}"
+    env["PYTHONPATH"] = f"{root / 'python'}:{root / 'tests' / 'python'}:{root}"
     env.setdefault("YIRAGE_BACKEND", "cpu")
     for sub in ("build/abstract_subexpr/release", "build/formal_verifier/release"):
         p = root / sub
@@ -232,7 +181,7 @@ def run_serving_cpu_cert(
             env["LD_LIBRARY_PATH"] = f"{p}:{env.get('LD_LIBRARY_PATH', '')}"
     py = sys.executable
 
-    for stage in serving_cpu_cert_manifest(quick=quick, real=real, yirage_core=yirage_core):
+    for stage in serving_cpu_cert_manifest(quick=quick, yirage_core=yirage_core):
         t0 = time.monotonic()
         if stage.kind == "pytest":
             cmd = f"{py} -m pytest {stage.target} -q --tb=short"
@@ -267,17 +216,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     p.add_argument("--quick", action="store_true", default=True)
     p.add_argument("--full", action="store_true", help="include extra smoke sweeps")
     p.add_argument(
-        "--real",
-        action="store_true",
-        default=True,
-        help="PyTorch real execution + bench (default)",
-    )
-    p.add_argument(
-        "--contract-only",
-        action="store_true",
-        help="NumPy reference contracts only (no torch real path)",
-    )
-    p.add_argument(
         "--yirage-core",
         action="store_true",
         help="include yirage.core superoptimize tier (requires native build)",
@@ -287,7 +225,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = p.parse_args(list(argv) if argv is not None else None)
 
     quick = not args.full
-    real = not args.contract_only
     yirage_core = bool(args.yirage_core)
     if args.manifest:
         manifest = [
@@ -295,22 +232,21 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                 "name": s.name,
                 "kind": s.kind,
                 "target": s.target,
-                "real": s.real,
                 "yirage_core": s.yirage_core,
             }
-            for s in serving_cpu_cert_manifest(quick=quick, real=real, yirage_core=yirage_core)
+            for s in serving_cpu_cert_manifest(quick=quick, yirage_core=yirage_core)
         ]
-        print(json.dumps({"manifest": manifest, "real": real, "yirage_core": yirage_core}, indent=2))
+        print(json.dumps({"manifest": manifest, "yirage_core": yirage_core}, indent=2))
         return 0
 
-    report = run_serving_cpu_cert(quick=quick, real=real, yirage_core=yirage_core)
+    report = run_serving_cpu_cert(quick=quick, yirage_core=yirage_core)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
     else:
-        mode = "real-torch" if real else "contract-only"
+        mode = "real-torch"
         if yirage_core:
             mode += "+yirage-core"
-        print(f"Serving cert (RuntimeFusion S1–S5, {mode})")
+        print(f"Serving cert (RuntimeFusion S1–S8, {mode})")
         print(
             f"  bootstrap_ok={report.bootstrap_ok} rf_version={report.serving_version} "
             f"device={report.torch_device}"

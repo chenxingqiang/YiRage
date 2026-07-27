@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S3 smoke: first-K decoder layers use RF MLP Capsules.
+"""S3 smoke: first-K decoder layers use RF MLP Capsules (real torch).
 
 Cloud-safe::
 
@@ -16,8 +16,6 @@ import sys
 import types
 from pathlib import Path
 
-import numpy as np
-
 
 def _bootstrap_serving():
     root = Path(__file__).resolve().parents[2]
@@ -31,6 +29,7 @@ def _bootstrap_serving():
         sys.modules["yirage"] = stub
     import yirage.serving as serving
 
+    serving.require_torch()
     return serving
 
 
@@ -44,29 +43,33 @@ def main() -> int:
     args = p.parse_args()
 
     serving = _bootstrap_serving()
-    model = serving.EngineModelStub(
+    import torch
+
+    model = serving.TorchEngineModel(
         args.layers,
         hidden_size=args.hidden,
         intermediate_size=args.intermediate,
         seed=0,
     )
     hybrid = serving.HybridModelOverride(model, max_rf_mlp_layers=args.k)
-    x = np.random.default_rng(2).normal(0, 1, size=(2, args.hidden)).astype(np.float32)
-    result = hybrid.forward(x)
-    ref = model.forward_engine_full(x)
-    match = bool(np.allclose(result.hidden, ref, rtol=1e-5, atol=1e-6))
+    x = torch.randn(2, args.hidden, dtype=torch.float32, device=model.device)
+    with torch.no_grad():
+        result = hybrid.forward(x)
+        ref = model.forward_engine_full(x)
+        match = bool(torch.allclose(result.hidden, ref, rtol=1e-5, atol=1e-6))
     report = {
         "s3": True,
         "inspect": hybrid.inspect(),
         "forward": result.to_dict(),
         "matches_engine_full": match,
         "expected_rf_layers": list(range(args.k)),
+        "device": model.device,
     }
     ok = match and result.rf_layer_ids == list(range(args.k))
     if args.json:
         print(json.dumps(report, indent=2, default=str))
     else:
-        print("S3 HybridModelOverride first-K smoke")
+        print("S3 HybridModelOverride first-K smoke (torch)")
         print(f"  layers={args.layers} k={args.k} rf_ids={result.rf_layer_ids}")
         print(f"  engine_mlp_ids={result.engine_mlp_layer_ids}")
         print(f"  matches_engine_full={match}")

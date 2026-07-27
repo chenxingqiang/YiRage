@@ -175,7 +175,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **Radix skip** | SGLang RadixAttention | `radix_meta` + `RF.step` skip/shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **partial（S6）** |
 | **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py`；`multi_capsule_segment_smoke.py` | **partial（S7）** |
 | **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测默认 `TorchDecoderMlpRfHook` | `torch_mlp_rf_hook_smoke.py`；vllm opt-in pytest | **partial（S8）** |
-| **Segment torch bench** | 实测 latency JSON | `run_segment_torch_bench_archive` | `segment_torch_bench.py`；cert `--real` | **partial（S8）** |
+| **Segment torch bench** | 实测 latency JSON | `run_segment_torch_bench_archive` | `segment_torch_bench.py`；cert | **partial（S8）** |
 | **MACA / vLLM-metax** | MetaX vLLM fork | maca pk backend + scaffold | MetaX 上 S2+ | backlog |
 
 ### 现有脚手架 → RuntimeFusion 映射
@@ -203,7 +203,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 - 复用 `persistent_kernel/`、搜索缓存作 backend，**不**在叙事上称 MPK
 - MACA：仅当 Capsule 在 C500 需 mxcc 时改支撑轨
 
-**验证**：默认 **`make test-serving-cpu-cert`**（`--real`）：PyTorch 真实张量 forward + latency bench + S1–S5 契约；`--contract-only` 仅 NumPy 参考层。有 `yirage.core` 构建后再加 GPU/macac 实测 tier。
+**验证**：**`make test-serving-cpu-cert`**：PyTorch 真实张量 forward + latency bench + S1–S8 pytest/smoke；无 NumPy stub / `--contract-only` 路径。有 `yirage.core` 构建后再加 `--yirage-core` tier。
 
 ---
 
@@ -569,10 +569,11 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S3（2026-07-27，first-K hybrid）**：闸门：多一层混合。`HybridModelOverride(max_rf_mlp_layers=K)` / `rf_mlp_layer_ids`；K∈{1,2,4} 与 engine 全路径数值对齐。验证：`hybrid_first_k_smoke` + pytest。下一轮：**S4** — `block_table` → paged_kv meta 桥。
 - **Serving Loop S4（2026-07-27，KV meta bridge）**：闸门：引擎 meta。`kv_meta.block_tables_to_paged_kv`（indptr/indices/last_page_len）；`RuntimeFusion.step` 在存在 `block_tables`+`seq_lens` 时自动写入 Capsule extras。验证：`test_runtime_fusion_s4_kv` + `kv_meta_bridge_smoke`。下一轮：**S5** — SM 预算共驻契约。
 - **Serving Loop S5（2026-07-27，SM 预算 + CPU cert）**：闸门：Serving/RF 执行契约。`sm_budget.resolve_sm_worker_quota` + `RF.step` 按 `sm_cost` 分配/超预算 skip；`RuntimeFusionMlpLayerOverride` SM skip→engine MLP fallback；CPU cert：`scripts/serving_cpu_cert.py` + `make test-serving-cpu-cert`。验证：26 pytest + cert 9 stage PASS。下一轮：**S6** — Radix hit meta。
-- **Serving Loop S5b（2026-07-27，实测路径：PyTorch real）**：闸门：拒绝 mock 默认。新增 `torch_engine.TorchEngineModel` / `torch_exec.mlp_torch` / `bench_forward`；`MlpFusionCapsule` 默认 `backend=torch`；cert 默认 `--real`（`real_torch_e2e` + latency ms）；`engine_stub` 仅 `--contract-only` 参考。验证：`make test-serving-cpu-cert` 6 stage real PASS（含 bench）。下一轮：**S5c** yirage.core tier。
+- **Serving Loop S5b（2026-07-27，实测路径：PyTorch real）**：闸门：拒绝 mock 默认。新增 `torch_engine.TorchEngineModel` / `torch_exec.mlp_torch` / `bench_forward`；`MlpFusionCapsule` 默认 `backend=torch`；cert 仅 real torch（`real_torch_e2e` + latency ms）。验证：`make test-serving-cpu-cert` PASS。下一轮：**S5c** yirage.core tier。
 - **Serving Loop S6（2026-07-27，Radix hit skip/shrink）**：闸门：SGLang Radix meta 驱动 Capsule 调度。`radix_meta.RadixHitMeta` + `RF.step` all-hit skip（`skipped_radix`）+ partial `apply_radix_shrink`；layer override all-hit → post-attn identity。验证：7 pytest + `radix_hit_smoke` + cert 8 stage PASS。下一轮：**S7** 多 Capsule 编排。
 - **Serving Loop S7（2026-07-27，multi-Capsule segment override）**：闸门：图级编排层。每层 MLP 拆成 gate_up→down 两 Capsule；`StepMeta.pipeline` + `resolve_capsule_pipeline`；`DecoderSegmentOverride` / `SegmentHybridModelOverride` 大段 override（Attention/KV 仍引擎）。验证：7 pytest + `multi_capsule_segment_smoke` + cert。下一轮：**S8** — 真 vLLM 插件 / torch 实测 bench 归档。
-- **Serving Loop S8（2026-07-27，vLLM plugin + segment torch bench）**：闸门：引擎插件 + 实测归档。`TorchDecoderMlpRfHook`（真实 torch 权重/forward，**禁止 mock**）；`VllmQwen2MlpRfHook` 仅当 `vllm` 已安装；`run_segment_torch_bench_archive` JSON ms。验证：`--real` cert + smokes。PR #161 待 main 合并。
+- **Serving Loop S8（2026-07-27，vLLM plugin + segment torch bench）**：闸门：引擎插件 + 实测归档。`TorchDecoderMlpRfHook`（真实 torch 权重/forward，**禁止 mock**）；`VllmQwen2MlpRfHook` 仅当 `vllm` 已安装；`run_segment_torch_bench_archive` JSON ms。验证：cert + smokes 全 real torch。PR #161 待 main 合并。
+- **Serving Loop S8b（2026-07-27，移除 contract-only / numpy stub cert）**：闸门：测试契约层。删除 `--contract-only` manifest 与 `test-serving-cpu-cert-contract`；S1–S7 pytest 统一 `TorchEngineModel`/`BACKEND_TORCH`；cert 仅 real torch 路径。验证：`make test-serving-cpu-cert-pytest` + `make test-serving-cpu-cert`。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。

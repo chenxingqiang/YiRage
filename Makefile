@@ -129,24 +129,21 @@ test-cpu-demos:
 	python3 -m pytest tests/integration/test_cpu_demos.py tests/integration/test_cpu_demo_loop.py tests/integration/test_cpu_loop_close.py -v --tb=short
 
 test-serving-cpu-cert:
-	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --real
+	PYTHONPATH=python python3 scripts/serving_cpu_cert.py
 
 test-serving-yirage-core:
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:. python3 scripts/serving_cpu_cert.py --real --yirage-core
+	YIRAGE_BACKEND=cpu PYTHONPATH=python:. python3 scripts/serving_cpu_cert.py --yirage-core
 
 test-serving-yirage-core-pytest:
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
 	YIRAGE_BACKEND=cpu PYTHONPATH=python:. python3 -m pytest tests/python/test_runtime_fusion_yirage_core.py -v --tb=short
 
-test-serving-cpu-cert-contract:
-	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --contract-only
-
 test-serving-cpu-cert-full:
 	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --full
 
 test-serving-cpu-cert-pytest:
-	PYTHONPATH=python python3 -m pytest tests/python/test_runtime_fusion_s1.py tests/python/test_runtime_fusion_s2_s3.py tests/python/test_runtime_fusion_s4_kv.py tests/python/test_runtime_fusion_s5_sm.py tests/python/test_runtime_fusion_s6_radix.py tests/python/test_runtime_fusion_s7_multi_capsule.py tests/python/test_runtime_fusion_s8_vllm_bench.py tests/integration/test_serving_cpu_cert.py -v --tb=short
+	PYTHONPATH=python:tests/python python3 -m pytest tests/python/test_runtime_fusion_s1.py tests/python/test_runtime_fusion_s2_s3.py tests/python/test_runtime_fusion_s4_kv.py tests/python/test_runtime_fusion_s5_sm.py tests/python/test_runtime_fusion_s6_radix.py tests/python/test_runtime_fusion_s7_multi_capsule.py tests/python/test_runtime_fusion_s8_vllm_bench.py tests/integration/test_serving_cpu_cert.py -v --tb=short
 
 test-cpu-cert-walkthrough-profile:
 	PYTHONPATH=. python3 scripts/cpu_certification.py --json --walkthrough-profile

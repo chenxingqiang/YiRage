@@ -6,7 +6,7 @@ from __future__ import annotations
 
 BACKEND_TORCH = "torch"
 BACKEND_YIRAGE_CPU = "yirage_cpu"  # yirage.core seed + CPU superoptimize
-BACKEND_NUMPY_REF = "numpy_ref"  # reference only; not for --real cert
+BACKEND_NUMPY_REF = "numpy_ref"  # offline reference only; not used in serving cert
 
 
 def default_serving_backend() -> str:

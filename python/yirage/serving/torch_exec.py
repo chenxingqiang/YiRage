@@ -3,7 +3,7 @@
 """Real PyTorch execution for RuntimeFusion (no NumPy stub / mock engine).
 
 Uses actual ``torch`` tensor ops on CPU (or CUDA when available). This is the
-default execution backend for serving smoke and cert when ``--real`` is set.
+default execution backend for serving smoke and cert.
 """
 
 from __future__ import annotations

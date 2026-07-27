@@ -4,34 +4,7 @@
 
 from __future__ import annotations
 
-import importlib
-import sys
-import types
-from pathlib import Path
-
-import numpy as np
-import pytest
-
-
-def _import_serving():
-    root = Path(__file__).resolve().parents[2]
-    pkg_root = root / "python"
-    yirage_dir = pkg_root / "yirage"
-    if str(pkg_root) not in sys.path:
-        sys.path.insert(0, str(pkg_root))
-    if "yirage" not in sys.modules or not hasattr(sys.modules["yirage"], "__path__"):
-        stub = types.ModuleType("yirage")
-        stub.__path__ = [str(yirage_dir)]  # type: ignore[attr-defined]
-        sys.modules["yirage"] = stub
-    for key in list(sys.modules):
-        if key == "yirage.serving" or key.startswith("yirage.serving."):
-            del sys.modules[key]
-    return importlib.import_module("yirage.serving")
-
-
-@pytest.fixture(scope="module")
-def serving():
-    return _import_serving()
+from serving_real_test_utils import serving, torch  # noqa: F401
 
 
 def test_split_mlp_pipeline_names(serving):
@@ -49,65 +22,68 @@ def test_resolve_capsule_pipeline_explicit_order(serving):
     assert [c.name for c in ordered] == ["b", "a"]
 
 
-def test_rf_step_runs_pipeline_gate_up_then_down(serving):
-    model = serving.EngineModelStub(1, hidden_size=16, intermediate_size=32, seed=4)
-    layer = model.layers[0]
-    rf = serving.build_split_mlp_runtime_fusion(layer, backend=serving.BACKEND_NUMPY_REF)
-    x = np.random.default_rng(5).normal(size=(2, 16)).astype(np.float32)
+def test_rf_step_runs_pipeline_gate_up_then_down(serving, torch):
+    layer = serving.TorchDecoderLayer(0, hidden_size=16, intermediate_size=32, seed=4)
+    rf = serving.build_split_mlp_runtime_fusion(layer, backend=serving.BACKEND_TORCH)
+    x = torch.randn(2, 16, dtype=torch.float32, device=layer.device)
     meta = serving.pipeline_meta_for_layer(0)
-    result = rf.step({"hidden": x}, meta=meta)
+    with torch.no_grad():
+        result = rf.step({"hidden": x}, meta=meta)
+        ref = serving.mlp_torch(
+            x,
+            rms_weight=layer.rms_weight,
+            w_gate=layer.w_gate,
+            w_up=layer.w_up,
+            w_down=layer.w_down,
+        )
     assert result.ran == [
         serving.split_mlp_gate_up_name(0),
         serving.split_mlp_down_name(0),
     ]
-    ref = serving.mlp_eager_numpy(
-        x,
-        rms_weight=layer.rms_weight,
-        w_gate=layer.w_gate,
-        w_up=layer.w_up,
-        w_down=layer.w_down,
-    )
-    np.testing.assert_allclose(result.outputs["hidden"], ref, rtol=1e-5, atol=1e-6)
+    assert torch.allclose(result.outputs["hidden"], ref, rtol=1e-5, atol=1e-6)
 
 
-def test_split_mlp_parity_oracle(serving):
-    model = serving.EngineModelStub(1, hidden_size=12, intermediate_size=24, seed=6)
-    layer = model.layers[0]
-    x = np.random.default_rng(7).normal(size=(3, 12)).astype(np.float32)
+def test_split_mlp_parity_oracle(serving, torch):
+    layer = serving.TorchDecoderLayer(0, hidden_size=12, intermediate_size=24, seed=6)
+    x = torch.randn(3, 12, dtype=torch.float32, device=layer.device)
     assert serving.split_mlp_matches_fused(
         x,
         rms_weight=layer.rms_weight,
         w_gate=layer.w_gate,
         w_up=layer.w_up,
         w_down=layer.w_down,
-        backend=serving.BACKEND_NUMPY_REF,
+        backend=serving.BACKEND_TORCH,
     )
 
 
-def test_decoder_segment_override_matches_engine(serving):
-    model = serving.EngineModelStub(4, hidden_size=16, intermediate_size=32, seed=8)
-    seg = serving.DecoderSegmentOverride(model, layer_start=1, layer_end=3)
-    x = np.random.default_rng(9).normal(size=(2, 16)).astype(np.float32)
-    got = seg.forward_segment(x)
-    ref = x
-    for lid in [1, 2]:
-        ref = model.layers[lid].forward_engine_full(ref)
-    np.testing.assert_allclose(got.hidden, ref, rtol=1e-5, atol=1e-6)
+def test_decoder_segment_override_matches_engine(serving, torch):
+    model = serving.TorchEngineModel(4, hidden_size=16, intermediate_size=32, seed=8)
+    seg = serving.DecoderSegmentOverride(
+        model, layer_start=1, layer_end=3, backend=serving.BACKEND_TORCH
+    )
+    x = torch.randn(2, 16, dtype=torch.float32, device=model.device)
+    with torch.no_grad():
+        got = seg.forward_segment(x)
+        ref = x
+        for lid in [1, 2]:
+            ref = model.layers[lid].forward_engine_full(ref)
+    assert torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-6)
     assert all(r.used_rf_mlp for r in got.layer_results)
     assert got.capsules_per_step == 2
 
 
-def test_segment_hybrid_mixed_paths(serving):
-    model = serving.EngineModelStub(4, hidden_size=16, intermediate_size=32, seed=10)
-    hybrid = serving.SegmentHybridModelOverride(
+def test_segment_hybrid_mixed_paths(serving, torch):
+    model = serving.TorchEngineModel(4, hidden_size=16, intermediate_size=32, seed=10)
+    hybrid = serving.TorchSegmentHybridModelOverride(
         model,
         segment_layer_ids=[1, 2],
         rf_mlp_layer_ids=[0],
     )
-    x = np.random.default_rng(11).normal(size=(2, 16)).astype(np.float32)
-    got = hybrid.forward(x)
-    ref = model.forward_engine_full(x)
-    np.testing.assert_allclose(got.hidden, ref, rtol=1e-5, atol=1e-6)
+    x = torch.randn(2, 16, dtype=torch.float32, device=model.device)
+    with torch.no_grad():
+        got = hybrid.forward(x)
+        ref = model.forward_engine_full(x)
+    assert torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-6)
     used = {r.layer_id for r in got.layer_results if r.used_rf_mlp}
     assert used == {0, 1, 2}
 
