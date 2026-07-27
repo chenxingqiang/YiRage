@@ -26,6 +26,9 @@ class StepMeta:
 
     S5 SM budget: ``sm_budget`` + ``extras['total_sms']`` / ``reserved_aux_sms`` cap
     capsule launches; over-budget capsules are skipped (engine owns that fragment).
+
+    S6 Radix: ``radix_hit_mask`` (bool [batch]) from SGLang RadixAttention — all-hit
+    skips the capsule; partial hit shrinks MLP to miss rows only (hits pass-through).
     """
 
     enabled: Optional[Set[str]] = None
@@ -93,6 +96,34 @@ class StepMeta:
             extras=extras,
         )
 
+    def with_radix_bridge(self, *, batch_size: Optional[int] = None) -> "StepMeta":
+        """Return a copy with normalized ``radix_hit`` in extras when mask is set."""
+        if self.radix_hit_mask is None:
+            return self
+        from .radix_meta import parse_radix_hit_mask
+
+        bs = batch_size
+        if bs is None and self.seq_lens is not None:
+            import numpy as np
+
+            bs = int(np.asarray(self.seq_lens).reshape(-1).shape[0])
+        radix = parse_radix_hit_mask(self.radix_hit_mask, batch_size=bs)
+        if radix is None:
+            return self
+        extras = dict(self.extras)
+        extras.update(radix.as_rf_extras())
+        return StepMeta(
+            enabled=set(self.enabled) if self.enabled is not None else None,
+            disabled=set(self.disabled) if self.disabled is not None else None,
+            force_skip_all=self.force_skip_all,
+            block_tables=self.block_tables,
+            seq_lens=self.seq_lens,
+            page_size=self.page_size,
+            radix_hit_mask=radix.hit_mask,
+            sm_budget=self.sm_budget,
+            extras=extras,
+        )
+
 
 @dataclass
 class StepResult:
@@ -101,6 +132,7 @@ class StepResult:
     outputs: Dict[str, Any]
     ran: List[str] = field(default_factory=list)
     skipped: List[str] = field(default_factory=list)
+    skipped_radix: List[str] = field(default_factory=list)
     meta: Optional[StepMeta] = None
     sm_allocation: Optional[SmStepAllocation] = None
 
@@ -108,6 +140,7 @@ class StepResult:
         d: Dict[str, Any] = {
             "ran": list(self.ran),
             "skipped": list(self.skipped),
+            "skipped_radix": list(self.skipped_radix),
             "output_keys": sorted(self.outputs.keys()),
             "force_skip_all": bool(self.meta.force_skip_all) if self.meta else False,
         }
@@ -142,7 +175,7 @@ class RuntimeFusion:
     def inspect(self) -> Dict[str, Any]:
         return {
             "runtime": "RuntimeFusion",
-            "version": "s5",
+            "version": "s6",
             "capsules": [c.inspect() for c in self._capsules],
         }
 
@@ -157,6 +190,13 @@ class RuntimeFusion:
         responsibility for that fragment — identity on ``hidden`` for S1 MLP).
         """
         step_meta = StepMeta.from_mapping(meta).with_paged_kv_bridge()
+        radix = None
+        if step_meta.radix_hit_mask is not None:
+            from .radix_meta import infer_batch_size_from_hidden, parse_radix_hit_mask
+
+            bs = infer_batch_size_from_hidden(inputs.get("hidden"))
+            step_meta = step_meta.with_radix_bridge(batch_size=bs)
+            radix = parse_radix_hit_mask(step_meta.radix_hit_mask, batch_size=bs)
         quota = resolve_sm_worker_quota(
             sm_budget=step_meta.sm_budget,
             extras=step_meta.extras,
@@ -168,18 +208,25 @@ class RuntimeFusion:
         state: Dict[str, Any] = dict(inputs)
         ran: List[str] = []
         skipped: List[str] = []
+        skipped_radix: List[str] = []
 
         for cap in self._capsules:
             if not step_meta.should_run(cap.name):
                 skipped.append(cap.name)
+                continue
+            if radix is not None and radix.skip_capsule_entirely():
+                skipped.append(cap.name)
+                skipped_radix.append(cap.name)
                 continue
             cost = capsule_sm_cost(cap)
             if cost > remaining_sms:
                 skipped.append(cap.name)
                 sm_alloc.skipped_budget.append(cap.name)
                 continue
-            # Pass full step meta extras (includes S4 paged_kv_* when bridged).
-            out = cap.execute(state, meta=step_meta.extras)
+            exec_meta = dict(step_meta.extras)
+            if radix is not None and radix.needs_shrink():
+                exec_meta.update(radix.as_rf_extras())
+            out = cap.execute(state, meta=exec_meta)
             state.update(out)
             ran.append(cap.name)
             sm_alloc.ran.append((cap.name, cost))
@@ -190,6 +237,7 @@ class RuntimeFusion:
             outputs=state,
             ran=ran,
             skipped=skipped,
+            skipped_radix=skipped_radix,
             meta=step_meta,
             sm_allocation=sm_alloc,
         )

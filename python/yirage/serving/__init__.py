@@ -25,6 +25,12 @@ from .kv_meta import (
     block_tables_to_paged_kv,
     last_page_len_from_seq,
 )
+from .radix_meta import (
+    RadixHitMeta,
+    apply_radix_shrink,
+    attach_radix_to_step_meta,
+    parse_radix_hit_mask,
+)
 from .bootstrap import bootstrap_yirage_stub, import_serving, repo_root, require_numpy
 from .cpu_cert import (
     CertReport,
@@ -101,6 +107,10 @@ __all__ = [
     "block_tables_to_paged_kv",
     "attach_paged_kv_to_step_meta",
     "last_page_len_from_seq",
+    "RadixHitMeta",
+    "parse_radix_hit_mask",
+    "attach_radix_to_step_meta",
+    "apply_radix_shrink",
     "bootstrap_yirage_stub",
     "import_serving",
     "repo_root",

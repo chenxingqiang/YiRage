@@ -43,6 +43,7 @@ def serving_cpu_cert_manifest(
         CertStage("s2_s3_contract", "pytest", "tests/python/test_runtime_fusion_s2_s3.py"),
         CertStage("s4_contract", "pytest", "tests/python/test_runtime_fusion_s4_kv.py"),
         CertStage("s5_contract", "pytest", "tests/python/test_runtime_fusion_s5_sm.py"),
+        CertStage("s6_contract", "pytest", "tests/python/test_runtime_fusion_s6_radix.py"),
     ]
     if real:
         stages.extend(
@@ -77,6 +78,7 @@ def serving_cpu_cert_manifest(
                     "smoke",
                     "demo/serving/sm_budget_coresidence_smoke.py",
                 ),
+                CertStage("radix_hit_smoke", "smoke", "demo/serving/radix_hit_smoke.py"),
             ]
         )
     if yirage_core:

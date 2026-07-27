@@ -200,38 +200,69 @@ class MlpFusionCapsule(FusionCapsule):
         inputs: Mapping[str, Any],
         meta: Optional[Mapping[str, Any]] = None,
     ) -> Dict[str, Any]:
-        del meta  # reserved for future RF meta (e.g. sm_budget hints)
         if "hidden" not in inputs:
             raise KeyError("MlpFusionCapsule.execute requires inputs['hidden']")
         hidden = inputs["hidden"]
+        radix = None
+        if meta:
+            from .radix_meta import infer_batch_size_from_hidden, parse_radix_hit_mask
+
+            mask = meta.get("radix_hit_mask")
+            if mask is not None:
+                bs = infer_batch_size_from_hidden(hidden)
+                radix = parse_radix_hit_mask(mask, batch_size=bs)
+
         if self.plan.backend == BACKEND_YIRAGE_CPU:
+            from .radix_meta import apply_radix_shrink
+
             h = to_torch(hidden, device=self._device)
-            if h.ndim == 2 and h.shape[0] != 1:
+            if h.ndim == 2 and h.shape[0] != 1 and radix is not None:
                 raise ValueError(
-                    f"yirage_cpu MLP expects decode batch=1, got shape={tuple(h.shape)}"
+                    "yirage_cpu MLP with radix shrink requires batch=1 decode today"
                 )
-            out = self._yirage_runner.forward(h)
+            if radix is not None and radix.any_hit:
+                out = apply_radix_shrink(h, radix, self._yirage_runner.forward)
+            else:
+                out = self._yirage_runner.forward(h)
             return {"hidden": out}
         if self.plan.backend == BACKEND_TORCH:
             h = to_torch(hidden, device=self._device)
-            out = mlp_torch(
-                h,
+
+            def _run(active):
+                return mlp_torch(
+                    active,
+                    rms_weight=self.rms_weight,
+                    w_gate=self.w_gate,
+                    w_up=self.w_up,
+                    w_down=self.w_down,
+                    eps=self.eps,
+                )
+
+            if radix is not None and radix.any_hit:
+                from .radix_meta import apply_radix_shrink
+
+                out = apply_radix_shrink(h, radix, _run)
+            else:
+                out = _run(h)
+            return {"hidden": out}
+        hidden_np = np.asarray(hidden)
+
+        def _run_np(active):
+            return mlp_eager_numpy(
+                active,
                 rms_weight=self.rms_weight,
                 w_gate=self.w_gate,
                 w_up=self.w_up,
                 w_down=self.w_down,
                 eps=self.eps,
             )
-            return {"hidden": out}
-        hidden_np = np.asarray(hidden)
-        out = mlp_eager_numpy(
-            hidden_np,
-            rms_weight=self.rms_weight,
-            w_gate=self.w_gate,
-            w_up=self.w_up,
-            w_down=self.w_down,
-            eps=self.eps,
-        )
+
+        if radix is not None and radix.any_hit:
+            from .radix_meta import apply_radix_shrink
+
+            out = apply_radix_shrink(hidden_np, radix, _run_np)
+        else:
+            out = _run_np(hidden_np)
         return {"hidden": out}
 
     def weights(self) -> Tuple[Any, Any, Any, Any]:

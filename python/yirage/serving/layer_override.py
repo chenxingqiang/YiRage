@@ -121,6 +121,11 @@ class RuntimeFusionMlpLayerOverride:
                 return LayerForwardResult(
                     hidden=out, rf=result, used_rf_mlp=True, layer_id=self.layer.layer_id
                 )
+            if self.capsule_name in result.skipped_radix:
+                # S6: Radix all-hit — cache owns MLP; pass post-attention hidden through.
+                return LayerForwardResult(
+                    hidden=h, rf=result, used_rf_mlp=False, layer_id=self.layer.layer_id
+                )
             # RF skipped (SM budget / internal policy) → engine owns MLP.
             out = self.layer.mlp_forward(h)
             return LayerForwardResult(
