@@ -98,10 +98,12 @@ from .sm_budget import (
     resolve_sm_worker_quota,
 )
 from .exec_backend import (
+    BACKEND_YIRAGE_MACA,
     BACKEND_NUMPY_REF,
     BACKEND_TORCH,
     BACKEND_YIRAGE_CPU,
     default_serving_backend,
+    is_maca_serving_backend,
     is_real_backend,
     is_yirage_backend,
 )
@@ -153,6 +155,36 @@ from .bench_archive import (
     run_segment_torch_bench_archive,
 )
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
+from .maca_serving_e2e import (
+    MacaServingFullLayerE2EReport,
+    run_maca_serving_full_layer_e2e_auto,
+    run_torch_maca_serving_full_layer_e2e,
+)
+from .maca_serving_meta import (
+    MACA_SERVING_DEFAULT_BLOCK_DIM,
+    MACA_SERVING_SM_COUNT_C500,
+    MACA_SERVING_WARP_SIZE,
+    MacaServingRfSpec,
+    attach_maca_serving_to_step_meta,
+    inspect_maca_serving_meta,
+    maca_serving_present,
+    validate_maca_block_dim,
+)
+from .vllm_metax_plugin import (
+    VllmMetaxMlpRfHookReport,
+    VllmMetaxQwen2MlpRfHook,
+    build_vllm_metax_qwen2_mlp_rf_hook,
+    is_metax_torch,
+    is_vllm_metax_available,
+    require_vllm_metax,
+    rf_step_meta_for_vllm_metax,
+)
+from .maca_exec import (
+    inspect_maca_serving_yirage_tier,
+    is_yirage_maca_available,
+    maca_superoptimize_kwargs,
+    require_yirage_maca,
+)
 from .yirage_core_e2e import (
     YirageCoreFullLayerE2EReport,
     run_yirage_core_full_layer_e2e,
@@ -276,7 +308,30 @@ __all__ = [
     "DEFAULT_CAPSULE_SM_COST",
     "BACKEND_TORCH",
     "BACKEND_YIRAGE_CPU",
-    "BACKEND_NUMPY_REF",
+    "BACKEND_YIRAGE_MACA",
+    "MACA_SERVING_WARP_SIZE",
+    "MACA_SERVING_SM_COUNT_C500",
+    "MACA_SERVING_DEFAULT_BLOCK_DIM",
+    "MacaServingRfSpec",
+    "attach_maca_serving_to_step_meta",
+    "maca_serving_present",
+    "inspect_maca_serving_meta",
+    "validate_maca_block_dim",
+    "MacaServingFullLayerE2EReport",
+    "run_torch_maca_serving_full_layer_e2e",
+    "run_maca_serving_full_layer_e2e_auto",
+    "is_metax_torch",
+    "is_vllm_metax_available",
+    "require_vllm_metax",
+    "VllmMetaxQwen2MlpRfHook",
+    "build_vllm_metax_qwen2_mlp_rf_hook",
+    "rf_step_meta_for_vllm_metax",
+    "VllmMetaxMlpRfHookReport",
+    "is_yirage_maca_available",
+    "require_yirage_maca",
+    "maca_superoptimize_kwargs",
+    "inspect_maca_serving_yirage_tier",
+    "is_maca_serving_backend",
     "default_serving_backend",
     "is_real_backend",
     "is_yirage_backend",
