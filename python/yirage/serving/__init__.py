@@ -19,6 +19,12 @@ from .engine_stub import (
     QWEN2_MLP_HF_ATTACH,
 )
 from .hybrid_model import HybridModelOverride, resolve_rf_mlp_layer_ids
+from .kv_meta import (
+    PagedKvMeta,
+    attach_paged_kv_to_step_meta,
+    block_tables_to_paged_kv,
+    last_page_len_from_seq,
+)
 from .layer_override import (
     LayerForwardResult,
     RuntimeFusionMlpLayerOverride,
@@ -47,4 +53,8 @@ __all__ = [
     "capsule_name_for_layer",
     "HybridModelOverride",
     "resolve_rf_mlp_layer_ids",
+    "PagedKvMeta",
+    "block_tables_to_paged_kv",
+    "attach_paged_kv_to_step_meta",
+    "last_page_len_from_seq",
 ]

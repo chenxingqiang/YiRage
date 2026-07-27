@@ -14,18 +14,22 @@ from .capsule import FusionCapsule
 class StepMeta:
     """Engine-provided (or test) meta for one RF.step.
 
-    Selection rules (S1):
+    Selection rules:
     - If ``enabled`` is non-empty, only those capsule names may run.
     - Else if ``disabled`` is non-empty, all registered except those may run.
     - Else all registered capsules run (default select-all for standalone smoke).
     - ``force_skip_all``: run nothing (engine owns the layer this step).
+
+    S4 KV bridge: when ``block_tables`` + ``seq_lens`` are set, RuntimeFusion.step
+    converts them into ``extras['paged_kv_*']`` via :mod:`yirage.serving.kv_meta`.
     """
 
     enabled: Optional[Set[str]] = None
     disabled: Optional[Set[str]] = None
     force_skip_all: bool = False
-    # Forward-compatible slots for S4+ (not consumed in S1 execute path).
     block_tables: Any = None
+    seq_lens: Any = None
+    page_size: int = 16
     radix_hit_mask: Any = None
     sm_budget: Optional[int] = None
     extras: Dict[str, Any] = field(default_factory=dict)
@@ -43,6 +47,8 @@ class StepMeta:
             disabled=set(disabled) if disabled is not None else None,
             force_skip_all=bool(data.get("force_skip_all", False)),
             block_tables=data.get("block_tables"),
+            seq_lens=data.get("seq_lens"),
+            page_size=int(data.get("page_size", 16)),
             radix_hit_mask=data.get("radix_hit_mask"),
             sm_budget=data.get("sm_budget"),
             extras=dict(data.get("extras") or {}),
@@ -56,6 +62,32 @@ class StepMeta:
         if self.disabled is not None:
             return capsule_name not in self.disabled
         return True
+
+    def with_paged_kv_bridge(self) -> "StepMeta":
+        """Return a copy with ``paged_kv_*`` filled from ``block_tables`` when possible."""
+        if self.block_tables is None or self.seq_lens is None:
+            return self
+        from .kv_meta import block_tables_to_paged_kv
+
+        paged = block_tables_to_paged_kv(
+            self.block_tables,
+            self.seq_lens,
+            page_size=self.page_size,
+            slot_mapping=self.extras.get("slot_mapping"),
+        )
+        extras = dict(self.extras)
+        extras.update(paged.as_rf_extras())
+        return StepMeta(
+            enabled=set(self.enabled) if self.enabled is not None else None,
+            disabled=set(self.disabled) if self.disabled is not None else None,
+            force_skip_all=self.force_skip_all,
+            block_tables=paged.block_tables,
+            seq_lens=paged.seq_lens,
+            page_size=paged.page_size,
+            radix_hit_mask=self.radix_hit_mask,
+            sm_budget=self.sm_budget,
+            extras=extras,
+        )
 
 
 @dataclass
@@ -102,7 +134,7 @@ class RuntimeFusion:
     def inspect(self) -> Dict[str, Any]:
         return {
             "runtime": "RuntimeFusion",
-            "version": "s3",
+            "version": "s4",
             "capsules": [c.inspect() for c in self._capsules],
         }
 
@@ -116,7 +148,7 @@ class RuntimeFusion:
         When a capsule is skipped, its outputs are not applied (engine retains
         responsibility for that fragment — identity on ``hidden`` for S1 MLP).
         """
-        step_meta = StepMeta.from_mapping(meta)
+        step_meta = StepMeta.from_mapping(meta).with_paged_kv_bridge()
         # Shallow copy so capsule outputs do not mutate caller unexpectedly.
         state: Dict[str, Any] = dict(inputs)
         ran: List[str] = []
@@ -124,6 +156,7 @@ class RuntimeFusion:
 
         for cap in self._capsules:
             if step_meta.should_run(cap.name):
+                # Pass full step meta extras (includes S4 paged_kv_* when bridged).
                 out = cap.execute(state, meta=step_meta.extras)
                 state.update(out)
                 ran.append(cap.name)
