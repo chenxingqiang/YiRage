@@ -1,181 +1,211 @@
 # AGENTS.md
 
-## YiRage 无限优化闭环（Infinite Optimization Loop）— **MPK Serving × MetaX MACA**
+## YiRage 无限优化闭环（Infinite Optimization Loop）— **RuntimeFusion × MetaX MACA**
 
-> **当前主目标（2026-07-27）**：将 YiRage **PersistentKernel / MegaKernel（对齐 [Mirage MPK](https://github.com/mirage-project/mirage/tree/mpk)）算子化并嵌入 vLLM / SGLang**，在保留工业 serving 调度（PagedAttention、RadixAttention、连续批处理）的前提下，用 **Block/Layer-level Override** 吃掉 MegaKernel 的单次推理 latency。MACA 真卡路径与 CUDA 金标准仍是**支撑轨**，不是终点。
+> **当前主目标（2026-07-27）**：以 **RuntimeFusion（RF）** 将搜索期 **FusionPlan** 裁成可调度的 **FusionCapsule**，嵌入 vLLM / SGLang：引擎保留连续批处理、PagedAttention、RadixAttention 与总调度权；YiRage 在 serving **每一步**按引擎 meta **弹性选择/编排**融合块。这是「引擎原生协同」的工业路径，**不是**把整网烤进独占 MegaKernel 的编译霸权。MACA 真卡与 CUDA 执行能力仍是**支撑轨**。
 
-> **当前主后端**：默认开发/验证优先 `YIRAGE_BACKEND=cuda`（NVIDIA 上对接上游 vLLM/SGLang）与 `YIRAGE_BACKEND=maca`（MetaX / [vLLM-metax](https://github.com/MetaX-MACA/vLLM-metax)）。CPU 闭环历史见文末 [历史归档：CPU 无限优化闭环](#历史归档cpu-无限优化闭环)。MACA↔CUDA 能力矩阵见 [CUDA 对标（支撑轨）](#cuda-对标优化目标与能力矩阵)。
+> **当前主后端**：默认验证优先 `YIRAGE_BACKEND=cuda`（对接上游 vLLM/SGLang）与 `YIRAGE_BACKEND=maca`（MetaX / [vLLM-metax](https://github.com/MetaX-MACA/vLLM-metax)）。CPU 闭环历史见文末 [历史归档：CPU 无限优化闭环](#历史归档cpu-无限优化闭环)。MACA↔CUDA 能力矩阵见 [CUDA 对标（支撑轨）](#cuda-对标优化目标与能力矩阵)。
 
-> **历史北极星（2026-07-08，已降级为支撑）**：MACA 算子/搜索/融合逐项对标 CUDA。R0–R26 已闭合离线 Qwen3 PK 脚手架；**不再**以「再做一轮 offline latency 归档（旧 R27）」为主迭代，除非 Serving 轨明确依赖该证据。
+> **概念切断（强制）**：对外叙事与新 Loop **禁止**以 Mirage / MPK / µGraph 作为产品身份。遗留符号（`mugraph`、`MuGraphStore`、`PersistentKernel` 类名等）按 [Legacy 对照表](#概念对照legacy--yirage-标准) 视为实现别名，符号大改名另开 Chore，不阻塞 S1。
+
+> **历史北极星（2026-07-08，已降级为支撑）**：MACA 算子/搜索/融合逐项对标 CUDA。R0–R26 已闭合离线 Qwen3 PK 脚手架；旧 R27 offline latency 归档降级。S0 起主轨为 RuntimeFusion。
 
 本仓库的持续改进**没有终止条件**。每一轮闭环的目标不是「做完就停」，而是：**感知现状 → 选定瓶颈 → 最小落地 → 用证据验证 → 把结论写回文档与契约 → 进入下一轮**。Cloud Agent 与人类协作者都应把 `AGENTS.md` 当作活文档，每轮验证通过后更新本节或下方 Gotchas。
 
 **不要**为此闭环新增独立编排脚本（例如一键跑完全部阶段的 orchestrator），除非用户明确要求。闭环由 Agent 按层执行现有脚本与测试，并把经验沉淀进文档。
+
+### 概念对照（Legacy → YiRage 标准）
+
+| 维度 | 遗留概念（Legacy，勿作对外身份） | **YiRage 标准概念** | 工业界语义对齐 |
+|------|----------------------------------|---------------------|----------------|
+| **搜索产物** | µGraph / MuGraph / `MuGraphStore` | **FusionPlan** | 优化后的局部子图执行计划（Execution Plan） |
+| **服务单元** | MegaKernel / MPK / 「一层烤死的 PK」 | **FusionCapsule** | 引擎侧可调度的动态融合粒度（Fused Block） |
+| **运行时** | Mirage-style Persistent MegaKernel 霸占 | **RuntimeFusion（RF）** | 引擎内嵌的动态选择与编排（Dynamic Fusion Runtime） |
+| **图层级（文档用语）** | KN Graph / TB Graph | **Device Graph / Tile Graph** | 设备级与 Tile 级算子抽象（代码符号可暂留 `KN*`/`TB*`） |
+| **执行战术（非产品身份）** | `PersistentKernel` worker/scheduler | Capsule 的可选 launch backend | 持久化 worker 只是实现手段之一 |
+
+**一句话关系**：
+
+```text
+引擎调度 (vLLM / SGLang)
+    ↓ meta（block_table / radix hit / batch / SM 预算）
+RuntimeFusion.step(...)
+    ↓ 本步选择 0..N 个边界可变的
+FusionCapsule+   ← 可降级回引擎原生算子
+    ↑ 来自搜索期缓存的
+FusionPlan 库    ← superoptimize / profile / shape-bucket cache
+```
+
+**与「编译霸权」的刻意对立**：FusionPlan 是搜索期方案，不是整网死刑判决；Capsule 边界可随 step 伸缩；RF 把调度权交还引擎，只拥有**融合身份**。
 
 ### 核心冲突与设计抉择（必读）
 
 | 侧 | 假设 | 冲突点 |
 |----|------|--------|
 | **vLLM / SGLang** | 算子级流式调度 + 显存碎片化（`block_table` / Radix 前缀缓存） | 需要细粒度抢占、动态 KV、辅助算子（Sampler、NCCL、Vision）可随时 launch |
-| **MPK / PersistentKernel** | 全图或大块融合的持久化内核，独占 SM（`num_workers`） | 倾向一次 launch 吃掉 N 层 forward，难以「只换一个 Attention op」 |
+| **错误路径（已废弃）** | 整图/大图烤进独占持久化内核 | 与连续批处理、Radix、辅助流冲突；重复「编译霸权」 |
+| **RuntimeFusion（正道）** | 弹性融合：按 meta 选 Capsule | 须定义 Capsule ABI、最小 `step` 钩子、meta 桥与 SM 预算 |
 
-**结论**：禁止「替换单个 Attention 算子」式接入；采用 **大颗粒度块替换（Block/Layer-level Override）**：
-1. 在 `vllm/model_executor/models/{qwen2,llama}.py`（或 SGLang 等价 model）层覆盖，而不是只改 `layers/` 内孤立 Linear。
-2. 初始化时用 YiRage PK API 把目标块编译成 MegaKernel；`forward` 跳过被覆盖的 `for layer in self.layers` 片段，**单次启动** PK。
-3. KV / 调度元数据经 `meta_tensors` + `attach_input` 实时注入；Attention 仍须能按 `block_table` / indptr **非连续寻址**。
-4. 精确限制 PK 占用的 SM，给 Sampler / NCCL / 多模态留辅助流，避免死锁。
-5. 对 SGLang Radix：MegaKernel 拓扑固定，内部按 cache-hit meta **动态跳过** Thread Block。
+**结论**：禁止「替换单个 Attention 算子」冒充完成；采用 **Block/Layer-level Override + RF**：
+1. 在 `vllm/model_executor/models/{qwen2,llama}.py`（或 SGLang 等价 model）覆盖可融合区间，而不是只改 `layers/` 内孤立 Linear。
+2. 搜索/构图得到 **FusionPlan**；裁成 **FusionCapsule**（首刀：单层 MLP）。`forward`/`RF.step` 按本步 meta 决定是否启用该 Capsule。
+3. KV / 调度元数据经 meta 缓冲实时注入；需要 Attention Capsule 时须支持 `block_table` / indptr **非连续寻址**（S4）。
+4. Capsule launch 的 SM 占用可配置，给 Sampler / NCCL / 多模态留辅助流（S5）。
+5. Radix：拓扑不必烤死；按 cache-hit meta **跳过或收缩** Capsule 工作集（S6）。
 
-**建议切入点（硬约束）**：先打通 **单层 MLP 混合执行**（RMSNorm + Gated-Linear 融合进 PK；**PagedAttention 仍留 vLLM**），再逐步吞入更多 Layer / Attention。参照脚手架：`demo/qwen3/demo.py`、`demo/qwen3/demo_chat.py`（`silu_mul_linear_with_residual_layer`）、`demo/maca/qwen3_pk_*.py`、`demo/maca/qwen_kernel_utils.py`（µGraph `superoptimize_mlp_*`）。
+**建议切入点（硬约束）**：S1 交付 **第一个可被 RF 选中的 MLP FusionCapsule + 最小 `step` 钩子**（RMSNorm + Gated-Linear；**PagedAttention 仍留引擎**）。脚手架可复用实现细节：`demo/qwen3/demo_chat.py`、`demo/maca/qwen3_pk_*.py`、`qwen_kernel_utils.superoptimize_mlp_*`——但叙事与 API 外壳须挂在 FusionCapsule / RF 下，不得宣传为 MegaKernel/MPK。
 
 ### 核心原则
 
 | 原则 | 含义 |
 |------|------|
-| **Serving 优先于离线 demo** | 新 Loop 须闭合 [MPK Serving 能力矩阵](#mpk-serving-能力矩阵对标-vllmsglang) 的一行；纯 offline PK demo 美化 **降级** |
-| **混合执行先于全图独占** | 未打通「vLLM 调度 + PK MLP 块」前，禁止一上来全模型 MegaKernel 替换 |
-| **先测后优** | 没有正确性与可复现 serving smoke，不改 PK task / meta ABI / SM 配额 |
-| **同后端评估** | Search/profile/execute 与 serving 插件须在同一 `backend`（cuda 或 maca）完成 |
-| **瓶颈驱动** | 优先：层覆盖钩子 → meta/`block_table` 桥 → SM 协同 → Radix skip；再谈微基准 |
-| **最小改动** | 每轮只解决本轮策略选定的 1～2 个瓶颈；复用现有 PK/µGraph API，禁止平行重写一套 runtime |
-| **验证通过再沉淀** | serving smoke / 契约 pytest 通过后再更新 `AGENTS.md`、serving 文档、kernel 契约 |
-| **框架对齐** | CUDA `PersistentKernel` + `demo/qwen3` 为 PK 金标准；MACA 为 MetaX/vLLM-metax 支撑轨；YiRage 价值在**可嵌入的大块融合**，而非孤立 beat cuBLAS |
-| **执行前价值闸门** | 每轮对照 [Serving 分阶路线](#serving-loop-分阶路线-s0sn) 与四轮自问；性能向须有 latency/throughput 对照基线 |
-| **行为性价比** | **每一步**过 [Agent 行为性价比审查](#agent-行为性价比审查每步必做)；禁止 stub 插件 / torch 回退冒充 MPK 嵌入 |
+| **Serving / RF 优先于离线 demo** | 新 Loop 须闭合 [RuntimeFusion 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 的一行；纯 offline demo 美化 **降级** |
+| **弹性融合先于全图独占** | 未打通「引擎调度 + MLP Capsule + `RF.step`」前，禁止全模型单一内核替换 |
+| **融合身份 ≠ 调度权** | Capsule/RF 拥有融合；vLLM/SGLang 拥有批处理与 KV 池 |
+| **先测后优** | 没有正确性与可复现 serving/RF smoke，不改 Capsule ABI / meta / SM 配额 |
+| **同后端评估** | Search/profile/execute 与 serving 插件须在同一 `backend` 完成 |
+| **瓶颈驱动** | 优先：Capsule + `step` 钩子 → 层覆盖 → meta/`block_table` → SM → Radix |
+| **最小改动** | 每轮 1～2 个瓶颈；复用现有搜索/执行实现作 legacy backend；禁止平行重写 runtime |
+| **文档先于符号大挪移** | S0/S1 完成品牌与概念切断；`MuGraphStore` 等改名另开 Chore |
+| **验证通过再沉淀** | RF/serving smoke 或契约通过后再更新 `AGENTS.md` |
+| **执行前价值闸门** | 每轮对照 [Serving 分阶](#serving-loop-分阶路线-s0sn) 与四轮自问 |
+| **行为性价比** | 禁止 stub 插件 / torch 回退冒充 RuntimeFusion |
 
 ### Agent 行为性价比审查（每步必做）
 
-Cloud Agent 在**每一步**行动前（读文件、改代码、跑命令、开 PR、引入 env 开关）须自问并写入 PR / 本轮笔记（可 1 句话）：
+Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 1 句话）：
 
 | 维度 | 问题 |
 |------|------|
 | **目标对齐** | 本步是否直接闭合当前 Serving 策略卡片（S{n}）的主瓶颈？ |
-| **正式 vs 回退** | 是否在绕开根因（stub 插件、整层 torch 回退、skip 编译/评测假装通过）？**禁止**用回退代替 PK compile / meta 注入 / 真 serving forward，除非用户**显式**要求临时烟雾 |
-| **证据** | 本步产出是否有可复现证据（vLLM/SGLang smoke 日志、pytest、latency JSON、MetaX VM 日志）？ |
-| **机会成本** | 同时间是否更应打通层覆盖钩子、`block_table` 桥、SM 配额，而非 offline demo 抛光？ |
+| **正式 vs 回退** | 是否在绕开根因（stub 插件、整层 torch 回退、用「烤死 MegaKernel」冒充 RF）？ |
+| **证据** | 是否有 vLLM/SGLang 或 RF smoke / pytest / latency JSON / MetaX 日志？ |
+| **机会成本** | 是否更应打通 Capsule/`step`/meta/SM，而非 offline 抛光或 legacy 大改名？ |
 
 **结论为「性价比不足」或「属于回退」时**：停止落地，回到策略层重选 backlog；不得为凑 Loop 合并 PR。
 
 ### 执行前闸门：框架目标与优化价值（每轮必做）
 
-**在勾选检查清单第 2 步「策略」、写代码之前**，Agent 必须先完成本闸门；若结论为「价值不足」，改选 backlog 中更高优先级项，**不得**为凑 Loop 而做低价值微优化。
+**在勾选检查清单第 2 步「策略」、写代码之前**，Agent 必须先完成本闸门；若结论为「价值不足」，改选更高优先级 backlog。
 
-#### YiRage 框架目标（Serving 主轨 + MACA 支撑轨）
+#### YiRage 框架目标（RuntimeFusion 主轨 + MACA 支撑轨）
 
-| 层级 | 工业 / CUDA 参考 | YiRage 对应 | 本阶段重点 |
-|------|------------------|-------------|------------|
-| **Serving 调度** | vLLM executor + PagedAttention；SGLang RadixAttention | **尚未嵌入**（S2+）；元数据经 `meta_tensors` 注入 | 层覆盖钩子、混合 forward |
-| **大块融合** | Mirage MPK MegaKernel；`demo/qwen3/demo.py --use-yirage` | `PersistentKernel`：`rmsnorm_linear_layer` / `silu_mul_linear_with_residual_layer` / `paged_attention_layer` | S1 抽出可复用 MLP 块 |
-| **图级 µGraph** | TorchInductor / 搜索融合 | `superoptimize` + TB customized；`qwen_kernel_utils.superoptimize_mlp_*` | 可作 CustomOp 过渡，**不**替代最终 PK 嵌入 |
-| **原语** | cuBLAS / mcPytorch matmul | `.cu` / `.maca` kernel；**不**重造孤立 GEMM 微内核 | 仅当编译失败阻塞 Serving 时修 |
-| **执行** | CUDA stream；MACA warp=64 | `compile()` → nvcc/mxcc；`num_workers` SM 配额 | S5 SM 协同 |
-| **验证** | vLLM generate 数值 + 吞吐；fingerprint | serving smoke + PK vs eager；MACA 真卡 | 正确性先于吞吐 |
+| 层级 | 工业参考 | YiRage 对应 | 本阶段重点 |
+|------|----------|-------------|------------|
+| **Serving 调度** | vLLM / SGLang | 引擎侧；RF 只消费 meta | S2+ 层覆盖 |
+| **RuntimeFusion** | Dynamic fusion runtime | `RF.step(meta) → Capsule*` | S1 最小钩子 |
+| **FusionCapsule** | Fused block | MLP Capsule（首刀）；后续 decoder 片段 | S1 |
+| **FusionPlan** | Execution plan | `superoptimize` 产物 + cache（legacy: mugraph） | 搜索/复用 |
+| **Device / Tile Graph** | 设备与 tile 抽象 | 代码暂留 KN/TB；文档用新名 | 实现层 |
+| **原语** | cuBLAS / mcPytorch | `.cu` / `.maca`；不重造孤立 GEMM | 仅阻塞时修 |
+| **验证** | generate 数值 + 吞吐 | Capsule vs eager；RF smoke | 正确性优先 |
 
-**借鉴要点（非照搬实现）**：
+**借鉴要点**：
 
-- **调度在外、融合在内**：vLLM/SGLang 继续拥有连续批处理与 KV 池；YiRage 只吃约定好的大块 compute。
-- **原语下沉、融合上浮**：孤立 GEMM 不争库；价值在 RMSNorm+MLP（再往后 Attention tile）融合。
-- **meta 打针**：`block_tables` / `slot_mapping` / Radix hit mask → 预绑定 meta buffer，每步更新后再 `ypk()`。
-- **SM 非全占**：`num_workers` 必须可配置留余量；辅助算子不得与全卡 PK 死锁。
-- **正确性优先**：先 hybrid numerical parity，再 latency；再 throughput under batching。
+- **调度在外、融合在内**：引擎拥有批处理与 KV；RF 只编排约定 Capsule。
+- **Plan ≠ 死刑**：FusionPlan 可缓存、可按 shape bucket 命中；本步可不选或降级。
+- **meta 打针**：`block_tables` / Radix hit / SM 预算 → RF.step。
+- **SM 非全占**：Capsule launch 预留辅助流。
+- **正确性优先**：先 Capsule/RF numerical parity，再 latency/throughput。
 
 #### 四轮自问（策略卡片必填）
 
-在 PR 描述或本轮笔记中**用 1～2 句话**回答：
+1. **层级**：Serving/RF（Capsule/`step`/meta/SM）还是支撑轨？若仅为 beat 孤立 GEMM、offline 抛光、或 Mirage 式整网烤核 → **拒绝**。
+2. **RF 对标**：闭合 [RuntimeFusion 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 哪一行？是否仍在用 legacy MPK/µGraph 对外叙事？
+3. **路径**：Capsule 边界是否清晰？`RF.step` 是否消费本轮所需 meta？SM 是否预留？
+4. **收益**：Capsule 通路 / 层覆盖 / KV 桥 / SM / Radix / e2e？性能向须写基线（eager 引擎 vs RF）。
+5. **验证入口**：真机或明确契约-only？不得虚报 Serving 完成。
+6. **机会成本**：是否挤掉更高优先级的 Capsule/`step` backlog？
 
-1. **层级**：本轮是 Serving 嵌入（插件/层覆盖/meta 桥/SM）还是支撑轨（`.maca`/搜索）？若仅为 beat 孤立 GEMM 或 offline demo 抛光 → **拒绝或降级**。
-2. **Serving 对标**：闭合 [MPK Serving 能力矩阵](#mpk-serving-能力矩阵对标-vllmsglang) 哪一行？vLLM/SGLang 参照行为是什么？是否仍停留在「细粒度单算子替换」反模式？
-3. **路径**：PK 块边界是否清晰（MLP-only → decoder block → N-layer）？`meta_tensors` / `attach_input` 是否覆盖本轮所需调度字段？`num_workers` 是否预留辅助 SM？
-4. **收益**：预期收益 — 混合执行通路 / KV 桥 / SM 协同 / Radix skip / 端到端 latency？性能向须写明对照基线（eager vLLM vs hybrid）。
-5. **验证入口**：本轮「真机验证入口」是否已跑通（NVIDIA 或 MetaX）？若无 GPU，是否仅契约/文档（不得宣称 Serving parity）？
-6. **机会成本**：是否还有更高优先级 Serving backlog（无层覆盖钩子、无 `block_table` 桥）被本轮挤掉？
-
-**性能向轮次**在感知阶段额外跑（按后端选择）：
+**性能向轮次**（按后端）：
 
 ```bash
-# CUDA / vLLM hybrid（Serving 主轨）
+# CUDA / RF hybrid（主轨）
 export YIRAGE_BACKEND=cuda PYTHONPATH=.
-# 目标：pytest serving 契约 + demo/serving 或 vLLM entry smoke（S2+ 落地后）
+# S1+：Capsule / RF.step smoke；S2+：vLLM entry
 
-# MACA 支撑轨（仅当本轮触及 MACA kernel/PK）
+# MACA 支撑（仅触及 MACA 时）
 export MACA_PATH=/opt/maca
 export LD_LIBRARY_PATH=${MACA_PATH}/lib:${MACA_PATH}/mxgpu_llvm/lib:$LD_LIBRARY_PATH
 export YIRAGE_BACKEND=maca
 PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 ```
 
-若 Serving 混合通路尚未打通，**禁止**用 `maca_vs_pytorch` 微基准冒充本轮主收益。
+若 RF 混合通路未打通，**禁止**用 `maca_vs_pytorch` 冒充本轮主收益。
 
 ---
 
-## MPK Serving 闭环（主轨，2026-07-27）
+## RuntimeFusion 闭环（主轨，2026-07-27）
 
 ### Serving Loop 分阶路线（S0…Sn）
 
-| 阶段 | 目标 | 复用脚手架 | 验证门槛 | 状态 |
-|------|------|------------|----------|------|
-| **S0** | 重写 Agent 迭代北极星与本表；冻结「反模式」 | 本文档 | 文档评审合入 | **本轮** |
-| **S1** | 抽出 **可复用单层 MLP PK 块**（RMSNorm+SiLU-GLU+down residual）；standalone hybrid smoke（无 vLLM） | `demo_chat.py` fused MLP；`_append_maca_pk_decoder_layer` MLP 段；`superoptimize_mlp_*` | CUDA（或 MACA）数值 vs eager MLP；compile+launch exit 0 | 下一轮 |
-| **S2** | **vLLM 单层 MLP Override**：改 `models/qwen2.py`（或插件包装），Attention/PagedAttention 仍走 vLLM | S1 块 + HF weight attach map | 1 层 Qwen 小模型 generate 数值对齐；吞吐不崩溃 | backlog |
-| **S3** | 多一层 / 可配置「前 K 层 MLP 进 PK」混合 | S2 钩子 | K∈{1,2,4} smoke | backlog |
-| **S4** | **PagedAttention meta 桥**：`block_table`/`slot_mapping` → `paged_kv_indptr/indices/...`（或 C++ `PagedAttentionParams.block_table`） | `build_qwen3_pk_meta_tensors`；`pk_task_kernels.h` | 非连续 KV 下 PK attn 或 hybrid 正确 | backlog |
-| **S5** | **SM 协同**：可配置 `num_workers` 上限；文档化与 Sampler/NCCL 共驻；防死锁 | `get_configurations_from_gpu`；`PersistentKernel` workers | 混合图下 sampling 无 hang | backlog |
-| **S6** | **SGLang Radix**：cache-hit meta → TB 内 early-return / mask skip | S4 meta 机制 | 前缀命中时跳过重算且数值正确 | backlog |
-| **S7** | **N 层 Decoder Block / 全图 Override**：`forward` 跳过主循环，单次 MegaKernel；仍由引擎管理 KV 池与调度 | `demo/qwen3/demo.py` 全图；S4–S6 | e2e latency 优于纯 eager；吞吐可接受 | backlog |
+| 阶段 | 目标 | 复用脚手架（实现） | 验证门槛 | 状态 |
+|------|------|--------------------|----------|------|
+| **S0** | 北极星改为 FusionPlan / FusionCapsule / RF；Legacy 对照表；冻结反模式 | 本文档 | 文档评审合入 | **本轮** |
+| **S1** | **第一个可被 RF 选中的 MLP FusionCapsule** + **最小 `RF.step` 钩子**（standalone，可不挂全量 vLLM） | `demo_chat` MLP 段；pk utils MLP；`superoptimize_mlp_*` 作 Plan 来源之一 | Capsule vs eager MLP 数值；`step` 可选中/跳过该 Capsule | 下一轮 |
+| **S2** | vLLM 单层 MLP Override：模型循环内调 `RF.step`；Attention/Paged 仍走引擎 | S1 Capsule + HF attach map | 小模型 generate 数值对齐；吞吐不崩溃 | backlog |
+| **S3** | 前 K 层 MLP Capsule 可配置混合 | S2 | K∈{1,2,4} smoke | backlog |
+| **S4** | PagedAttention **meta 桥**（`block_table` → paged_kv_* 等） | legacy meta builders；C++ paged params | 非连续 KV 下正确 | backlog |
+| **S5** | **SM 预算**与 Sampler/NCCL 共驻 | worker 配额 API | 混合下 sampling 无 hang | backlog |
+| **S6** | SGLang **Radix**：hit meta → 跳过/收缩 Capsule | S4 meta | 前缀命中语义正确 | backlog |
+| **S7** | 多 Capsule / 大段 Decoder Override（仍非「整网独占死刑」）；引擎管 KV 与调度 | S1–S6 | e2e latency/吞吐可接受 | backlog |
 
 **明确不做什么（反模式）**：
 
-- 只在 `vllm/model_executor/layers/attention.py` 里塞一个 YiRage Attention 算子，却不解决调度/meta/SM。
+- 对外宣称 YiRage 是 Mirage MPK / µGraph 复刻或对齐。
+- 只换 Attention 单算子却不解决 RF/`step`/meta/SM。
+- 把 S1 做成「不可选择的整层 MegaKernel 独占」，无 `step` 钩子。
 - 未打通 S2 就宣称「已支持 vLLM」。
-- 用整网 `torch` 回退或 CPU interpreter 冒充 MegaKernel 嵌入。
-- 将旧 MACA R27「offline latency 归档」提升为高于 S1–S2 的优先级。
+- 用整网 torch 回退冒充 RuntimeFusion。
+- 在 S1 阶段做 `MuGraphStore` 等大规模符号重命名 Chore。
+- 将旧 R27 offline latency 归档置于 S1–S2 之上。
 
-### MPK Serving 能力矩阵（对标 vLLM/SGLang）
+### RuntimeFusion 能力矩阵（对标 vLLM/SGLang）
 
 | 能力域 | 工业参照 | YiRage 落点（现状） | 真机验证入口（目标） | tier |
 |--------|----------|--------------------|---------------------|------|
-| **PK MLP 块 API** | Mirage MPK 层构建 | `rmsnorm_linear_layer` + `silu_mul_linear_with_residual_layer`；MACA 对齐构图 | `demo/qwen3/demo_chat.py`；抽出后 `tests/.../test_pk_mlp_block*` | partial |
-| **µGraph MLP 过渡** | vLLM CustomOp | `qwen_kernel_utils.superoptimize_mlp_*` | `qwen_inference_demo` / modeling maca | partial（过渡） |
-| **Model 层 Override** | `vllm/.../models/qwen2.py` 循环 | **无** | S2 smoke：`vllm` + YiRage MLP | **gap** |
-| **meta / KV 桥** | vLLM `block_tables` | YPK `paged_kv_*` indptr；C++ `block_table` 未接 Python | S4 adapter unit + e2e | **gap** |
-| **SM 配额共驻** | 引擎多流 | `num_workers` 可配但无 serving 契约 | S5 hang/stress | **gap** |
+| **FusionPlan 搜索/缓存** | Execution plan + cache | `superoptimize` + store（legacy mugraph API） | 现有 superopt/bench；文档称 FusionPlan | partial |
+| **MLP FusionCapsule** | Fused MLP block | 构图能力散落在 demo_chat / pk utils；**无 RF 外壳** | S1：`tests/.../test_fusion_capsule_mlp*` + smoke | **gap** |
+| **RF.step 钩子** | Dynamic fusion runtime | **无** | S1 standalone step；S2 挂引擎 | **gap** |
+| **Model 层 Override** | `vllm/.../models/qwen2.py` | **无** | S2 vLLM + Capsule | **gap** |
+| **meta / KV 桥** | `block_tables` | legacy `paged_kv_*`；未接 RF | S4 | **gap** |
+| **SM 配额共驻** | 引擎多流 | worker 可配、无 RF 契约 | S5 | **gap** |
 | **Radix skip** | SGLang RadixAttention | 无 | S6 | **gap** |
-| **全图 MegaKernel serving** | Mirage MPK + 引擎调度 | 离线 `demo/qwen3/demo.py --use-yirage` | S7 | partial（offline only） |
-| **MACA / vLLM-metax** | MetaX vLLM fork | `maca_pk_backend` + 离线 scaffold | MetaX：S2+ 的 metax 镜像 | backlog |
+| **多 Capsule 编排** | 大段 fused blocks | 离线全图 demo 仅作实现参考 | S7 | backlog |
+| **MACA / vLLM-metax** | MetaX vLLM fork | maca pk backend + scaffold | MetaX 上 S2+ | backlog |
 
-### 现有脚手架 → Serving 映射
+### 现有脚手架 → RuntimeFusion 映射
 
-| 脚手架 | 路径 | Serving 用途 |
-|--------|------|--------------|
-| 全图离线 PK | `demo/qwen3/demo.py` | S7 参照；**不是** S1 直接拷贝目标 |
-| 融合 MLP 构图 | `demo/qwen3/demo_chat.py` | S1 首选 API 形状 |
-| MACA PK 层追加 | `demo/maca/qwen3_pk_utils._append_maca_pk_decoder_layer` | 拆出 MLP 段作跨后端模板 |
-| HF attach | `demo/maca/qwen3_pk_hf_utils.maca_pk_hf_weight_attach_map` | S2 权重名对齐 |
-| meta 缓冲 | `build_qwen3_pk_meta_tensors` / `prepare_maca_pk_*_meta` | S4 扩展字段，而非推倒重来 |
-| µGraph MLP | `demo/maca/qwen_kernel_utils.py` | S1/S2 **过渡** CustomOp；正式目标仍是 PK 块 |
-| C++ paged params | `include/persistent_kernel/pk_task_kernels.h` `PagedAttentionParams` | S4 接线候选 |
-| MetaX 指针 | `maca_backend.cc` → vLLM-metax | S2+ MACA 分叉验证 |
+| 脚手架（实现） | 路径 | RF 用途 |
+|----------------|------|---------|
+| 融合 MLP 构图 | `demo/qwen3/demo_chat.py` | S1 Capsule 形状参考 |
+| 层追加 MLP 段 | `demo/maca/qwen3_pk_utils._append_maca_pk_decoder_layer` | 跨后端裁 Capsule 模板 |
+| HF attach | `qwen3_pk_hf_utils.maca_pk_hf_weight_attach_map` | S2 权重名 |
+| Plan 搜索 MLP | `qwen_kernel_utils.superoptimize_mlp_*` | FusionPlan 来源之一（过渡） |
+| meta 缓冲 | `build_qwen3_pk_meta_tensors` 等 | S4 扩展，挂到 RF.step |
+| 离线全图 demo | `demo/qwen3/demo.py` | **实现参考 only**；非 S1 产品目标 |
+| C++ paged params | `pk_task_kernels.h` | S4 |
+| Plan 持久化 | `MuGraphStore` / `~/.yirage/mugraphs/` | legacy FusionPlan 存储；改名 Chore 另开 |
 
 ### Serving 感知 / 策略 / 验证（主轨）
 
-**感知**：读本表 + `python/yirage/persistent_kernel/kernel.py` API；确认无 in-tree vLLM 插件；列出 S{n} gap；跑现有 PK MLP 相关 smoke（若有）。
+**感知**：读本表 + Legacy 对照；确认无 in-tree RF/`serving` 插件；列 S{n} gap。
 
-**策略**：每轮只闭合上表 **1 行**；优先 S1→S2→S4（KV）→S5（SM），Radix/全图垫后。
+**策略**：每轮闭合矩阵 **1 行**；优先 S1（Capsule+`step`）→ S2 → S4 → S5；Radix/多 Capsule 垫后。
 
 **落地落点**：
 
-- `python/yirage/persistent_kernel/`（块构建 helper、SM 配额 API）
-- 新建轻量 `python/yirage/serving/` 或 `demo/serving/`（**插件与适配器**；禁止巨型 orchestrator）
-- 可选外部 `vllm` 插件包目录（若引入，须可在无全量 vLLM 源码树时做契约测试）
-- MACA 支撑：仅当 S1+ 需要 mxcc/PK 任务在 C500 上可编译时改 `.maca` / `maca_pk_*`
+- 新建薄 API 外壳：`python/yirage/serving/` 或等价（`FusionCapsule`、`RuntimeFusion.step`）；内部可委托 legacy 构图/launch
+- 复用 `persistent_kernel/`、搜索缓存作 backend，**不**在叙事上称 MPK
+- MACA：仅当 Capsule 在 C500 需 mxcc 时改支撑轨
 
-**验证**：契约 pytest（可无卡）+ NVIDIA 或 MetaX 上 hybrid/serving smoke；**不以** Cloud CPU 绿宣称 Serving 完成。
+**验证**：契约 pytest +（有卡时）Capsule/RF smoke；Cloud CPU 绿不能宣称 RF/Serving 完成。
 
 ---
 
 ### CUDA 对标：优化目标与能力矩阵
 
-> **支撑轨**：下列矩阵服务 MetaX MACA ↔ CUDA **能力/语义/融合 parity**，以及离线 PK 回归。主迭代缺口请优先查 [MPK Serving 能力矩阵](#mpk-serving-能力矩阵对标-vllmsglang)。仅当 Serving 被 MACA 编译/ABI 阻塞时，本轮才选本表 gap。
+> **支撑轨**：下列矩阵服务 MetaX MACA ↔ CUDA **能力/语义/融合 parity**，以及离线 PK 回归。主迭代缺口请优先查 [RuntimeFusion 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang)。仅当 Serving 被 MACA 编译/ABI 阻塞时，本轮才选本表 gap。
 
 MACA 支撑闭环的目标：在 MetaX 真卡上对齐 CUDA 后端能力边界；性能基线为同机 mcPytorch；功能完备性以 CUDA 正式路径为金标准。
 
@@ -206,7 +236,7 @@ MACA 支撑闭环的目标：在 MetaX 真卡上对齐 CUDA 后端能力边界�
 | **搜索配置** | `get_cuda_search_config()` / CUDA `GeneratorConfig` | `get_maca_search_config()`、`maca_strategy.cc` | `demo/demo_maca_optimization.py`；`pytest -k maca` |
 | **KN 原语 kernel** | `src/kernel/cuda/*.cu` | `src/kernel/maca/*.maca`（matmul、elementwise、reduction…） | `benchmark/maca_native_benchmark.py` |
 | **TB customized / 融合** | customized CUDA kernel | `customized_kernel.maca` + TB interpreter 回退 | `maca_superopt_test.py`；`maca_vs_pytorch.py` |
-| **RMSNorm + matmul 融合** | CUDA fused µGraph | 同构图 `backend=maca` superoptimize | `maca_vs_pytorch.py`（rms  workload） |
+| **RMSNorm + matmul 融合** | CUDA fused FusionPlan | 同构图 `backend=maca` superoptimize | `maca_vs_pytorch.py`（rms workload） |
 | **Attention / softmax tile** | CUDA attention kernel 路径 | `attention_kernel.maca`、`softmax_kernel.maca` | `demo/maca/attention_smoke.py --inspect-only`（Cloud）；MetaX `--quick` superoptimize |
 | **Persistent kernel** | CUDA PK backend | `maca_pk_backend.cc` + `demo/maca/qwen3_persistent_kernel_demo.py` | `--compile-plan`/`--compile-inspect`（Cloud）；MetaX `--compile-only` minimal embed + `--quick` |
 | **Verifier** | CUDA fingerprint | MACA GPU fingerprint | `superoptimize(backend="maca")` 无 abort |
@@ -251,7 +281,7 @@ MACA 支撑闭环的目标：在 MetaX 真卡上对齐 CUDA 后端能力边界�
 | **Qwen3 PK** | `demo/qwen3/demo.py --use-yirage` | `demo/maca/qwen3_persistent_kernel_demo.py`（PK runtime smoke；`PersistentKernel.compile()` mxcc when `YIRAGE_BACKEND=maca`） |
 | **真卡验证** | NVIDIA GPU | **MetaX VM** `--quick` smoke；`tests/integration/test_maca_qwen_inference_demo.py` |
 
-**尚未对标（backlog）**：`demo/qwen3/demo.py --use-yirage` 全量多 layer task-graph e2e on MetaX（R17–R26 已闭合 scaffold/runtime/generation；**旧 R27 latency 归档降为支撑**）。**主轨改为** Serving S1–S7（MLP 块 → vLLM override → KV/SM/Radix → 全图）。
+**尚未对标（backlog）**：`demo/qwen3/demo.py --use-yirage` 全量多 layer task-graph e2e on MetaX（R17–R26 已闭合 scaffold/runtime/generation；**旧 R27 latency 归档降为支撑**）。**主轨改为** RuntimeFusion S1–S7（MLP FusionCapsule + RF.step → vLLM override → KV/SM/Radix → 多 Capsule）。
 
 
 #### 对齐策略（每轮策略层）
@@ -267,7 +297,7 @@ MACA 支撑闭环的目标：在 MetaX 真卡上对齐 CUDA 后端能力边界�
 | 检查类型 | 手段 | 适用场景 | 运行环境 |
 |----------|------|----------|----------|
 | **配置契约** | `pytest tests/python/test_maca_config.py`、`test_backends.py -k maca` | mxcc 命令、smem 上限、search quick | 可无卡；**合并前仍须真卡 smoke** |
-| **编译 + 搜索 smoke** | `demo/maca_superopt_test.py` | transpiler→mxcc、µGraph 编译/profile | **MetaX 真卡 VM** |
+| **编译 + 搜索 smoke** | `demo/maca_superopt_test.py` | transpiler→mxcc、FusionPlan 编译/profile | **MetaX 真卡 VM** |
 | **设备 + search 感知** | `demo/demo_maca_optimization.py` | SDK、GPU 名、grid/block 约束 | **MetaX 真卡 VM** |
 | **融合性能** | `benchmark/maca_vs_pytorch.py`（`--quick` 日常 / 全量 nightly） | 融合 vs mcPytorch；JSON speedup | **MetaX 真卡 VM** |
 | **原语 kernel** | `benchmark/maca_native_benchmark.py` | `.maca` 孤立 kernel | **MetaX 真卡 VM** |
@@ -301,22 +331,22 @@ flowchart LR
 
 #### 第 1 层：感知（Perceive）— 我们在哪？
 
-**目标**：弄清 **Serving 嵌入缺口**（层覆盖、meta/KV 桥、SM、Radix）、现有 PK/µGraph 脚手架可复用面；以及（支撑）MACA↔CUDA parity / mxcc 覆盖。
+**目标**：弄清 **RuntimeFusion 嵌入缺口**（Capsule/`step`、层覆盖、meta/KV、SM、Radix）、FusionPlan 可复用面；以及（支撑）MACA↔CUDA parity。
 
 **典型动作**：
 
-- 读 [MPK Serving 闭环](#mpk-serving-闭环主轨2026-07-27) + [docs/HARDWARE_OPTIMIZATION.md](docs/HARDWARE_OPTIMIZATION.md)；对照 `demo/qwen3/demo.py` / `demo_chat.py` / `demo/maca/qwen3_pk_*.py`
+- 读 [RuntimeFusion 闭环](#runtimefusion-闭环主轨2026-07-27) + [Legacy 对照](#概念对照legacy--yirage-标准) + [docs/HARDWARE_OPTIMIZATION.md](docs/HARDWARE_OPTIMIZATION.md)；对照 `demo_chat.py` / `qwen3_pk_*.py`（实现参考）
 - 确认本轮后端与硬件（NVIDIA 或 MetaX）
-- Serving gap 扫描：是否已有 `python/yirage/serving` / vLLM 插件？`PagedAttentionParams.block_table` 是否已接 Python？
+- RF gap 扫描：是否已有 `python/yirage/serving` / `RF.step` / FusionCapsule API？
 - （支撑）CUDA↔MACA kernel/search diff、`demo_maca_optimization`、`maca_vs_pytorch --quick`
 
-**产出**：简短快照 — **Serving S{n} gap**、可复用 API 列表、（可选）MACA 编译/parity 列表。
+**产出**：简短快照 — **Serving S{n} gap**、可复用实现列表、（可选）MACA 编译/parity 列表。
 
 ---
 
 #### 第 2 层：策略（Strategy）— 下一步改什么？
 
-**目标**：按 Serving 分阶排序，选定**单一**主攻（默认：S1 MLP 块 → S2 vLLM override）。
+**目标**：按 Serving 分阶排序，选定**单一**主攻（默认：S1 MLP FusionCapsule + RF.step → S2 vLLM override）。
 
 **前置条件**：已完成上文 [执行前闸门](#执行前闸门框架目标与优化价值每轮必做) 的四轮自问。
 
@@ -324,15 +354,16 @@ flowchart LR
 
 | 信号 | 优先策略 |
 |------|----------|
-| **无 MLP PK 块可复用 API** | **S1**：从 `demo_chat` / `_append_maca_pk_decoder_layer` 抽出 helper + smoke |
-| **有块、无 vLLM 层覆盖** | **S2**：`models/qwen2.py`（或插件）单层 MLP override；Attention 留引擎 |
-| **混合通、KV 错/非连续失败** | **S4**：`block_table` → `paged_kv_*` adapter |
-| **混合通、Sampler/NCCL hang** | **S5**：降低 `num_workers`、文档化 SM 预算 |
-| **SGLang 前缀缓存语义错** | **S6**：Radix hit meta + TB skip |
+| **无 MLP FusionCapsule / 无 RF.step** | **S1**：Capsule + 最小 step 钩子（委托现有构图实现） |
+| **有 Capsule、无 vLLM 层覆盖** | **S2**：`models/qwen2.py`（或插件）调 RF.step；Attention 留引擎 |
+| **混合通、KV 错/非连续失败** | **S4**：`block_table` → paged_kv_* adapter |
+| **混合通、Sampler/NCCL hang** | **S5**：SM 预算 |
+| **SGLang 前缀缓存语义错** | **S6**：Radix hit meta + Capsule 收缩/跳过 |
+| **对外仍写 Mirage/MPK/µGraph 身份** | 改文档/API 外壳；符号 Chore 另开 |
 | **CUDA 有、MACA 无**且阻塞 Serving/MetaX | 支撑轨：补 `.maca` / config / smoke |
-| `mxcc` 编译失败阻塞 PK | 修 kernel / cmake / shims |
-| 仅有 CPU pytest 绿、无 GPU serving smoke | **阻塞 Serving 完成宣称** |
-| 想做 offline latency 归档（旧 R27） | **降级**；仅当 S1+ 需要基线时做 |
+| `mxcc` 编译失败阻塞 Capsule | 修 kernel / cmake / shims |
+| 仅有 CPU pytest 绿、无 GPU RF smoke | **阻塞 Serving 完成宣称** |
+| 想做 offline latency 归档（旧 R27）或 mugraph 大改名 | **降级**；不挡 S1 |
 
 **产出**：本轮「策略卡片」— 1 句话目标（含 S{n}）、触及文件、预期验证命令。
 
@@ -502,9 +533,9 @@ pytest tests/python/test_maca_config.py -v
 
 ```
 [ ] 0. 闸门：策略卡片（含 Serving S{n} + 真机验证）+ [行为性价比审查](#agent-行为性价比审查每步必做)
-[ ] 1. 感知：Serving 矩阵 gap、PK/µGraph 可复用面；（若触及 MACA）mx-smi / demo_maca_*
-[ ] 2. 策略：只选 1 个 Serving 阶段（默认 S1→S2→S4…）；拒绝单 Attention 算子替换反模式与回退冒充
-[ ] 3. 落地：最小 patch；优先 persistent_kernel / serving 适配 / meta 桥；每步过行为性价比
+[ ] 1. 感知：RF 矩阵 gap、FusionPlan/Capsule 可复用面、Legacy 对照；（若触及 MACA）mx-smi / demo_maca_*
+[ ] 2. 策略：只选 1 个 Serving 阶段（默认 S1 Capsule+step → S2→S4…）；拒绝 Mirage/MPK 叙事与单 Attention 替换
+[ ] 3. 落地：最小 patch；优先 `serving/` RF 外壳 / Capsule / meta 桥；legacy 仅作委托；每步过行为性价比
 [ ] 4. 验证：对应 S{n} 入口 + 契约 pytest；触及 MACA 则 MetaX 相关入口
 [ ] 5. 开 PR：push 分支 cursor/...-c4c0（或仓库约定后缀），base=main；PR 含 S{n} 与验证摘要
 [ ] 6. 自动合并：验证闸门通过 → merge
@@ -518,9 +549,9 @@ pytest tests/python/test_maca_config.py -v
 
 | 层 | 工具 / 路径 |
 |----|-------------|
-| 感知 | [Serving 矩阵](#mpk-serving-能力矩阵对标-vllmsglang)、`demo/qwen3/demo.py` / `demo_chat.py`、`demo/maca/qwen3_pk_*.py`、`persistent_kernel/kernel.py` |
-| 策略 | Serving S0–S7 分阶、[CUDA 支撑矩阵](#cuda-对标优化目标与能力矩阵)、`get_maca_search_config()` |
-| 落地 | `python/yirage/persistent_kernel/`、拟议 `python/yirage/serving/` / `demo/serving/`、MACA `.maca` / `maca_pk_backend.cc` |
+| 感知 | [RF 矩阵](#runtimefusion-能力矩阵对标-vllmsglang)、[Legacy 对照](#概念对照legacy--yirage-标准)、`demo_chat.py`、`qwen3_pk_*.py` |
+| 策略 | Serving S0–S7（RF）、[CUDA 支撑矩阵](#cuda-对标优化目标与能力矩阵) |
+| 落地 | 拟议 `python/yirage/serving/`（RF/Capsule API）、legacy `persistent_kernel/` / mugraph store 委托、MACA 支撑 |
 | 验证 | S{n} smoke；`test_maca_*`；`qwen3_persistent_kernel_demo` flags |
 | 进化 | **`AGENTS.md`（Serving + MACA 笔记）**, `docs/maca_*.md`, `docs/HARDWARE_OPTIMIZATION.md` |
 
@@ -528,7 +559,7 @@ pytest tests/python/test_maca_config.py -v
 
 > **维护说明**：每合并一轮主轨（Serving）或支撑轨（MACA）PR，在此追加 3～5 行。CPU 历史见 [归档](#历史归档cpu-无限优化闭环)。
 
-- **Serving Loop S0（2026-07-27，迭代目标重写）**：闸门：文档/协议层。将 Agent 北极星从「MACA offline CUDA 对标 + 旧 R27 latency」切换为 **MPK 算子化嵌入 vLLM/SGLang**（Block/Layer Override；混合执行先于全图）。新增 [核心冲突](#核心冲突与设计抉择必读)、[Serving 分阶 S0–S7](#serving-loop-分阶路线-s0sn)、[Serving 能力矩阵](#mpk-serving-能力矩阵对标-vllmsglang)；MACA R0–R26 降为支撑轨。验证：文档审阅。下一轮：**S1** — 抽出可复用单层 MLP PK 块 + standalone hybrid smoke（PagedAttention 仍不进 PK）。
+- **Serving Loop S0（2026-07-27，RuntimeFusion 概念定稿）**：闸门：文档/协议层。北极星定为 **FusionPlan / FusionCapsule / RuntimeFusion（RF）**；写入 [Legacy 对照表](#概念对照legacy--yirage-标准)；明确反对 Mirage 式编译霸权与 MPK/µGraph 对外身份。MACA R0–R26 与旧 R27 为支撑。验证：文档审阅（PR #153）。下一轮：**S1** — 第一个可被 RF 选中的 **MLP FusionCapsule** + 最小 **`RF.step` 钩子**（PagedAttention 仍留引擎；不做符号大改名）。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
@@ -562,7 +593,7 @@ pytest tests/python/test_maca_config.py -v
 - **协议（2026-07-07）**：MACA 改动须在 MetaX GPU VM 验证通过后合并；禁止用 CPU cert/loop-close 替代。
 - **协议（2026-07-08，CUDA 对标）**：MACA 算子/融合/搜索须逐项对齐 CUDA 后端能力；每项能力须有 MetaX **真卡**验证入口；性能同后端对 mcPytorch，**功能**以 CUDA 正式路径为参照（**支撑轨**）。
 - **协议（框架对齐）**：每轮策略前必过执行前闸门 — 融合上浮、原语对齐库，64-thread warp（MACA）。
-- **协议（2026-07-27，MPK Serving）**：主轨为 vLLM/SGLang **Block/Layer Override**；禁止单 Attention 算子替换冒充完成；S1 混合 MLP 先于全图 MegaKernel；Serving 完成宣称须真机 smoke，不以 Cloud CPU 绿代替。
+- **协议（2026-07-27，RuntimeFusion）**：主轨为 **FusionPlan → FusionCapsule → RF.step** 嵌入 vLLM/SGLang；融合身份归 Capsule/RF，调度权归引擎；禁止 Mirage/MPK/µGraph 对外叙事与单 Attention 替换冒充完成；S1=可选择的 MLP Capsule+`step`，而非烤死 MegaKernel；完成宣称须真机 smoke。
 
 ---
 
@@ -873,17 +904,17 @@ pytest tests/python/test_maca_config.py -v
 
 ## Cursor Cloud specific instructions（Serving 主轨 + MetaX MACA 支撑）
 
-YiRage is a **library**（Python + native C++/Cython + PK MegaKernel + `.maca` GPU kernels），不是长驻 Web 应用。主迭代见 [MPK Serving 闭环](#mpk-serving-闭环主轨2026-07-27)。
+YiRage is a **library**（Python + native C++/Cython + RuntimeFusion / FusionPlan 实现 + `.maca` kernels），不是长驻 Web 应用。主迭代见 [RuntimeFusion 闭环](#runtimefusion-闭环主轨2026-07-27)。
 
 ### 双环境模型
 
 | 环境 | 用途 | 后端 |
 |------|------|------|
-| **Cloud Agent CPU VM** | 编辑代码、契约单测、开 PR、Serving 适配层骨架 | `cpu` / 无卡 pytest |
-| **NVIDIA GPU**（团队机） | Serving S1+ PK MLP / vLLM hybrid smoke | `cuda` |
-| **MetaX GPU SSH VM** | MACA 构建、PK mxcc、支撑轨 bench | `maca` |
+| **Cloud Agent CPU VM** | 编辑代码、契约单测、开 PR、RF API 外壳 | `cpu` / 无卡 pytest |
+| **NVIDIA GPU**（团队机） | Serving S1+ FusionCapsule / RF.step / vLLM hybrid | `cuda` |
+| **MetaX GPU SSH VM** | MACA 构建、支撑轨 bench | `maca` |
 
-**合并闸门**：Serving 功能宣称须对应 GPU smoke；MACA kernel/search 改动须 MetaX 验证；Cloud CPU 绿 **不能** 替代。
+**合并闸门**：Serving/RF 功能宣称须对应 GPU smoke；MACA kernel/search 改动须 MetaX 验证；Cloud CPU 绿 **不能** 替代。
 
 ### MetaX GPU VM 一次性设置
 
@@ -945,11 +976,11 @@ Rust helpers（若链接失败）：
 - **64-thread warp**：`MACA_WARP_SIZE=64`；`block_dims` 探索须为 64 倍数（`get_maca_search_config()`）。
 - **`mxcc` 编译**：改 `src/kernel/maca/*.maca` 后需重建 `yirage_runtime` 或 `pip install -e .`。
 - **SSH 用户名**：`root+<vm-id>@host`，非裸 `root@host`。
-- **MuGraph cache**：`superoptimize(..., use_persistent_cache=True)` 存 `~/.yirage/mugraphs/`；MACA 搜索耗时长，cache 可加速重复 shape。
-- **同后端优化**：Search/profile/execute 均 `backend="maca"`；见 [docs/HARDWARE_OPTIMIZATION.md](docs/HARDWARE_OPTIMIZATION.md)。
+- **FusionPlan cache（legacy 路径）**：`superoptimize(..., use_persistent_cache=True)` 现仍落在 `~/.yirage/mugraphs/`（`MuGraphStore`）；对外称 FusionPlan 缓存，符号改名 Chore 另开。
+- **同后端优化**：Search/profile/execute 均同一 `backend`；见 [docs/HARDWARE_OPTIMIZATION.md](docs/HARDWARE_OPTIMIZATION.md)。
 - **CPU 闭环归档**：`make test-cpu-cert` 等仍可用于 CPU 回归，但 **不是** Serving / MACA 合并闸门。
-- **Serving 反模式**：不要只换 vLLM Attention 算子；先做 S1 MLP 块 + S2 model 层 Override。
-- **旧 R27**：offline Qwen3 PK latency 归档已降级；勿自动开 R27 分支除非 Serving 明确依赖。
+- **Serving 反模式**：不要只换 Attention 算子，也不要宣传 Mirage/MPK/µGraph；先做 S1 MLP **FusionCapsule + RF.step**，再 S2 层 Override。
+- **旧 R27**：offline latency 归档已降级；勿自动开 R27 分支除非 RF 明确依赖。
 
 ### Running MACA demos
 
