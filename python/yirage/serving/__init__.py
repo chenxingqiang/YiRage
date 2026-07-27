@@ -42,7 +42,14 @@ from .sm_budget import (
     capsule_sm_cost,
     resolve_sm_worker_quota,
 )
-from .exec_backend import BACKEND_NUMPY_REF, BACKEND_TORCH, default_serving_backend, is_real_backend
+from .exec_backend import (
+    BACKEND_NUMPY_REF,
+    BACKEND_TORCH,
+    BACKEND_YIRAGE_CPU,
+    default_serving_backend,
+    is_real_backend,
+    is_yirage_backend,
+)
 from .torch_engine import TorchAttentionMeta, TorchDecoderLayer, TorchEngineModel
 from .torch_exec import (
     BenchResult,
@@ -62,6 +69,15 @@ from .layer_override import (
 from .mlp_capsule import MlpFusionCapsule, mlp_eager_numpy
 from .plan import FusionPlan
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
+from .yirage_exec import (
+    YirageServingMlpRunner,
+    bench_superoptimize_down_matmul,
+    build_gate_up_seed_graph,
+    build_mlp_down_seed_graph,
+    is_yirage_core_available,
+    require_yirage_core,
+    superoptimize_down_matmul_cpu,
+)
 
 __all__ = [
     "FusionPlan",
@@ -102,9 +118,18 @@ __all__ = [
     "DEFAULT_RESERVED_AUX_SMS",
     "DEFAULT_CAPSULE_SM_COST",
     "BACKEND_TORCH",
+    "BACKEND_YIRAGE_CPU",
     "BACKEND_NUMPY_REF",
     "default_serving_backend",
     "is_real_backend",
+    "is_yirage_backend",
+    "is_yirage_core_available",
+    "require_yirage_core",
+    "YirageServingMlpRunner",
+    "superoptimize_down_matmul_cpu",
+    "bench_superoptimize_down_matmul",
+    "build_gate_up_seed_graph",
+    "build_mlp_down_seed_graph",
     "TorchEngineModel",
     "TorchDecoderLayer",
     "TorchAttentionMeta",

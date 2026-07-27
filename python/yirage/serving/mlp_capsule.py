@@ -19,7 +19,12 @@ from typing import Any, Dict, Mapping, Optional, Tuple, Union
 import numpy as np
 
 from .capsule import FusionCapsule
-from .exec_backend import BACKEND_NUMPY_REF, BACKEND_TORCH, default_serving_backend
+from .exec_backend import (
+    BACKEND_NUMPY_REF,
+    BACKEND_TORCH,
+    BACKEND_YIRAGE_CPU,
+    default_serving_backend,
+)
 from .plan import FusionPlan
 from .torch_exec import mlp_torch, require_torch, to_numpy, to_torch
 
@@ -95,7 +100,27 @@ class MlpFusionCapsule(FusionCapsule):
         self.eps = float(eps)
         self._device = device
         backend = plan.backend
-        if backend == BACKEND_TORCH:
+        if backend == BACKEND_YIRAGE_CPU:
+            from .yirage_exec import YirageServingMlpRunner, require_yirage_core
+
+            require_yirage_core()
+            require_torch()
+            self._yirage_runner = YirageServingMlpRunner(
+                rms_weight=rms_weight,
+                w_gate=w_gate,
+                w_up=w_up,
+                w_down=w_down,
+                eps=eps,
+                device=device,
+                dtype_name=plan.dtype or "float32",
+                quick_superopt=True,
+            )
+            self._device = self._yirage_runner._device
+            self.rms_weight = self._yirage_runner.rms_weight
+            self.w_gate = self._yirage_runner.w_gate
+            self.w_up = self._yirage_runner.w_up
+            self.w_down = self._yirage_runner.w_down
+        elif backend == BACKEND_TORCH:
             require_torch()
             import torch
 
@@ -117,7 +142,7 @@ class MlpFusionCapsule(FusionCapsule):
         i = self.plan.intermediate_size
         if i is None:
             raise ValueError("MLP FusionPlan requires intermediate_size")
-        if self.plan.backend == BACKEND_TORCH:
+        if self.plan.backend in (BACKEND_TORCH, BACKEND_YIRAGE_CPU):
             import torch
 
             def _shape(t):
@@ -179,6 +204,14 @@ class MlpFusionCapsule(FusionCapsule):
         if "hidden" not in inputs:
             raise KeyError("MlpFusionCapsule.execute requires inputs['hidden']")
         hidden = inputs["hidden"]
+        if self.plan.backend == BACKEND_YIRAGE_CPU:
+            h = to_torch(hidden, device=self._device)
+            if h.ndim == 2 and h.shape[0] != 1:
+                raise ValueError(
+                    f"yirage_cpu MLP expects decode batch=1, got shape={tuple(h.shape)}"
+                )
+            out = self._yirage_runner.forward(h)
+            return {"hidden": out}
         if self.plan.backend == BACKEND_TORCH:
             h = to_torch(hidden, device=self._device)
             out = mlp_torch(

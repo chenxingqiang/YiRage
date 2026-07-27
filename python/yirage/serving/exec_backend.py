@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 BACKEND_TORCH = "torch"
+BACKEND_YIRAGE_CPU = "yirage_cpu"  # yirage.core seed + CPU superoptimize
 BACKEND_NUMPY_REF = "numpy_ref"  # reference only; not for --real cert
 
 
@@ -19,4 +20,8 @@ def default_serving_backend() -> str:
 
 
 def is_real_backend(backend: str) -> bool:
-    return backend == BACKEND_TORCH
+    return backend in (BACKEND_TORCH, BACKEND_YIRAGE_CPU)
+
+
+def is_yirage_backend(backend: str) -> bool:
+    return backend == BACKEND_YIRAGE_CPU

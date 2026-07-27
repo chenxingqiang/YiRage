@@ -31,9 +31,12 @@ class CertStage:
     target: str
     quick: bool = True
     real: bool = False  # requires torch real execution
+    yirage_core: bool = False  # requires built yirage.core
 
 
-def serving_cpu_cert_manifest(*, quick: bool = True, real: bool = True) -> List[CertStage]:
+def serving_cpu_cert_manifest(
+    *, quick: bool = True, real: bool = True, yirage_core: bool = False
+) -> List[CertStage]:
     """Ordered stages for Serving Loop verification."""
     stages: List[CertStage] = [
         CertStage("s1_contract", "pytest", "tests/python/test_runtime_fusion_s1.py"),
@@ -76,6 +79,23 @@ def serving_cpu_cert_manifest(*, quick: bool = True, real: bool = True) -> List[
                 ),
             ]
         )
+    if yirage_core:
+        stages.extend(
+            [
+                CertStage(
+                    "yirage_core_contract",
+                    "pytest",
+                    "tests/python/test_runtime_fusion_yirage_core.py",
+                    yirage_core=True,
+                ),
+                CertStage(
+                    "yirage_superopt_e2e",
+                    "smoke",
+                    "demo/serving/yirage_superopt_e2e.py --quick",
+                    yirage_core=True,
+                ),
+            ]
+        )
     if not quick:
         stages.append(
             CertStage(
@@ -106,6 +126,7 @@ class CertReport:
     ok: bool
     quick: bool
     real: bool
+    yirage_core: bool = False
     stages: List[StageResult] = field(default_factory=list)
     bootstrap_ok: bool = False
     serving_version: Optional[str] = None
@@ -116,6 +137,7 @@ class CertReport:
             "ok": self.ok,
             "quick": self.quick,
             "real": self.real,
+            "yirage_core": self.yirage_core,
             "bootstrap_ok": self.bootstrap_ok,
             "serving_version": self.serving_version,
             "torch_device": self.torch_device,
@@ -141,11 +163,13 @@ def _run_shell(command: str, *, cwd: Path, env: Dict[str, str]) -> subprocess.Co
     )
 
 
-def run_serving_cpu_cert(*, quick: bool = True, real: bool = True) -> CertReport:
+def run_serving_cpu_cert(
+    *, quick: bool = True, real: bool = True, yirage_core: bool = False
+) -> CertReport:
     """Execute manifest stages; return structured report."""
     require_numpy()
     root = repo_root()
-    report = CertReport(ok=True, quick=quick, real=real)
+    report = CertReport(ok=True, quick=quick, real=real, yirage_core=yirage_core)
 
     try:
         serving = import_serving(force_reload=True)
@@ -172,10 +196,15 @@ def run_serving_cpu_cert(*, quick: bool = True, real: bool = True) -> CertReport
         return report
 
     env = dict(**{k: v for k, v in __import__("os").environ.items()})
-    env["PYTHONPATH"] = str(root / "python")
+    env["PYTHONPATH"] = f"{root / 'python'}:{root}"
+    env.setdefault("YIRAGE_BACKEND", "cpu")
+    for sub in ("build/abstract_subexpr/release", "build/formal_verifier/release"):
+        p = root / sub
+        if p.exists():
+            env["LD_LIBRARY_PATH"] = f"{p}:{env.get('LD_LIBRARY_PATH', '')}"
     py = sys.executable
 
-    for stage in serving_cpu_cert_manifest(quick=quick, real=real):
+    for stage in serving_cpu_cert_manifest(quick=quick, real=real, yirage_core=yirage_core):
         t0 = time.monotonic()
         if stage.kind == "pytest":
             cmd = f"{py} -m pytest {stage.target} -q --tb=short"
@@ -220,25 +249,39 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="NumPy reference contracts only (no torch real path)",
     )
+    p.add_argument(
+        "--yirage-core",
+        action="store_true",
+        help="include yirage.core superoptimize tier (requires native build)",
+    )
     p.add_argument("--json", action="store_true")
     p.add_argument("--manifest", action="store_true", help="print stage manifest and exit")
     args = p.parse_args(list(argv) if argv is not None else None)
 
     quick = not args.full
     real = not args.contract_only
+    yirage_core = bool(args.yirage_core)
     if args.manifest:
         manifest = [
-            {"name": s.name, "kind": s.kind, "target": s.target, "real": s.real}
-            for s in serving_cpu_cert_manifest(quick=quick, real=real)
+            {
+                "name": s.name,
+                "kind": s.kind,
+                "target": s.target,
+                "real": s.real,
+                "yirage_core": s.yirage_core,
+            }
+            for s in serving_cpu_cert_manifest(quick=quick, real=real, yirage_core=yirage_core)
         ]
-        print(json.dumps({"manifest": manifest, "real": real}, indent=2))
+        print(json.dumps({"manifest": manifest, "real": real, "yirage_core": yirage_core}, indent=2))
         return 0
 
-    report = run_serving_cpu_cert(quick=quick, real=real)
+    report = run_serving_cpu_cert(quick=quick, real=real, yirage_core=yirage_core)
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
     else:
         mode = "real-torch" if real else "contract-only"
+        if yirage_core:
+            mode += "+yirage-core"
         print(f"Serving cert (RuntimeFusion S1–S5, {mode})")
         print(
             f"  bootstrap_ok={report.bootstrap_ok} rf_version={report.serving_version} "

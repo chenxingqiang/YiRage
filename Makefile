@@ -131,6 +131,14 @@ test-cpu-demos:
 test-serving-cpu-cert:
 	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --real
 
+test-serving-yirage-core:
+	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python:. python3 scripts/serving_cpu_cert.py --real --yirage-core
+
+test-serving-yirage-core-pytest:
+	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python:. python3 -m pytest tests/python/test_runtime_fusion_yirage_core.py -v --tb=short
+
 test-serving-cpu-cert-contract:
 	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --contract-only
 
