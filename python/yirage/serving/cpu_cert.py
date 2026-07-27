@@ -55,11 +55,6 @@ def serving_cpu_cert_manifest(
         ),
         CertStage("real_torch_e2e", "smoke", "demo/serving/real_torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
-        CertStage(
-            "torch_mlp_rf_hook_smoke",
-            "smoke",
-            "demo/serving/torch_mlp_rf_hook_smoke.py",
-        ),
     ]
     if yirage_core:
         stages.extend(
@@ -77,16 +72,6 @@ def serving_cpu_cert_manifest(
                     yirage_core=True,
                 ),
             ]
-        )
-    if not quick:
-        stages.append(
-            CertStage(
-                "hybrid_k_sweep",
-                "smoke",
-                "demo/serving/hybrid_first_k_smoke.py --k 1 && "
-                "demo/serving/hybrid_first_k_smoke.py --k 4",
-                quick=False,
-            )
         )
     return stages
 

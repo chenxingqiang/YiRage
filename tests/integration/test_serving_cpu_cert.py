@@ -32,9 +32,7 @@ def test_serving_cpu_cert_manifest_has_core_stages():
     assert "s7_contract" in names
     assert "s8_contract" in names
     assert "real_torch_e2e" in names
-    assert "torch_mlp_rf_hook_smoke" in names
-    assert "sm_budget_coresidence_smoke" not in names
-    assert "mlp_capsule_smoke" not in names
+    assert "segment_torch_bench" in names
 
 
 def test_serving_cpu_cert_quick_passes():

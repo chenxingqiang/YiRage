@@ -142,14 +142,14 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | 阶段 | 目标 | 复用脚手架（实现） | 验证门槛 | 状态 |
 |------|------|--------------------|----------|------|
 | **S0** | 北极星改为 FusionPlan / FusionCapsule / RF；Legacy 对照表；冻结反模式 | 本文档 | 文档评审合入 | **done（本 PR 含）** |
-| **S1** | **第一个可被 RF 选中的 MLP FusionCapsule** + **最小 `RF.step` 钩子**（standalone，可不挂全量 vLLM） | `python/yirage/serving/`；demo `demo/serving/mlp_capsule_smoke.py` | Capsule vs eager 数值；`step` 可选中/跳过；`pytest tests/python/test_runtime_fusion_s1.py` | **done** |
-| **S2** | vLLM 形 MLP Override：Attention 留引擎；MLP 走 `RF.step`（无 vLLM 包时用 duck-typed stub） | `layer_override.py`；`vllm_mlp_override_smoke.py` | RF 与 engine 全路径数值对齐；skip→engine fallback | **done** |
-| **S3** | 前 K 层 MLP Capsule 可配置混合 | `hybrid_model.py`；`hybrid_first_k_smoke.py` | K∈{1,2,4}；`test_runtime_fusion_s2_s3.py` | **done** |
-| **S4** | **PagedAttention meta 桥**（`block_table` → paged_kv_*） | `kv_meta.py`；`RF.step` auto-bridge | `test_runtime_fusion_s4_kv.py`；`kv_meta_bridge_smoke.py` | **done** |
-| **S5** | **SM 预算**与 Sampler/NCCL 共驻 | `sm_budget.py`；`RF.step` 超预算 skip + engine fallback | `test_runtime_fusion_s5_sm.py`；`sm_budget_coresidence_smoke.py`；`make test-serving-cpu-cert` | **done** |
-| **S6** | SGLang **Radix**：hit meta → 跳过/收缩 Capsule | `radix_meta.py`；`RF.step` all-hit skip + shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **done** |
-| **S7** | 多 Capsule / 大段 Decoder Override（仍非「整网独占死刑」）；引擎管 KV 与调度 | `capsule_orchestration.py`；`split_mlp_capsule.py`；`segment_override.py` | `test_runtime_fusion_s7_multi_capsule.py`；`multi_capsule_segment_smoke.py` | **done** |
-| **S8** | vLLM Qwen2 MLP 插件契约 + segment torch 实测 bench 归档 | `torch_plugin.py`（实测）；`vllm_plugin.py`（须安装 vllm） | `test_runtime_fusion_s8_*`；`torch_mlp_rf_hook_smoke.py`；`segment_torch_bench.py` | **done（本轮）** |
+| **S1** | **第一个可被 RF 选中的 MLP FusionCapsule** + **最小 `RF.step` 钩子** | `python/yirage/serving/` | `pytest tests/python/test_runtime_fusion_s1.py` | **done** |
+| **S2** | vLLM 形 MLP Override：Attention 留引擎；MLP 走 `RF.step` | `layer_override.py` | `test_runtime_fusion_s2_s3.py` | **done** |
+| **S3** | 前 K 层 MLP Capsule 可配置混合 | `hybrid_model.py` | K∈{1,2,4}；`test_runtime_fusion_s2_s3.py` | **done** |
+| **S4** | **PagedAttention meta 桥**（`block_table` → paged_kv_*） | `kv_meta.py`；`RF.step` auto-bridge | `test_runtime_fusion_s4_kv.py` | **done** |
+| **S5** | **SM 预算**与 Sampler/NCCL 共驻 | `sm_budget.py`；`RF.step` 超预算 skip + engine fallback | `test_runtime_fusion_s5_sm.py`；`make test-serving-cpu-cert` | **done** |
+| **S6** | SGLang **Radix**：hit meta → 跳过/收缩 Capsule | `radix_meta.py` | `test_runtime_fusion_s6_radix.py` | **done** |
+| **S7** | 多 Capsule / 大段 Decoder Override | `capsule_orchestration.py`；`split_mlp_capsule.py`；`segment_override.py` | `test_runtime_fusion_s7_multi_capsule.py` | **done** |
+| **S8** | vLLM Qwen2 MLP 插件契约 + segment torch 实测 bench 归档 | `torch_plugin.py`；`vllm_plugin.py`（须安装 vllm） | `test_runtime_fusion_s8_*`；`segment_torch_bench.py` | **done（本轮）** |
 
 **明确不做什么（反模式）**：
 
@@ -168,13 +168,13 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **FusionPlan 搜索/缓存** | Execution plan + cache | `FusionPlan` API（S1）；存储仍 legacy mugraph | `test_runtime_fusion_s1` plan 契约；cache chore 另开 | partial |
 | **MLP FusionCapsule** | Fused MLP block | `yirage.serving.MlpFusionCapsule`（eager_numpy） | `test_runtime_fusion_s1.py`；mlp smoke | **partial（S1）** |
 | **RF.step 钩子** | Dynamic fusion runtime | `RuntimeFusion.step`（select/skip） | 同上 | **partial（S1）** |
-| **Model 层 Override** | `vllm/.../models/qwen2.py` | `RuntimeFusionMlpLayerOverride` + engine stub（真 vLLM 插件待接） | `test_runtime_fusion_s2_s3.py`；`vllm_mlp_override_smoke.py` | **partial（S2）** |
-| **前 K 层混合** | 可配置 fused layers | `HybridModelOverride(max_rf_mlp_layers=K)` | `hybrid_first_k_smoke.py --k {1,2,4}` | **partial（S3）** |
-| **meta / KV 桥** | `block_tables` | `block_tables_to_paged_kv` + `StepMeta.with_paged_kv_bridge` | `test_runtime_fusion_s4_kv.py`；`kv_meta_bridge_smoke.py` | **partial（S4）** |
-| **SM 配额共驻** | 引擎多流 | `resolve_sm_worker_quota` + `RF.step` 超预算 skip；layer engine fallback | `test_runtime_fusion_s5_sm.py`；`sm_budget_coresidence_smoke.py` | **partial（S5）** |
-| **Radix skip** | SGLang RadixAttention | `radix_meta` + `RF.step` skip/shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **partial（S6）** |
-| **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py`；`multi_capsule_segment_smoke.py` | **partial（S7）** |
-| **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测默认 `TorchDecoderMlpRfHook` | `torch_mlp_rf_hook_smoke.py`；vllm opt-in pytest | **partial（S8）** |
+| **Model 层 Override** | `vllm/.../models/qwen2.py` | `RuntimeFusionMlpLayerOverride` + `TorchDecoderMlpRfHook` | `test_runtime_fusion_s2_s3.py` | **partial（S2）** |
+| **前 K 层混合** | 可配置 fused layers | `HybridModelOverride(max_rf_mlp_layers=K)` | `test_runtime_fusion_s2_s3.py` | **partial（S3）** |
+| **meta / KV 桥** | `block_tables` | `block_tables_to_paged_kv` + `StepMeta.with_paged_kv_bridge` | `test_runtime_fusion_s4_kv.py` | **partial（S4）** |
+| **SM 配额共驻** | 引擎多流 | `resolve_sm_worker_quota` + `RF.step` 超预算 skip | `test_runtime_fusion_s5_sm.py` | **partial（S5）** |
+| **Radix skip** | SGLang RadixAttention | `radix_meta` + `RF.step` skip/shrink | `test_runtime_fusion_s6_radix.py` | **partial（S6）** |
+| **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py` | **partial（S7）** |
+| **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测默认 `TorchDecoderMlpRfHook` | `test_runtime_fusion_s8_*`；`segment_torch_bench.py` | **partial（S8）** |
 | **Segment torch bench** | 实测 latency JSON | `run_segment_torch_bench_archive` | `segment_torch_bench.py`；cert | **partial（S8）** |
 | **MACA / vLLM-metax** | MetaX vLLM fork | maca pk backend + scaffold | MetaX 上 S2+ | backlog |
 
@@ -573,7 +573,8 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S6（2026-07-27，Radix hit skip/shrink）**：闸门：SGLang Radix meta 驱动 Capsule 调度。`radix_meta.RadixHitMeta` + `RF.step` all-hit skip（`skipped_radix`）+ partial `apply_radix_shrink`；layer override all-hit → post-attn identity。验证：7 pytest + `radix_hit_smoke` + cert 8 stage PASS。下一轮：**S7** 多 Capsule 编排。
 - **Serving Loop S7（2026-07-27，multi-Capsule segment override）**：闸门：图级编排层。每层 MLP 拆成 gate_up→down 两 Capsule；`StepMeta.pipeline` + `resolve_capsule_pipeline`；`DecoderSegmentOverride` / `SegmentHybridModelOverride` 大段 override（Attention/KV 仍引擎）。验证：7 pytest + `multi_capsule_segment_smoke` + cert。下一轮：**S8** — 真 vLLM 插件 / torch 实测 bench 归档。
 - **Serving Loop S8（2026-07-27，vLLM plugin + segment torch bench）**：闸门：引擎插件 + 实测归档。`TorchDecoderMlpRfHook`（真实 torch 权重/forward，**禁止 mock**）；`VllmQwen2MlpRfHook` 仅当 `vllm` 已安装；`run_segment_torch_bench_archive` JSON ms。验证：cert + smokes 全 real torch。PR #161 待 main 合并。
-- **Serving Loop S8b（2026-07-27，移除 contract-only / numpy stub cert）**：闸门：测试契约层。删除 `--contract-only` manifest 与 `test-serving-cpu-cert-contract`；S1–S7 pytest 统一 `TorchEngineModel`/`BACKEND_TORCH`；cert 仅 real torch 路径。验证：`make test-serving-cpu-cert-pytest` + `make test-serving-cpu-cert`。
+- **Serving Loop S8b（2026-07-27，移除 contract-only / numpy stub cert）**：闸门：测试契约层。删除 `--contract-only` manifest；S1–S7 pytest 统一 real torch。验证：`make test-serving-cpu-cert-pytest` + `make test-serving-cpu-cert`。
+- **Serving Loop S8c（2026-07-27，删除 serving smoke 脚本）**：闸门：工具层。删除 `demo/serving/*smoke*.py`（已由 pytest + `real_torch_e2e`/`segment_torch_bench` 覆盖）；cert manifest 同步。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
