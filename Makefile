@@ -128,6 +128,15 @@ test-cpu-cert-full-profile:
 test-cpu-demos:
 	python3 -m pytest tests/integration/test_cpu_demos.py tests/integration/test_cpu_demo_loop.py tests/integration/test_cpu_loop_close.py -v --tb=short
 
+test-serving-cpu-cert:
+	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --quick
+
+test-serving-cpu-cert-full:
+	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --full
+
+test-serving-cpu-cert-pytest:
+	PYTHONPATH=python python3 -m pytest tests/python/test_runtime_fusion_s1.py tests/python/test_runtime_fusion_s2_s3.py tests/python/test_runtime_fusion_s4_kv.py tests/python/test_runtime_fusion_s5_sm.py tests/integration/test_serving_cpu_cert.py -v --tb=short
+
 test-cpu-cert-walkthrough-profile:
 	PYTHONPATH=. python3 scripts/cpu_certification.py --json --walkthrough-profile
 

@@ -121,6 +121,8 @@ class HybridModelOverride:
                     step_meta = {
                         "enabled": {capsule_name_for_layer(lid)},
                         "block_tables": meta.block_tables,
+                        "seq_lens": meta.seq_lens,
+                        "page_size": meta.page_size,
                         "radix_hit_mask": meta.radix_hit_mask,
                         "sm_budget": meta.sm_budget,
                         "extras": meta.extras,

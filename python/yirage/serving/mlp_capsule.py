@@ -119,14 +119,16 @@ class MlpFusionCapsule(FusionCapsule):
         seed: int = 0,
         name: str = "mlp_rms_gated_residual",
         dtype=np.float32,
+        plan: Optional[FusionPlan] = None,
     ) -> "MlpFusionCapsule":
         rng = np.random.default_rng(seed)
-        plan = FusionPlan.mlp(
-            name=name,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            dtype=np.dtype(dtype).name,
-        )
+        if plan is None:
+            plan = FusionPlan.mlp(
+                name=name,
+                hidden_size=hidden_size,
+                intermediate_size=intermediate_size,
+                dtype=np.dtype(dtype).name,
+            )
         scale = 0.02
         return cls(
             plan,

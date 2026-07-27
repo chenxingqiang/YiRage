@@ -25,6 +25,23 @@ from .kv_meta import (
     block_tables_to_paged_kv,
     last_page_len_from_seq,
 )
+from .bootstrap import bootstrap_yirage_stub, import_serving, repo_root, require_numpy
+from .cpu_cert import (
+    CertReport,
+    CertStage,
+    run_serving_cpu_cert,
+    serving_cpu_cert_manifest,
+)
+from .sm_budget import (
+    DEFAULT_CAPSULE_SM_COST,
+    DEFAULT_RESERVED_AUX_SMS,
+    DEFAULT_TOTAL_SMS,
+    SmStepAllocation,
+    SmWorkerQuota,
+    assert_aux_coresidence,
+    capsule_sm_cost,
+    resolve_sm_worker_quota,
+)
 from .layer_override import (
     LayerForwardResult,
     RuntimeFusionMlpLayerOverride,
@@ -57,4 +74,20 @@ __all__ = [
     "block_tables_to_paged_kv",
     "attach_paged_kv_to_step_meta",
     "last_page_len_from_seq",
+    "bootstrap_yirage_stub",
+    "import_serving",
+    "repo_root",
+    "require_numpy",
+    "run_serving_cpu_cert",
+    "serving_cpu_cert_manifest",
+    "CertReport",
+    "CertStage",
+    "SmWorkerQuota",
+    "SmStepAllocation",
+    "resolve_sm_worker_quota",
+    "capsule_sm_cost",
+    "assert_aux_coresidence",
+    "DEFAULT_TOTAL_SMS",
+    "DEFAULT_RESERVED_AUX_SMS",
+    "DEFAULT_CAPSULE_SM_COST",
 ]

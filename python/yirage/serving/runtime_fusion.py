@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set
 
 from .capsule import FusionCapsule
+from .sm_budget import SmStepAllocation, capsule_sm_cost, resolve_sm_worker_quota
 
 
 @dataclass
@@ -22,6 +23,9 @@ class StepMeta:
 
     S4 KV bridge: when ``block_tables`` + ``seq_lens`` are set, RuntimeFusion.step
     converts them into ``extras['paged_kv_*']`` via :mod:`yirage.serving.kv_meta`.
+
+    S5 SM budget: ``sm_budget`` + ``extras['total_sms']`` / ``reserved_aux_sms`` cap
+    capsule launches; over-budget capsules are skipped (engine owns that fragment).
     """
 
     enabled: Optional[Set[str]] = None
@@ -98,14 +102,18 @@ class StepResult:
     ran: List[str] = field(default_factory=list)
     skipped: List[str] = field(default_factory=list)
     meta: Optional[StepMeta] = None
+    sm_allocation: Optional[SmStepAllocation] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d: Dict[str, Any] = {
             "ran": list(self.ran),
             "skipped": list(self.skipped),
             "output_keys": sorted(self.outputs.keys()),
             "force_skip_all": bool(self.meta.force_skip_all) if self.meta else False,
         }
+        if self.sm_allocation is not None:
+            d["sm_allocation"] = self.sm_allocation.to_dict()
+        return d
 
 
 class RuntimeFusion:
@@ -134,7 +142,7 @@ class RuntimeFusion:
     def inspect(self) -> Dict[str, Any]:
         return {
             "runtime": "RuntimeFusion",
-            "version": "s4",
+            "version": "s5",
             "capsules": [c.inspect() for c in self._capsules],
         }
 
@@ -149,18 +157,39 @@ class RuntimeFusion:
         responsibility for that fragment — identity on ``hidden`` for S1 MLP).
         """
         step_meta = StepMeta.from_mapping(meta).with_paged_kv_bridge()
+        quota = resolve_sm_worker_quota(
+            sm_budget=step_meta.sm_budget,
+            extras=step_meta.extras,
+        )
+        remaining_sms = quota.capsule_budget_sms
+        sm_alloc = SmStepAllocation(quota=quota, remaining_sms=remaining_sms)
+
         # Shallow copy so capsule outputs do not mutate caller unexpectedly.
         state: Dict[str, Any] = dict(inputs)
         ran: List[str] = []
         skipped: List[str] = []
 
         for cap in self._capsules:
-            if step_meta.should_run(cap.name):
-                # Pass full step meta extras (includes S4 paged_kv_* when bridged).
-                out = cap.execute(state, meta=step_meta.extras)
-                state.update(out)
-                ran.append(cap.name)
-            else:
+            if not step_meta.should_run(cap.name):
                 skipped.append(cap.name)
+                continue
+            cost = capsule_sm_cost(cap)
+            if cost > remaining_sms:
+                skipped.append(cap.name)
+                sm_alloc.skipped_budget.append(cap.name)
+                continue
+            # Pass full step meta extras (includes S4 paged_kv_* when bridged).
+            out = cap.execute(state, meta=step_meta.extras)
+            state.update(out)
+            ran.append(cap.name)
+            sm_alloc.ran.append((cap.name, cost))
+            remaining_sms -= cost
 
-        return StepResult(outputs=state, ran=ran, skipped=skipped, meta=step_meta)
+        sm_alloc.remaining_sms = remaining_sms
+        return StepResult(
+            outputs=state,
+            ran=ran,
+            skipped=skipped,
+            meta=step_meta,
+            sm_allocation=sm_alloc,
+        )

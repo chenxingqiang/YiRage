@@ -90,21 +90,28 @@ class RuntimeFusionMlpLayerOverride:
         # 1) Attention / PagedAttention stays on the engine.
         h = self.layer.attention_forward(hidden, attn_meta)
 
-        # 2) MLP: RF.step select, else engine MLP fallback.
+        # 2) MLP: RF.step select, else engine MLP fallback (incl. SM budget skip).
         meta = StepMeta.from_mapping(rf_meta)
         if meta.should_run(self.capsule_name):
-            # Ensure only this layer capsule is considered when meta is empty-enabled.
             step_meta = {
                 "enabled": {self.capsule_name},
                 "block_tables": meta.block_tables,
+                "seq_lens": meta.seq_lens,
+                "page_size": meta.page_size,
                 "radix_hit_mask": meta.radix_hit_mask,
                 "sm_budget": meta.sm_budget,
                 "extras": meta.extras,
             }
             result = self.rf.step({"hidden": h}, meta=step_meta)
-            out = np.asarray(result.outputs["hidden"])
+            if self.capsule_name in result.ran:
+                out = np.asarray(result.outputs["hidden"])
+                return LayerForwardResult(
+                    hidden=out, rf=result, used_rf_mlp=True, layer_id=self.layer.layer_id
+                )
+            # RF skipped (SM budget / internal policy) → engine owns MLP.
+            out = self.layer.mlp_forward(h)
             return LayerForwardResult(
-                hidden=out, rf=result, used_rf_mlp=True, layer_id=self.layer.layer_id
+                hidden=out, rf=result, used_rf_mlp=False, layer_id=self.layer.layer_id
             )
 
         out = self.layer.mlp_forward(h)
