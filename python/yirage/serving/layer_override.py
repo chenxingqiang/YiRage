@@ -143,6 +143,52 @@ class RuntimeFusionMlpLayerOverride:
             hidden=out, rf=skip_result, used_rf_mlp=False, layer_id=self.layer.layer_id
         )
 
+    def forward_mlp_only(
+        self,
+        hidden_after_attn,
+        *,
+        rf_meta: Optional[Union[StepMeta, Mapping[str, Any]]] = None,
+    ) -> LayerForwardResult:
+        """Run only the MLP RF path (vLLM hook: Attention already executed)."""
+        meta = StepMeta.from_mapping(rf_meta)
+        h = hidden_after_attn
+        if meta.should_run(self.capsule_name):
+            step_meta = {
+                "enabled": {self.capsule_name},
+                "block_tables": meta.block_tables,
+                "seq_lens": meta.seq_lens,
+                "page_size": meta.page_size,
+                "radix_hit_mask": meta.radix_hit_mask,
+                "sm_budget": meta.sm_budget,
+                "extras": meta.extras,
+            }
+            result = self.rf.step({"hidden": h}, meta=step_meta)
+            if self.capsule_name in result.ran:
+                return LayerForwardResult(
+                    hidden=result.outputs["hidden"],
+                    rf=result,
+                    used_rf_mlp=True,
+                    layer_id=self.layer.layer_id,
+                )
+            if self.capsule_name in result.skipped_radix:
+                return LayerForwardResult(
+                    hidden=h, rf=result, used_rf_mlp=False, layer_id=self.layer.layer_id
+                )
+            out = self.layer.mlp_forward(h)
+            return LayerForwardResult(
+                hidden=out, rf=result, used_rf_mlp=False, layer_id=self.layer.layer_id
+            )
+        out = self.layer.mlp_forward(h)
+        skip_result = StepResult(
+            outputs={"hidden": out},
+            ran=[],
+            skipped=[self.capsule_name],
+            meta=meta,
+        )
+        return LayerForwardResult(
+            hidden=out, rf=skip_result, used_rf_mlp=False, layer_id=self.layer.layer_id
+        )
+
     def inspect(self) -> Dict[str, Any]:
         return {
             "override": "RuntimeFusionMlpLayerOverride",

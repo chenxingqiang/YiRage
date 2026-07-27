@@ -146,7 +146,7 @@ test-serving-cpu-cert-full:
 	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --full
 
 test-serving-cpu-cert-pytest:
-	PYTHONPATH=python python3 -m pytest tests/python/test_runtime_fusion_s1.py tests/python/test_runtime_fusion_s2_s3.py tests/python/test_runtime_fusion_s4_kv.py tests/python/test_runtime_fusion_s5_sm.py tests/python/test_runtime_fusion_s6_radix.py tests/python/test_runtime_fusion_s7_multi_capsule.py tests/integration/test_serving_cpu_cert.py -v --tb=short
+	PYTHONPATH=python python3 -m pytest tests/python/test_runtime_fusion_s1.py tests/python/test_runtime_fusion_s2_s3.py tests/python/test_runtime_fusion_s4_kv.py tests/python/test_runtime_fusion_s5_sm.py tests/python/test_runtime_fusion_s6_radix.py tests/python/test_runtime_fusion_s7_multi_capsule.py tests/python/test_runtime_fusion_s8_vllm_bench.py tests/integration/test_serving_cpu_cert.py -v --tb=short
 
 test-cpu-cert-walkthrough-profile:
 	PYTHONPATH=. python3 scripts/cpu_certification.py --json --walkthrough-profile

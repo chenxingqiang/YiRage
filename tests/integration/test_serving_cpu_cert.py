@@ -30,6 +30,7 @@ def test_serving_cpu_cert_manifest_has_core_stages():
     assert "s5_contract" in real_names
     assert "s6_contract" in real_names
     assert "s7_contract" in real_names
+    assert "s8_contract" in real_names
     assert "real_torch_e2e" in real_names
     contract_names = [s.name for s in manifest_fn(quick=True, real=False)]
     assert "sm_budget_coresidence_smoke" in contract_names
@@ -40,7 +41,7 @@ def test_serving_cpu_cert_quick_passes():
     report = run_cert(quick=True, real=True)
     assert report.bootstrap_ok is True
     assert report.real is True
-    assert report.serving_version == "s7"
+    assert report.serving_version == "s8"
     assert report.torch_device in {"cpu", "cuda"}
     failed = [(s.name, s.returncode, s.stderr_tail) for s in report.stages if not s.ok]
     assert report.ok is True, failed

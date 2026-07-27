@@ -31,6 +31,14 @@ from .radix_meta import (
     attach_radix_to_step_meta,
     parse_radix_hit_mask,
 )
+from .vllm_plugin import (
+    VLLM_QWEN2_MLP_ATTACH,
+    VllmMlpWeightView,
+    VllmQwen2MlpRfHook,
+    build_vllm_qwen2_mlp_rf_hook,
+    extract_qwen2_mlp_weights,
+    is_vllm_available,
+)
 from .bootstrap import bootstrap_yirage_stub, import_serving, repo_root, require_numpy
 from .cpu_cert import (
     CertReport,
@@ -96,6 +104,13 @@ from .split_mlp_capsule import (
     split_mlp_matches_fused,
     split_mlp_parity_numpy,
 )
+from .bench_archive import (
+    ServingBenchArchive,
+    ServingBenchArchiveRow,
+    TorchSegmentForwardResult,
+    TorchSegmentHybridModelOverride,
+    run_segment_torch_bench_archive,
+)
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
 from .yirage_exec import (
     YirageServingMlpRunner,
@@ -139,6 +154,17 @@ __all__ = [
     "SegmentHybridModelOverride",
     "SegmentForwardResult",
     "resolve_segment_layer_ids",
+    "TorchSegmentHybridModelOverride",
+    "TorchSegmentForwardResult",
+    "run_segment_torch_bench_archive",
+    "ServingBenchArchive",
+    "ServingBenchArchiveRow",
+    "is_vllm_available",
+    "VLLM_QWEN2_MLP_ATTACH",
+    "VllmMlpWeightView",
+    "VllmQwen2MlpRfHook",
+    "build_vllm_qwen2_mlp_rf_hook",
+    "extract_qwen2_mlp_weights",
     "HybridModelOverride",
     "resolve_rf_mlp_layer_ids",
     "PagedKvMeta",

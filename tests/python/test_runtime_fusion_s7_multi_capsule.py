@@ -113,4 +113,4 @@ def test_segment_hybrid_mixed_paths(serving):
 
 
 def test_rf_inspect_version_s7(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s7"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s8"
