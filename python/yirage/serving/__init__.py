@@ -153,6 +153,11 @@ from .bench_archive import (
     run_segment_torch_bench_archive,
 )
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
+from .yirage_core_e2e import (
+    YirageCoreFullLayerE2EReport,
+    run_yirage_core_full_layer_e2e,
+    run_yirage_core_full_layer_e2e_auto,
+)
 from .yirage_exec import (
     YirageServingMlpRunner,
     bench_superoptimize_down_matmul,
@@ -238,6 +243,9 @@ __all__ = [
     "VllmPagedFullLayerE2EReport",
     "run_torch_vllm_paged_full_layer_e2e",
     "run_vllm_paged_full_layer_e2e_auto",
+    "YirageCoreFullLayerE2EReport",
+    "run_yirage_core_full_layer_e2e",
+    "run_yirage_core_full_layer_e2e_auto",
     "HybridModelOverride",
     "resolve_rf_mlp_layer_ids",
     "PagedKvMeta",

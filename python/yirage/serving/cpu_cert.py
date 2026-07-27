@@ -78,6 +78,11 @@ def serving_cpu_cert_manifest(
             "tests/python/test_runtime_fusion_s13_vllm_paged_e2e.py",
         ),
         CertStage(
+            "s14_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s14_yirage_core_e2e.py",
+        ),
+        CertStage(
             "real_torch_contract",
             "pytest",
             "tests/python/test_runtime_fusion_real_torch.py",
@@ -98,6 +103,12 @@ def serving_cpu_cert_manifest(
                     "yirage_superopt_e2e",
                     "smoke",
                     "demo/serving/yirage_superopt_e2e.py --quick",
+                    yirage_core=True,
+                ),
+                CertStage(
+                    "yirage_core_full_e2e",
+                    "smoke",
+                    "demo/serving/yirage_core_full_e2e.py --quick",
                     yirage_core=True,
                 ),
             ]
@@ -260,7 +271,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mode = "real-torch"
         if yirage_core:
             mode += "+yirage-core"
-        print(f"Serving cert (RuntimeFusion S1–S13, {mode})")
+        print(f"Serving cert (RuntimeFusion S1–S14, {mode})")
         print(
             f"  bootstrap_ok={report.bootstrap_ok} rf_version={report.serving_version} "
             f"device={report.torch_device}"

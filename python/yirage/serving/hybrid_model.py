@@ -68,15 +68,18 @@ class HybridModelOverride:
         *,
         max_rf_mlp_layers: Optional[int] = None,
         rf_mlp_layer_ids: Optional[Sequence[int]] = None,
+        mlp_backend: Optional[str] = None,
     ):
         self.model = model
+        self.mlp_backend = mlp_backend
         self.rf_layer_ids = resolve_rf_mlp_layer_ids(
             len(model.layers),
             max_rf_mlp_layers=max_rf_mlp_layers,
             rf_mlp_layer_ids=rf_mlp_layer_ids,
         )
         capsules = [
-            build_layer_mlp_capsule(model.layers[i]) for i in sorted(self.rf_layer_ids)
+            build_layer_mlp_capsule(model.layers[i], backend=mlp_backend)
+            for i in sorted(self.rf_layer_ids)
         ]
         self.rf = RuntimeFusion(capsules)
         self.overrides: Dict[int, RuntimeFusionMlpLayerOverride] = {
@@ -93,6 +96,7 @@ class HybridModelOverride:
             "hybrid": "HybridModelOverride",
             "num_layers": len(self.model.layers),
             "rf_mlp_layer_ids": sorted(self.rf_layer_ids),
+            "mlp_backend": self.mlp_backend,
             "rf": self.rf.inspect(),
             "overrides": {str(i): o.inspect() for i, o in self.overrides.items()},
         }

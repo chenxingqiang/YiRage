@@ -27,9 +27,10 @@ def is_yirage_core_available() -> bool:
     if os.environ.get("YIRAGE_SKIP_NATIVE") == "1":
         return False
     try:
+        import yirage as yr
         import yirage.core  # noqa: F401
 
-        return True
+        return hasattr(yr, "float32")
     except ImportError:
         return False
 

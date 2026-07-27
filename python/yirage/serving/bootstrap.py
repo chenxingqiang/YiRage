@@ -24,13 +24,20 @@ def serving_pkg_dir() -> Path:
 
 
 def bootstrap_yirage_stub(*, force_reload: bool = False) -> None:
-    """Register a namespace ``yirage`` package stub pointing at ``python/yirage``."""
-    pkg_root = str(repo_root() / "python")
+    """Register ``yirage`` for serving imports; prefer a real built package when present."""
+    root = repo_root()
+    pkg_root = str(root / "python")
     yirage_dir = str(serving_pkg_dir())
     if pkg_root not in sys.path:
         sys.path.insert(0, pkg_root)
+    root_s = str(root)
+    if root_s not in sys.path:
+        sys.path.insert(0, root_s)
 
     existing = sys.modules.get("yirage")
+    if not force_reload and existing is not None and hasattr(existing, "float32"):
+        return
+
     if (
         not force_reload
         and existing is not None
@@ -38,6 +45,14 @@ def bootstrap_yirage_stub(*, force_reload: bool = False) -> None:
         and yirage_dir in list(existing.__path__)  # type: ignore[attr-defined]
     ):
         return
+
+    try:
+        import yirage as yr  # noqa: F401
+
+        if hasattr(yr, "float32"):
+            return
+    except ImportError:
+        pass
 
     stub = types.ModuleType("yirage")
     stub.__path__ = [yirage_dir]  # type: ignore[attr-defined]
