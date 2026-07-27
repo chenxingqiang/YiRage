@@ -83,4 +83,4 @@ def test_sglang_plugin_requires_real_package(serving):
 
 
 def test_rf_inspect_version_s10(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s11"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s12"

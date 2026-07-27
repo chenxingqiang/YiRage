@@ -33,6 +33,16 @@ from .radix_meta import (
     parse_radix_hit_mask,
     radix_hit_mask_from_sglang_extend_lens,
 )
+from .sglang_e2e import (
+    SglangForwardBatchSpec,
+    SglangHybridE2EReport,
+    SglangMlpRfE2EReport,
+    build_minimal_sglang_qwen2_decoder_layer,
+    run_sglang_mlp_rf_e2e_auto,
+    run_sglang_qwen2_mlp_rf_e2e,
+    run_torch_sglang_hybrid_full_e2e,
+    run_torch_sglang_mlp_rf_e2e,
+)
 from .sglang_plugin import (
     SGLANG_QWEN2_MLP_ATTACH,
     SglangBatchTorchMlpRfHook,
@@ -194,6 +204,14 @@ __all__ = [
     "build_sglang_batch_torch_mlp_rf_hook",
     "build_sglang_qwen2_mlp_rf_hook",
     "extract_sglang_qwen2_mlp_weights",
+    "SglangForwardBatchSpec",
+    "SglangMlpRfE2EReport",
+    "SglangHybridE2EReport",
+    "build_minimal_sglang_qwen2_decoder_layer",
+    "run_torch_sglang_mlp_rf_e2e",
+    "run_torch_sglang_hybrid_full_e2e",
+    "run_sglang_qwen2_mlp_rf_e2e",
+    "run_sglang_mlp_rf_e2e_auto",
     "is_vllm_available",
     "require_vllm",
     "TorchDecoderMlpRfHook",
