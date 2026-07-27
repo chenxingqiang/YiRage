@@ -2,7 +2,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU certification runner for RuntimeFusion Serving Loops (S1–Sn).
 
-All stages use **real PyTorch** tensor execution (no NumPy stub engine, no mock).
+All stages use **real PyTorch** tensor execution.
+
+**Policy (permanent):** Do NOT add ``demo/serving/*smoke*.py``, ``--contract-only``,
+or NumPy stub (``EngineModelStub`` / ``BACKEND_NUMPY_REF``) cert paths.
+See AGENTS.md § Serving 验证禁令.
 
 Use from Cloud Agent merge gates::
 

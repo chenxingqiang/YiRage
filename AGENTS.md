@@ -62,14 +62,14 @@ FusionPlan 库    ← superoptimize / profile / shape-bucket cache
 | **Serving / RF 优先于离线 demo** | 新 Loop 须闭合 [RuntimeFusion 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 的一行；纯 offline demo 美化 **降级** |
 | **弹性融合先于全图独占** | 未打通「引擎调度 + MLP Capsule + `RF.step`」前，禁止全模型单一内核替换 |
 | **融合身份 ≠ 调度权** | Capsule/RF 拥有融合；vLLM/SGLang 拥有批处理与 KV 池 |
-| **先测后优** | 没有正确性与可复现 serving/RF smoke，不改 Capsule ABI / meta / SM 配额 |
+| **先测后优** | 没有正确性与可复现 serving/RF **pytest（real torch）**，不改 Capsule ABI / meta / SM 配额 |
 | **同后端评估** | Search/profile/execute 与 serving 插件须在同一 `backend` 完成 |
 | **瓶颈驱动** | 优先：Capsule + `step` 钩子 → 层覆盖 → meta/`block_table` → SM → Radix |
 | **最小改动** | 每轮 1～2 个瓶颈；复用现有搜索/执行实现作 legacy backend；禁止平行重写 runtime |
 | **文档先于符号大挪移** | S0/S1 完成品牌与概念切断；`MuGraphStore` 等改名另开 Chore |
-| **验证通过再沉淀** | RF/serving smoke 或契约通过后再更新 `AGENTS.md` |
+| **验证通过再沉淀** | RF/serving pytest 或 e2e demo 通过后再更新 `AGENTS.md` |
 | **执行前价值闸门** | 每轮对照 [Serving 分阶](#serving-loop-分阶路线-s0sn) 与四轮自问 |
-| **行为性价比** | 禁止 stub 插件 / torch 回退冒充 RuntimeFusion |
+| **行为性价比** | 禁止 stub 插件 / torch 回退 / **NumPy stub smoke** 冒充 RuntimeFusion |
 
 ### Agent 行为性价比审查（每步必做）
 
@@ -79,7 +79,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 |------|------|
 | **目标对齐** | 本步是否直接闭合当前 Serving 策略卡片（S{n}）的主瓶颈？ |
 | **正式 vs 回退** | 是否在绕开根因（stub 插件、整层 torch 回退、用「烤死 MegaKernel」冒充 RF）？ |
-| **证据** | 是否有 vLLM/SGLang 或 RF smoke / pytest / latency JSON / MetaX 日志？ |
+| **证据** | 是否有 vLLM/SGLang 或 RF **pytest（real torch）** / latency JSON / MetaX 日志？ |
 | **机会成本** | 是否更应打通 Capsule/`step`/meta/SM，而非 offline 抛光或 legacy 大改名？ |
 
 **结论为「性价比不足」或「属于回退」时**：停止落地，回到策略层重选 backlog；不得为凑 Loop 合并 PR。
@@ -98,7 +98,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 | **FusionPlan** | Execution plan | `superoptimize` 产物 + cache（legacy: mugraph） | 搜索/复用 |
 | **Device / Tile Graph** | 设备与 tile 抽象 | 代码暂留 KN/TB；文档用新名 | 实现层 |
 | **原语** | cuBLAS / mcPytorch | `.cu` / `.maca`；不重造孤立 GEMM | 仅阻塞时修 |
-| **验证** | generate 数值 + 吞吐 | Capsule vs eager；RF smoke | 正确性优先 |
+| **验证** | generate 数值 + 吞吐 | Capsule vs eager；RF pytest | 正确性优先 |
 
 **借鉴要点**：
 
@@ -114,7 +114,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 2. **RF 对标**：闭合 [RuntimeFusion 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 哪一行？是否仍在用 legacy MPK/µGraph 对外叙事？
 3. **路径**：Capsule 边界是否清晰？`RF.step` 是否消费本轮所需 meta？SM 是否预留？
 4. **收益**：Capsule 通路 / 层覆盖 / KV 桥 / SM / Radix / e2e？性能向须写基线（eager 引擎 vs RF）。
-5. **验证入口**：真机或明确契约-only？不得虚报 Serving 完成。
+5. **验证入口**：`make test-serving-cpu-cert-pytest` 或 e2e demo；**禁止**新增 stub/smoke 脚本冒充完成。
 6. **机会成本**：是否挤掉更高优先级的 Capsule/`step` backlog？
 
 **性能向轮次**（按后端）：
@@ -122,7 +122,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 ```bash
 # CUDA / RF hybrid（主轨）
 export YIRAGE_BACKEND=cuda PYTHONPATH=.
-# S1+：Capsule / RF.step smoke；S2+：vLLM entry
+# S1+：pytest tests/python/test_runtime_fusion_s*.py；e2e demo/serving/real_torch_e2e.py
 
 # MACA 支撑（仅触及 MACA 时）
 export MACA_PATH=/opt/maca
@@ -159,6 +159,27 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 - 未打通 S2 就宣称「已支持 vLLM」。
 - 用整网 torch 回退冒充 RuntimeFusion。
 - 在 S1 阶段做 `MuGraphStore` 等大规模符号重命名 Chore。
+
+### Serving 验证禁令（**严禁**，2026-07-27 起永久有效）
+
+> Cloud Agent 与人类协作者：**不得**再引入下列测试形态；已有项已删除，**禁止回滚或换名复活**。
+
+| 严禁项 | 说明 |
+|--------|------|
+| **`demo/serving/*smoke*.py`** | 任何带 `smoke` 后缀的 Serving demo；能力须写入 `tests/python/test_runtime_fusion_s*.py` |
+| **`--contract-only` / NumPy stub cert** | 无 torch 的「契约-only」cert 分支；`EngineModelStub` + `BACKEND_NUMPY_REF` **不得**作为 cert/pytest 主路径 |
+| **Mock / duck-typed vLLM 层** | 如 `_MockVllmQwen2Layer`；vLLM 路径须真实 `pip install vllm` 或测负路径 `pytest.skip` |
+| **重复验证脚本** | 与 pytest 同义的 one-off demo；仅保留 **`real_torch_e2e.py`**、**`segment_torch_bench.py`**（实测 e2e/bench），以及可选 **`yirage_superopt_e2e.py`**（yirage-core tier） |
+
+**唯一认可的 Serving 验证栈**：
+
+```bash
+make test-serving-cpu-cert-pytest   # S1–S8 real torch pytest
+make test-serving-cpu-cert          # 上式 + real_torch_e2e + segment_torch_bench
+```
+
+新能力：**先写/扩 pytest**（`TorchEngineModel`、`BACKEND_TORCH`、`tests/python/serving_real_test_utils.py`），必要时再加 **非 smoke 命名**的 e2e demo；**不得**为凑 stage 数新建 smoke 文件。
+
 - 将旧 R27 offline latency 归档置于 S1–S2 之上。
 
 ### RuntimeFusion 能力矩阵（对标 vLLM/SGLang）
@@ -166,7 +187,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | 能力域 | 工业参照 | YiRage 落点（现状） | 真机验证入口（目标） | tier |
 |--------|----------|--------------------|---------------------|------|
 | **FusionPlan 搜索/缓存** | Execution plan + cache | `FusionPlan` API（S1）；存储仍 legacy mugraph | `test_runtime_fusion_s1` plan 契约；cache chore 另开 | partial |
-| **MLP FusionCapsule** | Fused MLP block | `yirage.serving.MlpFusionCapsule`（eager_numpy） | `test_runtime_fusion_s1.py`；mlp smoke | **partial（S1）** |
+| **MLP FusionCapsule** | Fused MLP block | `yirage.serving.MlpFusionCapsule`（默认 `backend=torch`） | `test_runtime_fusion_s1.py` | **partial（S1）** |
 | **RF.step 钩子** | Dynamic fusion runtime | `RuntimeFusion.step`（select/skip） | 同上 | **partial（S1）** |
 | **Model 层 Override** | `vllm/.../models/qwen2.py` | `RuntimeFusionMlpLayerOverride` + `TorchDecoderMlpRfHook` | `test_runtime_fusion_s2_s3.py` | **partial（S2）** |
 | **前 K 层混合** | 可配置 fused layers | `HybridModelOverride(max_rf_mlp_layers=K)` | `test_runtime_fusion_s2_s3.py` | **partial（S3）** |
@@ -203,7 +224,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 - 复用 `persistent_kernel/`、搜索缓存作 backend，**不**在叙事上称 MPK
 - MACA：仅当 Capsule 在 C500 需 mxcc 时改支撑轨
 
-**验证**：**`make test-serving-cpu-cert`**：PyTorch 真实张量 forward + latency bench + S1–S8 pytest/smoke；无 NumPy stub / `--contract-only` 路径。有 `yirage.core` 构建后再加 `--yirage-core` tier。
+**验证**：**`make test-serving-cpu-cert`** = S1–S8 **real torch pytest** + `real_torch_e2e` + `segment_torch_bench`；见 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)。可选 **`--yirage-core`** tier。
 
 ---
 
@@ -540,7 +561,7 @@ pytest tests/python/test_maca_config.py -v
 [ ] 1. 感知：RF 矩阵 gap、FusionPlan/Capsule 可复用面、Legacy 对照；（若触及 MACA）mx-smi / demo_maca_*
 [ ] 2. 策略：只选 1 个 Serving 阶段（默认 S1 Capsule+step → S2→S4…）；拒绝 Mirage/MPK 叙事与单 Attention 替换
 [ ] 3. 落地：最小 patch；优先 `serving/` RF 外壳 / Capsule / meta 桥；legacy 仅作委托；每步过行为性价比
-[ ] 4. 验证：对应 S{n} 入口 + 契约 pytest；触及 MACA 则 MetaX 相关入口
+[ ] 4. 验证：`make test-serving-cpu-cert-pytest`；**禁止**新增 `*smoke*` / contract-only / stub cert；触及 MACA 则 MetaX 入口
 [ ] 5. 开 PR：push 分支 cursor/...-c4c0（或仓库约定后缀），base=main；PR 含 S{n} 与验证摘要
 [ ] 6. 自动合并：验证闸门通过 → merge
 [ ] 7. 同步 main：git checkout main && git pull
@@ -556,7 +577,7 @@ pytest tests/python/test_maca_config.py -v
 | 感知 | [RF 矩阵](#runtimefusion-能力矩阵对标-vllmsglang)、[Legacy 对照](#概念对照legacy--yirage-标准)、`demo_chat.py`、`qwen3_pk_*.py` |
 | 策略 | Serving S0–S7（RF）、[CUDA 支撑矩阵](#cuda-对标优化目标与能力矩阵) |
 | 落地 | 拟议 `python/yirage/serving/`（RF/Capsule API）、legacy `persistent_kernel/` / mugraph store 委托、MACA 支撑 |
-| 验证 | S{n} smoke；`test_maca_*`；`qwen3_persistent_kernel_demo` flags |
+| 验证 | `make test-serving-cpu-cert-pytest`；`demo/serving/real_torch_e2e.py`；`test_maca_*` |
 | 进化 | **`AGENTS.md`（Serving + MACA 笔记）**, `docs/maca_*.md`, `docs/HARDWARE_OPTIMIZATION.md` |
 
 ### 当前轮次笔记（Serving + MACA，由 Agent 持续追加）
@@ -574,7 +595,8 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S7（2026-07-27，multi-Capsule segment override）**：闸门：图级编排层。每层 MLP 拆成 gate_up→down 两 Capsule；`StepMeta.pipeline` + `resolve_capsule_pipeline`；`DecoderSegmentOverride` / `SegmentHybridModelOverride` 大段 override（Attention/KV 仍引擎）。验证：7 pytest + `multi_capsule_segment_smoke` + cert。下一轮：**S8** — 真 vLLM 插件 / torch 实测 bench 归档。
 - **Serving Loop S8（2026-07-27，vLLM plugin + segment torch bench）**：闸门：引擎插件 + 实测归档。`TorchDecoderMlpRfHook`（真实 torch 权重/forward，**禁止 mock**）；`VllmQwen2MlpRfHook` 仅当 `vllm` 已安装；`run_segment_torch_bench_archive` JSON ms。验证：cert + smokes 全 real torch。PR #161 待 main 合并。
 - **Serving Loop S8b（2026-07-27，移除 contract-only / numpy stub cert）**：闸门：测试契约层。删除 `--contract-only` manifest；S1–S7 pytest 统一 real torch。验证：`make test-serving-cpu-cert-pytest` + `make test-serving-cpu-cert`。
-- **Serving Loop S8c（2026-07-27，删除 serving smoke 脚本）**：闸门：工具层。删除 `demo/serving/*smoke*.py`（已由 pytest + `real_torch_e2e`/`segment_torch_bench` 覆盖）；cert manifest 同步。
+- **Serving Loop S8c（2026-07-27，删除 serving smoke 脚本）**：闸门：工具层。删除 `demo/serving/*smoke*.py`；cert manifest 同步。
+- **Serving Loop S8d（2026-07-27，验证禁令入 AGENTS）**：闸门：协议层。写入 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)；禁止再写 smoke/contract-only/stub cert。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
@@ -929,7 +951,9 @@ YiRage is a **library**（Python + native C++/Cython + RuntimeFusion / FusionPla
 | **NVIDIA GPU**（团队机） | Serving S1+ FusionCapsule / RF.step / vLLM hybrid | `cuda` |
 | **MetaX GPU SSH VM** | MACA 构建、支撑轨 bench | `maca` |
 
-**合并闸门**：Serving/RF 功能宣称须对应 GPU smoke；MACA kernel/search 改动须 MetaX 验证；Cloud CPU 绿 **不能** 替代。
+**合并闸门**：Serving/RF 功能宣称须 **real torch pytest** 绿；MACA kernel/search 改动须 MetaX 验证；Cloud CPU 绿 **不能** 替代。
+
+**Serving 验证**：见 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效) — **严禁** `demo/serving/*smoke*.py`、`--contract-only`、NumPy stub cert。
 
 ### MetaX GPU VM 一次性设置
 
@@ -994,7 +1018,7 @@ Rust helpers（若链接失败）：
 - **FusionPlan cache（legacy 路径）**：`superoptimize(..., use_persistent_cache=True)` 现仍落在 `~/.yirage/mugraphs/`（`MuGraphStore`）；对外称 FusionPlan 缓存，符号改名 Chore 另开。
 - **同后端优化**：Search/profile/execute 均同一 `backend`；见 [docs/HARDWARE_OPTIMIZATION.md](docs/HARDWARE_OPTIMIZATION.md)。
 - **CPU 闭环归档**：`make test-cpu-cert` 等仍可用于 CPU 回归，但 **不是** Serving / MACA 合并闸门。
-- **Serving 反模式**：不要只换 Attention 算子，也不要宣传 Mirage/MPK/µGraph；先做 S1 MLP **FusionCapsule + RF.step**，再 S2 层 Override。
+- **Serving 反模式**：不要只换 Attention 算子，也不要宣传 Mirage/MPK/µGraph；**严禁** `*smoke*` demo / contract-only / stub cert（见 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)）。
 - **旧 R27**：offline latency 归档已降级；勿自动开 R27 分支除非 RF 明确依赖。
 
 ### Running MACA demos

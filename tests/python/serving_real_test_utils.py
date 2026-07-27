@@ -1,6 +1,11 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Shared helpers: real torch serving tests only (no numpy stub engine)."""
+"""Shared helpers: real torch serving tests only (no numpy stub engine).
+
+Policy: Serving verification lives in pytest + ``real_torch_e2e`` /
+``segment_torch_bench`` only — do NOT add ``demo/serving/*smoke*.py``.
+See AGENTS.md § Serving 验证禁令.
+"""
 
 from __future__ import annotations
 
