@@ -9,8 +9,9 @@ available; otherwise torch hybrid + ``MacaServingRfSpec`` meta (CPU CI gate).
 
 from __future__ import annotations
 
+import json
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from .bench_archive import ServingBenchArchive, ServingBenchArchiveRow
@@ -282,7 +283,7 @@ def run_yirage_maca_generation_bench_archive(
         bench_iters=1,
     )
 
-    archive = ServingBenchArchive(version="s17", device=model.device)
+    archive = ServingBenchArchive(version="s18", device=model.device)
     archive.rows.append(
         ServingBenchArchiveRow(
             name=eng_step.name,
@@ -353,3 +354,117 @@ def run_yirage_maca_generation_auto(
         decode_steps=decode_steps,
         backend=None,
     )
+
+
+MCPYTORCH_BASELINE_NAME = "mcPytorch_torch_engine"
+
+
+@dataclass(frozen=True)
+class YirageMacaGenerationBaselineSummary:
+    """S18: hybrid decode latency vs mcPytorch (torch engine) baseline."""
+
+    baseline_name: str
+    baseline_decode_step_ms: float
+    hybrid_decode_step_ms: float
+    speedup_vs_baseline: float
+    parity_ok: bool
+    backend_used: str
+    metax_torch: bool
+    decode_steps: int
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "baseline_name": self.baseline_name,
+            "baseline_decode_step_ms": round(self.baseline_decode_step_ms, 4),
+            "hybrid_decode_step_ms": round(self.hybrid_decode_step_ms, 4),
+            "speedup_vs_baseline": round(self.speedup_vs_baseline, 4),
+            "parity_ok": self.parity_ok,
+            "backend_used": self.backend_used,
+            "metax_torch": self.metax_torch,
+            "decode_steps": self.decode_steps,
+        }
+
+
+@dataclass
+class YirageMacaGenerationBaselineArchive:
+    """JSON-serializable generation bench vs mcPytorch baseline (S18)."""
+
+    version: str
+    device: str
+    archive: ServingBenchArchive
+    summary: YirageMacaGenerationBaselineSummary
+    created_unix: float = field(default_factory=time.time)
+
+    def to_dict(self) -> Dict[str, Any]:
+        base = self.archive.to_dict()
+        base["generation_baseline_archive"] = True
+        base["version"] = self.version
+        base["baseline"] = self.summary.baseline_name
+        base["summary"] = self.summary.to_dict()
+        return base
+
+    def write_json(self, path) -> None:
+        from pathlib import Path
+
+        Path(path).write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+
+
+def _metax_torch_detected() -> bool:
+    from .vllm_metax_plugin import is_metax_torch
+
+    return is_metax_torch()
+
+
+def run_yirage_maca_generation_mcpytorch_baseline_archive(
+    *,
+    num_layers: int = 2,
+    hidden_size: int = 32,
+    intermediate_size: int = 64,
+    decode_steps: int = 4,
+    seed: int = 0,
+    warmup: int = 2,
+    iters: int = 8,
+    backend: Optional[str] = None,
+) -> YirageMacaGenerationBaselineArchive:
+    """S18 archive: RF hybrid decode step vs mcPytorch torch-engine baseline."""
+    archive = run_yirage_maca_generation_bench_archive(
+        num_layers=num_layers,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        decode_steps=decode_steps,
+        seed=seed,
+        warmup=warmup,
+        iters=iters,
+        backend=backend,
+    )
+    be = backend or resolve_yirage_maca_generation_backend()
+    if be == BACKEND_YIRAGE_MACA and not is_yirage_maca_available():
+        be = BACKEND_TORCH
+
+    baseline_row = next(r for r in archive.rows if r.name == "engine_decode_step")
+    hybrid_row = next(r for r in archive.rows if r.name == "hybrid_decode_step")
+    speedup = baseline_row.mean_ms / max(hybrid_row.mean_ms, 1e-9)
+
+    summary = YirageMacaGenerationBaselineSummary(
+        baseline_name=MCPYTORCH_BASELINE_NAME,
+        baseline_decode_step_ms=baseline_row.mean_ms,
+        hybrid_decode_step_ms=hybrid_row.mean_ms,
+        speedup_vs_baseline=speedup,
+        parity_ok=bool(baseline_row.parity_ok and hybrid_row.parity_ok),
+        backend_used=be,
+        metax_torch=_metax_torch_detected(),
+        decode_steps=int(decode_steps),
+    )
+
+    baseline_archive = YirageMacaGenerationBaselineArchive(
+        version="s18",
+        device=archive.device,
+        archive=archive,
+        summary=summary,
+    )
+    baseline_archive.archive.version = "s18"
+    for row in baseline_archive.archive.rows:
+        row.extras.setdefault("baseline", MCPYTORCH_BASELINE_NAME)
+        if row.name == "hybrid_decode_step":
+            row.extras["speedup_vs_mcpytorch"] = speedup
+    return baseline_archive

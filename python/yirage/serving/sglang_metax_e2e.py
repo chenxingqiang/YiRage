@@ -501,3 +501,124 @@ def run_sglang_metax_hybrid_full_e2e_auto(
         batch=batch,
         bench=bench,
     )
+
+
+@dataclass(frozen=True)
+class SglangMetaxMultiLayerRealForkE2EReport:
+    """S18: multi-layer SGLang-metax Qwen2 hook + ForwardBatch hybrid."""
+
+    layer_reports: List[SglangMetaxMlpRfE2EReport]
+    hybrid: SglangMetaxHybridE2EReport
+    layer_ids: List[int]
+    real_fork: bool
+    parity_ok: bool
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "real_fork": self.real_fork,
+            "parity_ok": self.parity_ok,
+            "layer_ids": list(self.layer_ids),
+            "layer_reports": [r.to_dict() for r in self.layer_reports],
+            "hybrid": self.hybrid.to_dict(),
+        }
+
+
+def run_sglang_metax_multilayer_real_fork_e2e(
+    *,
+    maca_spec: Optional[MacaServingRfSpec] = None,
+    layer_ids: Optional[Sequence[int]] = None,
+    hidden_size: int = 64,
+    intermediate_size: int = 128,
+    batch: int = 4,
+    warmup: int = 2,
+    iters: int = 8,
+    bench: bool = True,
+) -> SglangMetaxMultiLayerRealForkE2EReport:
+    """Multi-layer real SGLang-metax fork (one Qwen2 hook per layer id)."""
+    require_sglang_metax()
+    lids = list(layer_ids if layer_ids is not None else [0, 1])
+    layer_reports = [
+        run_sglang_metax_qwen2_mlp_rf_e2e(
+            maca_spec=maca_spec,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            layer_id=int(lid),
+            warmup=warmup,
+            iters=iters,
+            bench=bench,
+        )
+        for lid in lids
+    ]
+    hybrid = run_torch_sglang_metax_hybrid_full_e2e(
+        maca_spec=maca_spec,
+        num_layers=max(lids) + 1,
+        max_rf_mlp_layers=len(lids),
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        batch=batch,
+        warmup=warmup,
+        iters=iters,
+        bench=bench,
+    )
+    parity_ok = all(r.parity_ok for r in layer_reports) and hybrid.parity_ok
+    return SglangMetaxMultiLayerRealForkE2EReport(
+        layer_reports=layer_reports,
+        hybrid=hybrid,
+        layer_ids=lids,
+        real_fork=True,
+        parity_ok=parity_ok,
+    )
+
+
+def run_sglang_metax_multilayer_real_fork_auto(
+    *,
+    maca_spec: Optional[MacaServingRfSpec] = None,
+    layer_ids: Optional[Sequence[int]] = None,
+    hidden_size: int = 64,
+    intermediate_size: int = 128,
+    batch: int = 4,
+    bench: bool = True,
+) -> SglangMetaxMultiLayerRealForkE2EReport:
+    """Cert entry: real multi-layer fork when tier available; else torch hook per layer."""
+    lids = list(layer_ids if layer_ids is not None else [0, 1])
+    if is_sglang_metax_available():
+        try:
+            return run_sglang_metax_multilayer_real_fork_e2e(
+                maca_spec=maca_spec,
+                layer_ids=lids,
+                hidden_size=hidden_size,
+                intermediate_size=intermediate_size,
+                batch=batch,
+                bench=bench,
+            )
+        except Exception:
+            pass
+    layer_reports = [
+        run_torch_sglang_metax_mlp_rf_e2e(
+            maca_spec=maca_spec,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            layer_id=int(lid),
+            bench=bench,
+        )
+        for lid in lids
+    ]
+    hybrid = run_torch_sglang_metax_hybrid_full_e2e(
+        maca_spec=maca_spec,
+        num_layers=max(lids) + 1,
+        max_rf_mlp_layers=len(lids),
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        batch=batch,
+        bench=bench,
+    )
+    parity_ok = all(r.parity_ok for r in layer_reports) and hybrid.parity_ok
+    return SglangMetaxMultiLayerRealForkE2EReport(
+        layer_reports=layer_reports,
+        hybrid=hybrid,
+        layer_ids=lids,
+        real_fork=False,
+        parity_ok=parity_ok,
+    )

@@ -70,4 +70,4 @@ def test_yirage_core_full_layer_auto_entry(yirage_serving):
 
 
 def test_rf_inspect_version_s14(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s17"
+    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s18"

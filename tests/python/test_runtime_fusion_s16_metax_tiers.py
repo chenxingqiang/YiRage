@@ -139,4 +139,4 @@ def test_yirage_maca_full_layer_e2e(serving):
 
 
 def test_rf_inspect_version_s16(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s17"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"

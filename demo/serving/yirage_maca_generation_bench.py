@@ -45,7 +45,8 @@ def main() -> int:
     p.add_argument("--decode-steps", type=int, default=4)
     p.add_argument("--quick", action="store_true", help="smaller shapes / fewer iters")
     p.add_argument("--output", type=str, default="")
-    p.add_argument("--json", action="store_true")
+    p.add_argument("--json", action="store_true", help="print JSON archive to stdout")
+    p.add_argument("--baseline-json", action="store_true", help="use mcPytorch baseline archive schema")
     args = p.parse_args()
 
     serving, root = _bootstrap()
@@ -63,28 +64,42 @@ def main() -> int:
     decode_steps = 2 if args.quick else args.decode_steps
     iters = 4 if args.quick else 8
 
-    archive = serving.run_yirage_maca_generation_bench_archive(
-        num_layers=num_layers,
-        hidden_size=hidden_size,
-        intermediate_size=intermediate_size,
-        decode_steps=decode_steps,
-        warmup=1,
-        iters=iters,
-    )
-    if args.output:
-        archive.write_json(Path(args.output))
+    if args.baseline_json or args.json:
+        baseline = serving.run_yirage_maca_generation_mcpytorch_baseline_archive(
+            num_layers=num_layers,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            decode_steps=decode_steps,
+            warmup=1,
+            iters=iters,
+        )
+        if args.output:
+            baseline.write_json(Path(args.output))
+        report = baseline.to_dict()
+        hybrid_ms = baseline.summary.hybrid_decode_step_ms
+        ok = baseline.summary.parity_ok and hybrid_ms > 0
+    else:
+        archive = serving.run_yirage_maca_generation_bench_archive(
+            num_layers=num_layers,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            decode_steps=decode_steps,
+            warmup=1,
+            iters=iters,
+        )
+        if args.output:
+            archive.write_json(Path(args.output))
+        report = archive.to_dict()
+        hybrid = next(r for r in archive.rows if r.name == "hybrid_decode_step")
+        ok = hybrid.parity_ok and hybrid.mean_ms > 0
 
-    report = archive.to_dict()
-    hybrid = next(r for r in archive.rows if r.name == "hybrid_decode_step")
-    ok = hybrid.parity_ok and hybrid.mean_ms > 0
-
-    if args.json:
+    if args.baseline_json or args.json:
         print(json.dumps(report, indent=2))
     else:
         print("S17 yirage_maca generation bench archive")
-        print(f"  device={archive.device} version={archive.version}")
-        for row in archive.rows:
-            print(f"  {row.name}: {row.mean_ms:.3f}ms parity={row.parity_ok}")
+        print(f"  device={report.get('device')} version={report.get('version')}")
+        for row in report.get("rows", []):
+            print(f"  {row['name']}: {row['mean_ms']:.3f}ms parity={row['parity_ok']}")
         print("PASS" if ok else "FAIL")
 
     return 0 if ok else 1
