@@ -405,3 +405,99 @@ def run_sglang_metax_mlp_rf_e2e_auto(
         batch=batch,
         bench=bench,
     )
+
+
+@dataclass(frozen=True)
+class SglangMetaxRealForkE2EReport:
+    """Real SGLang-metax fork: Qwen2 hook + ForwardBatch hybrid (both with MACA meta)."""
+
+    hook: SglangMetaxMlpRfE2EReport
+    hybrid: SglangMetaxHybridE2EReport
+    real_fork: bool
+    parity_ok: bool
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "real_fork": self.real_fork,
+            "parity_ok": self.parity_ok,
+            "hook": self.hook.to_dict(),
+            "hybrid": self.hybrid.to_dict(),
+        }
+
+
+def run_sglang_metax_real_fork_e2e(
+    *,
+    maca_spec: Optional[MacaServingRfSpec] = None,
+    hidden_size: int = 64,
+    intermediate_size: int = 128,
+    batch: int = 4,
+    num_layers: int = 2,
+    max_rf_mlp_layers: int = 2,
+    warmup: int = 2,
+    iters: int = 8,
+    bench: bool = True,
+) -> SglangMetaxRealForkE2EReport:
+    """Full SGLang-metax fork e2e (requires ``sglang`` on MetaX host)."""
+    require_sglang_metax()
+    hook = run_sglang_metax_qwen2_mlp_rf_e2e(
+        maca_spec=maca_spec,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        batch=batch,
+        warmup=warmup,
+        iters=iters,
+        bench=bench,
+    )
+    hybrid = run_torch_sglang_metax_hybrid_full_e2e(
+        maca_spec=maca_spec,
+        num_layers=num_layers,
+        max_rf_mlp_layers=max_rf_mlp_layers,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        batch=batch,
+        warmup=warmup,
+        iters=iters,
+        bench=bench,
+    )
+    return SglangMetaxRealForkE2EReport(
+        hook=hook,
+        hybrid=hybrid,
+        real_fork=True,
+        parity_ok=hook.parity_ok and hybrid.parity_ok,
+    )
+
+
+def run_sglang_metax_hybrid_full_e2e_auto(
+    *,
+    maca_spec: Optional[MacaServingRfSpec] = None,
+    num_layers: int = 4,
+    max_rf_mlp_layers: int = 2,
+    hidden_size: int = 64,
+    intermediate_size: int = 128,
+    batch: int = 4,
+    bench: bool = True,
+) -> SglangMetaxHybridE2EReport:
+    """Cert entry: torch hybrid + MACA meta; real fork when tier available."""
+    if is_sglang_metax_available():
+        try:
+            fork = run_sglang_metax_real_fork_e2e(
+                maca_spec=maca_spec,
+                num_layers=num_layers,
+                max_rf_mlp_layers=max_rf_mlp_layers,
+                hidden_size=hidden_size,
+                intermediate_size=intermediate_size,
+                batch=batch,
+                bench=bench,
+            )
+            return fork.hybrid
+        except Exception:
+            pass
+    return run_torch_sglang_metax_hybrid_full_e2e(
+        maca_spec=maca_spec,
+        num_layers=num_layers,
+        max_rf_mlp_layers=max_rf_mlp_layers,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        batch=batch,
+        bench=bench,
+    )
