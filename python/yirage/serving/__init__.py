@@ -29,7 +29,9 @@ from .radix_meta import (
     RadixHitMeta,
     apply_radix_shrink,
     attach_radix_to_step_meta,
+    build_sglang_rf_step_meta,
     parse_radix_hit_mask,
+    radix_hit_mask_from_sglang_extend_lens,
 )
 from .torch_plugin import TorchDecoderMlpRfHook, build_torch_mlp_rf_hook
 from .vllm_plugin import (
@@ -180,6 +182,8 @@ __all__ = [
     "parse_radix_hit_mask",
     "attach_radix_to_step_meta",
     "apply_radix_shrink",
+    "build_sglang_rf_step_meta",
+    "radix_hit_mask_from_sglang_extend_lens",
     "bootstrap_yirage_stub",
     "import_serving",
     "repo_root",

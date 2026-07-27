@@ -148,3 +148,78 @@ def apply_radix_shrink(
     out = np.array(hidden_np, copy=True)
     out[active] = np.asarray(compute_active(hidden_np[active]))
     return out  # type: ignore[return-value]
+
+
+def radix_hit_mask_from_sglang_extend_lens(
+    extend_lens: ArrayLike,
+) -> np.ndarray:
+    """Map SGLang ``extend_seq_lens`` to per-row Radix hit mask.
+
+    SGLang uses ``extend_seq_lens[b] == 0`` when request ``b`` has no new tokens
+    to compute (prefix fully cached). Those rows skip FusionCapsule MLP work.
+    """
+    ext = np.asarray(extend_lens, dtype=np.int64).reshape(-1)
+    if ext.ndim != 1:
+        raise ValueError(f"extend_lens must be rank-1 [batch], got shape={ext.shape}")
+    if np.any(ext < 0):
+        raise ValueError("extend_lens must be non-negative")
+    return ext == 0
+
+
+def build_sglang_rf_step_meta(
+    base: Optional[Mapping[str, Any]] = None,
+    *,
+    block_tables: Optional[ArrayLike] = None,
+    seq_lens: Optional[ArrayLike] = None,
+    extend_lens: Optional[ArrayLike] = None,
+    page_size: int = 16,
+    radix_hit_mask: Optional[ArrayLike] = None,
+    enabled: Optional[Sequence[str]] = None,
+    sm_budget: Optional[int] = None,
+    extras: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Build a StepMeta-compatible dict from SGLang ForwardBatch-like fields.
+
+    Combines S4 ``block_tables``/``seq_lens`` bridging with S6 Radix skip/shrink.
+    Does not import ``sglang``; callers pass tensors/arrays from the engine batch.
+    """
+    out: Dict[str, Any] = dict(base or {})
+    merged_extras = dict(out.get("extras") or {})
+    if extras:
+        merged_extras.update(dict(extras))
+
+    if block_tables is not None and seq_lens is not None:
+        from .kv_meta import attach_paged_kv_to_step_meta
+
+        out = attach_paged_kv_to_step_meta(
+            out,
+            block_tables=block_tables,
+            seq_lens=seq_lens,
+            page_size=page_size,
+            slot_mapping=merged_extras.get("slot_mapping"),
+        )
+        merged_extras = dict(out.get("extras") or {})
+
+    mask = radix_hit_mask
+    if mask is None and extend_lens is not None:
+        mask = radix_hit_mask_from_sglang_extend_lens(extend_lens)
+
+    if mask is not None:
+        bs = None
+        if seq_lens is not None:
+            bs = int(np.asarray(seq_lens).reshape(-1).shape[0])
+        out = attach_radix_to_step_meta(out, radix_hit_mask=mask, batch_size=bs)
+
+    merged_extras = dict(out.get("extras") or {})
+    if extend_lens is not None:
+        ext = np.asarray(extend_lens, dtype=np.int64).reshape(-1).tolist()
+        merged_extras["sglang"] = dict(merged_extras.get("sglang") or {})
+        merged_extras["sglang"]["extend_lens"] = ext
+
+    if enabled is not None:
+        out["enabled"] = set(enabled)
+    if sm_budget is not None:
+        out["sm_budget"] = int(sm_budget)
+    out["page_size"] = int(page_size)
+    out["extras"] = merged_extras
+    return out

@@ -193,7 +193,8 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **S5** | **SM 预算**与 Sampler/NCCL 共驻 | `sm_budget.py`；`RF.step` 超预算 skip + engine fallback | `test_runtime_fusion_s5_sm.py`；`make test-serving-cpu-cert` | **done** |
 | **S6** | SGLang **Radix**：hit meta → 跳过/收缩 Capsule | `radix_meta.py` | `test_runtime_fusion_s6_radix.py` | **done** |
 | **S7** | 多 Capsule / 大段 Decoder Override | `capsule_orchestration.py`；`split_mlp_capsule.py`；`segment_override.py` | `test_runtime_fusion_s7_multi_capsule.py` | **done** |
-| **S8** | vLLM Qwen2 MLP 插件契约 + segment torch 实测 bench 归档 | `torch_plugin.py`；`vllm_plugin.py`（须安装 vllm） | `test_runtime_fusion_s8_*`；`segment_torch_bench.py` | **done（本轮）** |
+| **S8** | vLLM Qwen2 MLP 插件契约 + segment torch 实测 bench 归档 | `torch_plugin.py`；`vllm_plugin.py`（须安装 vllm） | `test_runtime_fusion_s8_*`；`segment_torch_bench.py` | **done** |
+| **S9** | **SGLang ForwardBatch meta 桥**（`extend_seq_lens` → Radix skip/shrink + KV） | `radix_meta.build_sglang_rf_step_meta` | `test_runtime_fusion_s9_sglang_meta.py` | **done（本轮）** |
 
 **明确不做什么（反模式）**：
 
@@ -237,7 +238,7 @@ make test-serving-cpu-cert          # 上式 + real_torch_e2e + segment_torch_be
 | **前 K 层混合** | 可配置 fused layers | `HybridModelOverride(max_rf_mlp_layers=K)` | `test_runtime_fusion_s2_s3.py` | **partial（S3）** |
 | **meta / KV 桥** | `block_tables` | `block_tables_to_paged_kv` + `StepMeta.with_paged_kv_bridge` | `test_runtime_fusion_s4_kv.py` | **partial（S4）** |
 | **SM 配额共驻** | 引擎多流 | `resolve_sm_worker_quota` + `RF.step` 超预算 skip | `test_runtime_fusion_s5_sm.py` | **partial（S5）** |
-| **Radix skip** | SGLang RadixAttention | `radix_meta` + `RF.step` skip/shrink | `test_runtime_fusion_s6_radix.py` | **partial（S6）** |
+| **Radix skip** | SGLang RadixAttention | `radix_meta` + `build_sglang_rf_step_meta` | `test_runtime_fusion_s6_radix.py`；`test_runtime_fusion_s9_sglang_meta.py` | **partial（S6/S9）** |
 | **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py` | **partial（S7）** |
 | **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测默认 `TorchDecoderMlpRfHook` | `test_runtime_fusion_s8_*`；`segment_torch_bench.py` | **partial（S8）** |
 | **Segment torch bench** | 实测 latency JSON | `run_segment_torch_bench_archive` | `segment_torch_bench.py`；cert | **partial（S8）** |
@@ -642,6 +643,7 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S8c（2026-07-27，删除 serving smoke 脚本）**：闸门：工具层。删除 `demo/serving/*smoke*.py`；cert manifest 同步。
 - **Serving Loop S8d（2026-07-27，验证禁令入 AGENTS）**：闸门：协议层。写入 [Serving 验证禁令](#serving-验证禁令严禁2026-07-27-起永久有效)；禁止再写 smoke/contract-only/stub cert。
 - **Agent Protocol（2026-07-27，TDD + Production 开发协议）**：闸门：文档/协议层。新增 [Agent Development Protocol](#agent-development-protocolmandatory)（TDD、分阶段、设计冻结、最小改动、真实环境、少建文件、README/AGENTS 分工、人工审批门）。
+- **Serving Loop S9（2026-07-27，SGLang meta bridge）**：闸门：图级/meta 层。`radix_hit_mask_from_sglang_extend_lens` + `build_sglang_rf_step_meta`（`extend_seq_lens`→Radix + 可选 KV 桥）；RF version **s9**。验证：`test_runtime_fusion_s9_sglang_meta.py` + cert。下一轮：**S10** — SGLang model hook（须安装 sglang）或 vLLM 全链路 e2e。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
