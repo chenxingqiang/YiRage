@@ -141,8 +141,8 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 
 | 阶段 | 目标 | 复用脚手架（实现） | 验证门槛 | 状态 |
 |------|------|--------------------|----------|------|
-| **S0** | 北极星改为 FusionPlan / FusionCapsule / RF；Legacy 对照表；冻结反模式 | 本文档 | 文档评审合入 | **本轮** |
-| **S1** | **第一个可被 RF 选中的 MLP FusionCapsule** + **最小 `RF.step` 钩子**（standalone，可不挂全量 vLLM） | `demo_chat` MLP 段；pk utils MLP；`superoptimize_mlp_*` 作 Plan 来源之一 | Capsule vs eager MLP 数值；`step` 可选中/跳过该 Capsule | 下一轮 |
+| **S0** | 北极星改为 FusionPlan / FusionCapsule / RF；Legacy 对照表；冻结反模式 | 本文档 | 文档评审合入 | **done（本 PR 含）** |
+| **S1** | **第一个可被 RF 选中的 MLP FusionCapsule** + **最小 `RF.step` 钩子**（standalone，可不挂全量 vLLM） | `python/yirage/serving/`；demo `demo/serving/mlp_capsule_smoke.py` | Capsule vs eager 数值；`step` 可选中/跳过；`pytest tests/python/test_runtime_fusion_s1.py` | **本轮** |
 | **S2** | vLLM 单层 MLP Override：模型循环内调 `RF.step`；Attention/Paged 仍走引擎 | S1 Capsule + HF attach map | 小模型 generate 数值对齐；吞吐不崩溃 | backlog |
 | **S3** | 前 K 层 MLP Capsule 可配置混合 | S2 | K∈{1,2,4} smoke | backlog |
 | **S4** | PagedAttention **meta 桥**（`block_table` → paged_kv_* 等） | legacy meta builders；C++ paged params | 非连续 KV 下正确 | backlog |
@@ -165,8 +165,8 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | 能力域 | 工业参照 | YiRage 落点（现状） | 真机验证入口（目标） | tier |
 |--------|----------|--------------------|---------------------|------|
 | **FusionPlan 搜索/缓存** | Execution plan + cache | `superoptimize` + store（legacy mugraph API） | 现有 superopt/bench；文档称 FusionPlan | partial |
-| **MLP FusionCapsule** | Fused MLP block | 构图能力散落在 demo_chat / pk utils；**无 RF 外壳** | S1：`tests/.../test_fusion_capsule_mlp*` + smoke | **gap** |
-| **RF.step 钩子** | Dynamic fusion runtime | **无** | S1 standalone step；S2 挂引擎 | **gap** |
+| **MLP FusionCapsule** | Fused MLP block | `yirage.serving.MlpFusionCapsule`（S1 eager_numpy） | `pytest tests/python/test_runtime_fusion_s1.py`；`demo/serving/mlp_capsule_smoke.py` | **partial（S1）** |
+| **RF.step 钩子** | Dynamic fusion runtime | `yirage.serving.RuntimeFusion.step`（select/skip） | 同上 | **partial（S1）** |
 | **Model 层 Override** | `vllm/.../models/qwen2.py` | **无** | S2 vLLM + Capsule | **gap** |
 | **meta / KV 桥** | `block_tables` | legacy `paged_kv_*`；未接 RF | S4 | **gap** |
 | **SM 配额共驻** | 引擎多流 | worker 可配、无 RF 契约 | S5 | **gap** |
@@ -560,6 +560,7 @@ pytest tests/python/test_maca_config.py -v
 > **维护说明**：每合并一轮主轨（Serving）或支撑轨（MACA）PR，在此追加 3～5 行。CPU 历史见 [归档](#历史归档cpu-无限优化闭环)。
 
 - **Serving Loop S0（2026-07-27，RuntimeFusion 概念定稿）**：闸门：文档/协议层。北极星定为 **FusionPlan / FusionCapsule / RuntimeFusion（RF）**；写入 [Legacy 对照表](#概念对照legacy--yirage-标准)；明确反对 Mirage 式编译霸权与 MPK/µGraph 对外身份。MACA R0–R26 与旧 R27 为支撑。验证：文档审阅（PR #153）。下一轮：**S1** — 第一个可被 RF 选中的 **MLP FusionCapsule** + 最小 **`RF.step` 钩子**（PagedAttention 仍留引擎；不做符号大改名）。
+- **Serving Loop S1（2026-07-27，MLP FusionCapsule + RF.step）**：闸门：Serving/RF API 外壳。新增 `python/yirage/serving/`（`FusionPlan`、`MlpFusionCapsule`、`RuntimeFusion.step`）；S1 执行器为 eager NumPy（Cloud 可测，不依赖 `yirage.core`）；`demo/serving/mlp_capsule_smoke.py`；契约 `tests/python/test_runtime_fusion_s1.py`。验证：pytest S1 + smoke select/skip。下一轮：**S2** — vLLM 模型层 Override 挂 `RF.step`（Attention/Paged 仍留引擎）。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
