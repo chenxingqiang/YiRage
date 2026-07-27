@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set
+from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set, Tuple
 
 from .capsule import FusionCapsule
 from .sm_budget import SmStepAllocation, capsule_sm_cost, resolve_sm_worker_quota
@@ -29,10 +29,13 @@ class StepMeta:
 
     S6 Radix: ``radix_hit_mask`` (bool [batch]) from SGLang RadixAttention — all-hit
     skips the capsule; partial hit shrinks MLP to miss rows only (hits pass-through).
+
+    S7 Pipeline: ``pipeline`` explicit capsule execution order (gate_up → down).
     """
 
     enabled: Optional[Set[str]] = None
     disabled: Optional[Set[str]] = None
+    pipeline: Optional[Tuple[str, ...]] = None
     force_skip_all: bool = False
     block_tables: Any = None
     seq_lens: Any = None
@@ -49,9 +52,11 @@ class StepMeta:
             return data
         enabled = data.get("enabled")
         disabled = data.get("disabled")
+        pipeline = data.get("pipeline")
         return cls(
             enabled=set(enabled) if enabled is not None else None,
             disabled=set(disabled) if disabled is not None else None,
+            pipeline=tuple(pipeline) if pipeline is not None else None,
             force_skip_all=bool(data.get("force_skip_all", False)),
             block_tables=data.get("block_tables"),
             seq_lens=data.get("seq_lens"),
@@ -87,6 +92,7 @@ class StepMeta:
         return StepMeta(
             enabled=set(self.enabled) if self.enabled is not None else None,
             disabled=set(self.disabled) if self.disabled is not None else None,
+            pipeline=self.pipeline,
             force_skip_all=self.force_skip_all,
             block_tables=paged.block_tables,
             seq_lens=paged.seq_lens,
@@ -115,6 +121,7 @@ class StepMeta:
         return StepMeta(
             enabled=set(self.enabled) if self.enabled is not None else None,
             disabled=set(self.disabled) if self.disabled is not None else None,
+            pipeline=self.pipeline,
             force_skip_all=self.force_skip_all,
             block_tables=self.block_tables,
             seq_lens=self.seq_lens,
@@ -175,7 +182,7 @@ class RuntimeFusion:
     def inspect(self) -> Dict[str, Any]:
         return {
             "runtime": "RuntimeFusion",
-            "version": "s6",
+            "version": "s7",
             "capsules": [c.inspect() for c in self._capsules],
         }
 
@@ -210,7 +217,10 @@ class RuntimeFusion:
         skipped: List[str] = []
         skipped_radix: List[str] = []
 
-        for cap in self._capsules:
+        from .capsule_orchestration import resolve_capsule_pipeline
+
+        ordered_caps = resolve_capsule_pipeline(self._capsules, step_meta)
+        for cap in ordered_caps:
             if not step_meta.should_run(cap.name):
                 skipped.append(cap.name)
                 continue

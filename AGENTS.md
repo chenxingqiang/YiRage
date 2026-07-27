@@ -147,8 +147,8 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **S3** | 前 K 层 MLP Capsule 可配置混合 | `hybrid_model.py`；`hybrid_first_k_smoke.py` | K∈{1,2,4}；`test_runtime_fusion_s2_s3.py` | **done** |
 | **S4** | **PagedAttention meta 桥**（`block_table` → paged_kv_*） | `kv_meta.py`；`RF.step` auto-bridge | `test_runtime_fusion_s4_kv.py`；`kv_meta_bridge_smoke.py` | **done** |
 | **S5** | **SM 预算**与 Sampler/NCCL 共驻 | `sm_budget.py`；`RF.step` 超预算 skip + engine fallback | `test_runtime_fusion_s5_sm.py`；`sm_budget_coresidence_smoke.py`；`make test-serving-cpu-cert` | **done** |
-| **S6** | SGLang **Radix**：hit meta → 跳过/收缩 Capsule | `radix_meta.py`；`RF.step` all-hit skip + shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **done（本轮）** |
-| **S7** | 多 Capsule / 大段 Decoder Override（仍非「整网独占死刑」）；引擎管 KV 与调度 | S1–S6 | e2e latency/吞吐可接受 | **下一轮** |
+| **S6** | SGLang **Radix**：hit meta → 跳过/收缩 Capsule | `radix_meta.py`；`RF.step` all-hit skip + shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **done** |
+| **S7** | 多 Capsule / 大段 Decoder Override（仍非「整网独占死刑」）；引擎管 KV 与调度 | `capsule_orchestration.py`；`split_mlp_capsule.py`；`segment_override.py` | `test_runtime_fusion_s7_multi_capsule.py`；`multi_capsule_segment_smoke.py` | **done（本轮）** |
 
 **明确不做什么（反模式）**：
 
@@ -172,7 +172,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **meta / KV 桥** | `block_tables` | `block_tables_to_paged_kv` + `StepMeta.with_paged_kv_bridge` | `test_runtime_fusion_s4_kv.py`；`kv_meta_bridge_smoke.py` | **partial（S4）** |
 | **SM 配额共驻** | 引擎多流 | `resolve_sm_worker_quota` + `RF.step` 超预算 skip；layer engine fallback | `test_runtime_fusion_s5_sm.py`；`sm_budget_coresidence_smoke.py` | **partial（S5）** |
 | **Radix skip** | SGLang RadixAttention | `radix_meta` + `RF.step` skip/shrink | `test_runtime_fusion_s6_radix.py`；`radix_hit_smoke.py` | **partial（S6）** |
-| **多 Capsule 编排** | 大段 fused blocks | 离线全图 demo 仅作实现参考 | S7 | backlog |
+| **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py`；`multi_capsule_segment_smoke.py` | **partial（S7）** |
 | **MACA / vLLM-metax** | MetaX vLLM fork | maca pk backend + scaffold | MetaX 上 S2+ | backlog |
 
 ### 现有脚手架 → RuntimeFusion 映射
@@ -568,6 +568,7 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S5（2026-07-27，SM 预算 + CPU cert）**：闸门：Serving/RF 执行契约。`sm_budget.resolve_sm_worker_quota` + `RF.step` 按 `sm_cost` 分配/超预算 skip；`RuntimeFusionMlpLayerOverride` SM skip→engine MLP fallback；CPU cert：`scripts/serving_cpu_cert.py` + `make test-serving-cpu-cert`。验证：26 pytest + cert 9 stage PASS。下一轮：**S6** — Radix hit meta。
 - **Serving Loop S5b（2026-07-27，实测路径：PyTorch real）**：闸门：拒绝 mock 默认。新增 `torch_engine.TorchEngineModel` / `torch_exec.mlp_torch` / `bench_forward`；`MlpFusionCapsule` 默认 `backend=torch`；cert 默认 `--real`（`real_torch_e2e` + latency ms）；`engine_stub` 仅 `--contract-only` 参考。验证：`make test-serving-cpu-cert` 6 stage real PASS（含 bench）。下一轮：**S5c** yirage.core tier。
 - **Serving Loop S6（2026-07-27，Radix hit skip/shrink）**：闸门：SGLang Radix meta 驱动 Capsule 调度。`radix_meta.RadixHitMeta` + `RF.step` all-hit skip（`skipped_radix`）+ partial `apply_radix_shrink`；layer override all-hit → post-attn identity。验证：7 pytest + `radix_hit_smoke` + cert 8 stage PASS。下一轮：**S7** 多 Capsule 编排。
+- **Serving Loop S7（2026-07-27，multi-Capsule segment override）**：闸门：图级编排层。每层 MLP 拆成 gate_up→down 两 Capsule；`StepMeta.pipeline` + `resolve_capsule_pipeline`；`DecoderSegmentOverride` / `SegmentHybridModelOverride` 大段 override（Attention/KV 仍引擎）。验证：7 pytest + `multi_capsule_segment_smoke` + cert。下一轮：**S8** — 真 vLLM 插件 / torch 实测 bench 归档。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。

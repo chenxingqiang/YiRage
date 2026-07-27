@@ -66,6 +66,14 @@ from .torch_exec import (
     to_numpy,
     to_torch,
 )
+from .capsule_orchestration import (
+    build_split_mlp_runtime_fusion,
+    pipeline_meta_for_layer,
+    resolve_capsule_pipeline,
+    split_mlp_down_name,
+    split_mlp_gate_up_name,
+    split_mlp_pipeline_names,
+)
 from .layer_override import (
     LayerForwardResult,
     RuntimeFusionMlpLayerOverride,
@@ -74,6 +82,20 @@ from .layer_override import (
 )
 from .mlp_capsule import MlpFusionCapsule, mlp_eager_numpy
 from .plan import FusionPlan
+from .segment_override import (
+    DecoderSegmentOverride,
+    RuntimeFusionSplitMlpLayerOverride,
+    SegmentForwardResult,
+    SegmentHybridModelOverride,
+    resolve_segment_layer_ids,
+)
+from .split_mlp_capsule import (
+    MlpDownFusionCapsule,
+    MlpGateUpFusionCapsule,
+    build_layer_split_mlp_capsules,
+    split_mlp_matches_fused,
+    split_mlp_parity_numpy,
+)
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
 from .yirage_exec import (
     YirageServingMlpRunner,
@@ -101,6 +123,22 @@ __all__ = [
     "LayerForwardResult",
     "build_layer_mlp_capsule",
     "capsule_name_for_layer",
+    "build_split_mlp_runtime_fusion",
+    "pipeline_meta_for_layer",
+    "resolve_capsule_pipeline",
+    "split_mlp_gate_up_name",
+    "split_mlp_down_name",
+    "split_mlp_pipeline_names",
+    "MlpGateUpFusionCapsule",
+    "MlpDownFusionCapsule",
+    "build_layer_split_mlp_capsules",
+    "split_mlp_parity_numpy",
+    "split_mlp_matches_fused",
+    "RuntimeFusionSplitMlpLayerOverride",
+    "DecoderSegmentOverride",
+    "SegmentHybridModelOverride",
+    "SegmentForwardResult",
+    "resolve_segment_layer_ids",
     "HybridModelOverride",
     "resolve_rf_mlp_layer_ids",
     "PagedKvMeta",
