@@ -23,6 +23,7 @@ from .exec_backend import (
     BACKEND_NUMPY_REF,
     BACKEND_TORCH,
     BACKEND_YIRAGE_CPU,
+    BACKEND_YIRAGE_MACA,
     default_serving_backend,
 )
 from .plan import FusionPlan
@@ -120,6 +121,26 @@ class MlpFusionCapsule(FusionCapsule):
             self.w_gate = self._yirage_runner.w_gate
             self.w_up = self._yirage_runner.w_up
             self.w_down = self._yirage_runner.w_down
+        elif backend == BACKEND_YIRAGE_MACA:
+            from .maca_exec import YirageMacaServingMlpRunner, require_yirage_maca
+
+            require_yirage_maca()
+            require_torch()
+            self._maca_runner = YirageMacaServingMlpRunner(
+                rms_weight=rms_weight,
+                w_gate=w_gate,
+                w_up=w_up,
+                w_down=w_down,
+                eps=eps,
+                device=device,
+                dtype_name=plan.dtype or "float32",
+                quick_superopt=True,
+            )
+            self._device = self._maca_runner._device
+            self.rms_weight = self._maca_runner.rms_weight
+            self.w_gate = self._maca_runner.w_gate
+            self.w_up = self._maca_runner.w_up
+            self.w_down = self._maca_runner.w_down
         elif backend == BACKEND_TORCH:
             require_torch()
             import torch
@@ -142,7 +163,7 @@ class MlpFusionCapsule(FusionCapsule):
         i = self.plan.intermediate_size
         if i is None:
             raise ValueError("MLP FusionPlan requires intermediate_size")
-        if self.plan.backend in (BACKEND_TORCH, BACKEND_YIRAGE_CPU):
+        if self.plan.backend in (BACKEND_TORCH, BACKEND_YIRAGE_CPU, BACKEND_YIRAGE_MACA):
             import torch
 
             def _shape(t):
@@ -224,6 +245,19 @@ class MlpFusionCapsule(FusionCapsule):
                 out = apply_radix_shrink(h, radix, self._yirage_runner.forward)
             else:
                 out = self._yirage_runner.forward(h)
+            return {"hidden": out}
+        if self.plan.backend == BACKEND_YIRAGE_MACA:
+            from .radix_meta import apply_radix_shrink
+
+            h = to_torch(hidden, device=self._device)
+            if h.ndim == 2 and h.shape[0] != 1 and radix is not None:
+                raise ValueError(
+                    "yirage_maca MLP with radix shrink requires batch=1 decode today"
+                )
+            if radix is not None and radix.any_hit:
+                out = apply_radix_shrink(h, radix, self._maca_runner.forward)
+            else:
+                out = self._maca_runner.forward(h)
             return {"hidden": out}
         if self.plan.backend == BACKEND_TORCH:
             h = to_torch(hidden, device=self._device)

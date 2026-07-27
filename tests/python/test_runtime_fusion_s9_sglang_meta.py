@@ -65,4 +65,4 @@ def test_hybrid_partial_sglang_extend_lens(serving, torch):
 
 
 def test_rf_inspect_version_s9(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s15"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s16"

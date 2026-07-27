@@ -94,7 +94,7 @@ def test_yirage_maca_tier_inspect(serving):
 
 
 def test_rf_inspect_version_s15(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s15"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s16"
 
 
 def test_backend_yirage_maca_constant(serving):

@@ -88,6 +88,11 @@ def serving_cpu_cert_manifest(
             "tests/python/test_runtime_fusion_s15_maca_serving.py",
         ),
         CertStage(
+            "s16_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s16_metax_tiers.py",
+        ),
+        CertStage(
             "real_torch_contract",
             "pytest",
             "tests/python/test_runtime_fusion_real_torch.py",
@@ -276,7 +281,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         mode = "real-torch"
         if yirage_core:
             mode += "+yirage-core"
-        print(f"Serving cert (RuntimeFusion S1–S15, {mode})")
+        print(f"Serving cert (RuntimeFusion S1–S16, {mode})")
         print(
             f"  bootstrap_ok={report.bootstrap_ok} rf_version={report.serving_version} "
             f"device={report.torch_device}"

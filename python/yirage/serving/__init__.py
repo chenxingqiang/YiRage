@@ -180,6 +180,7 @@ from .vllm_metax_plugin import (
     rf_step_meta_for_vllm_metax,
 )
 from .maca_exec import (
+    YirageMacaServingMlpRunner,
     inspect_maca_serving_yirage_tier,
     is_yirage_maca_available,
     maca_superoptimize_kwargs,
@@ -189,6 +190,28 @@ from .yirage_core_e2e import (
     YirageCoreFullLayerE2EReport,
     run_yirage_core_full_layer_e2e,
     run_yirage_core_full_layer_e2e_auto,
+)
+from .yirage_maca_e2e import (
+    YirageMacaFullLayerE2EReport,
+    run_yirage_maca_full_layer_e2e,
+    run_yirage_maca_full_layer_e2e_auto,
+)
+from .sglang_metax_e2e import (
+    SglangMetaxHybridE2EReport,
+    SglangMetaxMlpRfE2EReport,
+    run_sglang_metax_mlp_rf_e2e_auto,
+    run_sglang_metax_qwen2_mlp_rf_e2e,
+    run_torch_sglang_metax_hybrid_full_e2e,
+    run_torch_sglang_metax_mlp_rf_e2e,
+)
+from .sglang_metax_plugin import (
+    SglangMetaxBatchTorchMlpRfHook,
+    SglangMetaxQwen2MlpRfHook,
+    build_sglang_metax_batch_torch_mlp_rf_hook,
+    build_sglang_metax_qwen2_mlp_rf_hook,
+    is_sglang_metax_available,
+    require_sglang_metax,
+    rf_step_meta_for_sglang_metax,
 )
 from .yirage_exec import (
     YirageServingMlpRunner,
@@ -278,6 +301,23 @@ __all__ = [
     "YirageCoreFullLayerE2EReport",
     "run_yirage_core_full_layer_e2e",
     "run_yirage_core_full_layer_e2e_auto",
+    "YirageMacaFullLayerE2EReport",
+    "run_yirage_maca_full_layer_e2e",
+    "run_yirage_maca_full_layer_e2e_auto",
+    "YirageMacaServingMlpRunner",
+    "SglangMetaxBatchTorchMlpRfHook",
+    "SglangMetaxQwen2MlpRfHook",
+    "SglangMetaxHybridE2EReport",
+    "SglangMetaxMlpRfE2EReport",
+    "build_sglang_metax_batch_torch_mlp_rf_hook",
+    "build_sglang_metax_qwen2_mlp_rf_hook",
+    "is_sglang_metax_available",
+    "require_sglang_metax",
+    "rf_step_meta_for_sglang_metax",
+    "run_torch_sglang_metax_mlp_rf_e2e",
+    "run_torch_sglang_metax_hybrid_full_e2e",
+    "run_sglang_metax_qwen2_mlp_rf_e2e",
+    "run_sglang_metax_mlp_rf_e2e_auto",
     "HybridModelOverride",
     "resolve_rf_mlp_layer_ids",
     "PagedKvMeta",

@@ -200,7 +200,8 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **S12** | **SGLang ForwardBatch 全链路 e2e**（Radix partial/all-hit + KV meta + 可选 sglang） | `sglang_e2e.run_torch_sglang_*` / `run_sglang_qwen2_mlp_rf_e2e` | `test_runtime_fusion_s12_sglang_e2e.py`；`sglang_mlp_e2e.py` | **done** |
 | **S13** | **vLLM PagedAttention 全层 MLP hook** | `vllm_paged_e2e.VllmPagedKvBatchSpec` + `run_torch_vllm_paged_full_layer_e2e` | `test_runtime_fusion_s13_vllm_paged_e2e.py`；`vllm_paged_e2e.py` | **done** |
 | **S14** | **yirage.core MLP capsule 全层 hybrid e2e** | `yirage_core_e2e.run_yirage_core_full_layer_e2e` + `HybridModelOverride(mlp_backend=yirage_cpu)` | `test_runtime_fusion_s14_yirage_core_e2e.py`；`yirage_core_full_e2e.py` | **done** |
-| **S15** | **MACA serving meta + vLLM-metax 插件 tier** | `maca_serving_meta.MacaServingRfSpec` + `vllm_metax_plugin` + `maca_serving_e2e` | `test_runtime_fusion_s15_maca_serving.py`；`maca_serving_e2e.py` | **done（本轮）** |
+| **S15** | **MACA serving meta + vLLM-metax 插件 tier** | `maca_serving_meta.MacaServingRfSpec` + `vllm_metax_plugin` + `maca_serving_e2e` | `test_runtime_fusion_s15_maca_serving.py`；`maca_serving_e2e.py` | **done** |
+| **S16** | **yirage_maca 全层 capsule + SGLang-metax 对称 tier** | `YirageMacaServingMlpRunner` + `yirage_maca_e2e` + `sglang_metax_plugin` + `sglang_metax_e2e` | `test_runtime_fusion_s16_metax_tiers.py`；`yirage_maca_full_e2e.py`（MetaX VM）；`sglang_metax_e2e.py` | **done（本轮）** |
 
 **明确不做什么（反模式）**：
 
@@ -220,12 +221,12 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **`demo/serving/*smoke*.py`** | 任何带 `smoke` 后缀的 Serving demo；能力须写入 `tests/python/test_runtime_fusion_s*.py` |
 | **`--contract-only` / NumPy stub cert** | 无 torch 的「契约-only」cert 分支；`EngineModelStub` + `BACKEND_NUMPY_REF` **不得**作为 cert/pytest 主路径 |
 | **Mock / duck-typed vLLM 层** | 如 `_MockVllmQwen2Layer`；vLLM 路径须真实 `pip install vllm` 或测负路径 `pytest.skip` |
-| **重复验证脚本** | 与 pytest 同义的 one-off demo；仅保留 **`real_torch_e2e.py`**、**`segment_torch_bench.py`**、**`vllm_mlp_e2e.py`**、**`sglang_mlp_e2e.py`**、**`vllm_paged_e2e.py`**、**`maca_serving_e2e.py`**（实测 e2e/bench），以及可选 **`yirage_superopt_e2e.py`** / **`yirage_core_full_e2e.py`**（yirage-core tier） |
+| **重复验证脚本** | 与 pytest 同义的 one-off demo；仅保留 **`real_torch_e2e.py`**、**`segment_torch_bench.py`**、**`vllm_mlp_e2e.py`**、**`sglang_mlp_e2e.py`**、**`vllm_paged_e2e.py`**、**`maca_serving_e2e.py`**、**`sglang_metax_e2e.py`**（实测 e2e/bench），以及可选 **`yirage_superopt_e2e.py`** / **`yirage_core_full_e2e.py`** / **`yirage_maca_full_e2e.py`**（yirage-core/MACA tier） |
 
 **唯一认可的 Serving 验证栈**：
 
 ```bash
-make test-serving-cpu-cert-pytest   # S1–S15 real torch pytest
+make test-serving-cpu-cert-pytest   # S1–S16 real torch pytest
 make test-serving-cpu-cert          # 上式 + real_torch_e2e + segment_torch_bench
 ```
 
@@ -249,7 +250,8 @@ make test-serving-cpu-cert          # 上式 + real_torch_e2e + segment_torch_be
 | **多 Capsule 编排** | 大段 fused blocks | `split_mlp_capsule` gate_up→down pipeline + `DecoderSegmentOverride` | `test_runtime_fusion_s7_multi_capsule.py` | **partial（S7）** |
 | **vLLM MLP 插件** | `vllm/.../qwen2.py` hook | `VllmQwen2MlpRfHook`（**须安装 vllm**）；实测 `TorchDecoderMlpRfHook` + `vllm_e2e` | `test_runtime_fusion_s8_*`；`test_runtime_fusion_s11_vllm_e2e.py`；`vllm_mlp_e2e.py` | **partial（S8/S11）** |
 | **Segment torch bench** | 实测 latency JSON | `run_segment_torch_bench_archive` | `segment_torch_bench.py`；cert | **partial（S8）** |
-| **MACA / vLLM-metax** | MetaX vLLM fork | `maca_serving_meta` + `vllm_metax_plugin` + `maca_serving_e2e` | `test_runtime_fusion_s15_maca_serving.py`；MetaX VM `yirage_maca` tier | **partial（S15）** |
+| **MACA / vLLM-metax** | MetaX vLLM fork | `maca_serving_meta` + `vllm_metax_plugin` + `maca_serving_e2e` | `test_runtime_fusion_s15_maca_serving.py`；MetaX VM `yirage_maca` tier | **partial（S15/S16）** |
+| **SGLang-metax / yirage_maca capsule** | SGLang-metax fork | `sglang_metax_plugin` + `YirageMacaServingMlpRunner` + `yirage_maca_e2e` | `test_runtime_fusion_s16_metax_tiers.py`；MetaX VM `yirage_maca_full_e2e.py` | **partial（S16）** |
 
 ### 现有脚手架 → RuntimeFusion 映射
 
@@ -657,6 +659,7 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S13（2026-07-27，vLLM PagedAttention 全层 hook）**：闸门：图级/e2e 层。`VllmPagedKvBatchSpec` + 全层 `HybridModelOverride` + paged KV bridged RF steps；RF version **s13**。验证：`test_runtime_fusion_s13_vllm_paged_e2e.py` + `vllm_paged_e2e.py`。下一轮：**S14** — yirage-core MLP capsule 全层 e2e tier 或 MACA serving 支撑。
 - **Serving Loop S14（2026-07-27，yirage.core 全层 hybrid e2e）**：闸门：图级/执行层。`HybridModelOverride(mlp_backend=yirage_cpu)` + `run_yirage_core_full_layer_e2e`（batch=1 decode；gate_up seed + superopt down）；RF version **s14**。验证：`test_runtime_fusion_s14_yirage_core_e2e.py` + `yirage_core_full_e2e.py`（skip 无 yirage.core）。下一轮：**S15** — MACA serving 支撑或 vLLM-metax 插件 tier。
 - **Serving Loop S15（2026-07-27，MACA serving + vLLM-metax tier）**：闸门：图级/契约层。`MacaServingRfSpec`（64-warp/C500 SM meta 桥）+ `VllmMetaxQwen2MlpRfHook` + 全层 `maca_serving_e2e`；`BACKEND_YIRAGE_MACA` scaffold；RF version **s15**。验证：`test_runtime_fusion_s15_maca_serving.py` + `maca_serving_e2e.py`。下一轮：**S16** — MetaX VM `yirage_maca` 全层 capsule e2e 或 SGLang-metax 对称 tier。
+- **Serving Loop S16（2026-07-27，yirage_maca 全层 + SGLang-metax tier）**：闸门：图级/执行层。`YirageMacaServingMlpRunner` + `MlpFusionCapsule(backend=yirage_maca)` + `yirage_maca_e2e`；`sglang_metax_plugin` + `sglang_metax_e2e`（ForwardBatch + MACA meta）；RF version **s16**。验证：`test_runtime_fusion_s16_metax_tiers.py` + `sglang_metax_e2e.py`（CPU torch）；MetaX VM `yirage_maca_full_e2e.py`。下一轮：**S17** — MetaX VM 全路径 yirage_maca generation latency 归档；SGLang-metax 真 fork e2e。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
