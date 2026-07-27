@@ -2,8 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """Engine-side layer stubs (vLLM Qwen2-shaped) without importing vLLM.
 
-Used for Cloud contracts and as the duck-typed surface that a real
-``vllm.model_executor.models.qwen2.Qwen2DecoderLayer`` plugin would wrap.
+**Not for Serving cert or pytest.** Real verification uses ``TorchEngineModel``
+(``torch_engine.py``) + ``tests/python/test_runtime_fusion_s*.py``.
+This module remains for internal/offline reference only; do not wire it back
+into ``cpu_cert`` or add new ``*smoke*`` demos. See AGENTS.md § Serving 验证禁令.
 """
 
 from __future__ import annotations
