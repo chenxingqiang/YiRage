@@ -65,6 +65,12 @@ from .vllm_e2e import (
     run_vllm_mlp_rf_e2e_auto,
     run_vllm_qwen2_mlp_rf_e2e,
 )
+from .vllm_paged_e2e import (
+    VllmPagedFullLayerE2EReport,
+    VllmPagedKvBatchSpec,
+    run_torch_vllm_paged_full_layer_e2e,
+    run_vllm_paged_full_layer_e2e_auto,
+)
 from .vllm_plugin import (
     VLLM_QWEN2_MLP_ATTACH,
     VllmMlpWeightView,
@@ -228,6 +234,10 @@ __all__ = [
     "run_torch_vllm_hybrid_full_e2e",
     "run_vllm_qwen2_mlp_rf_e2e",
     "run_vllm_mlp_rf_e2e_auto",
+    "VllmPagedKvBatchSpec",
+    "VllmPagedFullLayerE2EReport",
+    "run_torch_vllm_paged_full_layer_e2e",
+    "run_vllm_paged_full_layer_e2e_auto",
     "HybridModelOverride",
     "resolve_rf_mlp_layer_ids",
     "PagedKvMeta",

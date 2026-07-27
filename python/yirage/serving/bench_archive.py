@@ -229,7 +229,7 @@ def run_segment_torch_bench_archive(
         device=model.device,
     )
 
-    archive = ServingBenchArchive(version="s12", device=model.device)
+    archive = ServingBenchArchive(version="s13", device=model.device)
     archive.rows.append(
         ServingBenchArchiveRow(
             name=eng_bench.name,
