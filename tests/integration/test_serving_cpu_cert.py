@@ -37,8 +37,10 @@ def test_serving_cpu_cert_manifest_has_core_stages():
     assert "s17_contract" in names
     assert "s18_contract" in names
     assert "torch_e2e" in names
+    assert "qwen05b_contract" in names
     assert "segment_torch_bench" in names
     assert "vllm_mlp_e2e" in names
+    assert "qwen05b_cpu_e2e" in names
 
 
 def test_serving_cpu_cert_quick_passes():

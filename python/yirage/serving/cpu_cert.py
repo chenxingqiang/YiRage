@@ -107,9 +107,15 @@ def serving_cpu_cert_manifest(
             "pytest",
             "tests/python/test_runtime_fusion_torch.py",
         ),
+        CertStage(
+            "qwen05b_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_qwen05b_cpu_e2e.py",
+        ),
         CertStage("torch_e2e", "smoke", "demo/serving/torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
         CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),
+        CertStage("qwen05b_cpu_e2e", "smoke", "demo/serving/qwen05b_cpu_e2e.py --quick"),
     ]
     if yirage_core:
         stages.extend(

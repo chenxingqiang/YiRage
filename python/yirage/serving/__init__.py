@@ -65,6 +65,17 @@ from .vllm_e2e import (
     run_vllm_mlp_rf_e2e_auto,
     run_vllm_qwen2_mlp_rf_e2e,
 )
+from .hf_qwen_cpu_e2e import (
+    DEFAULT_QWEN05B_MODEL,
+    HfQwen05bCpuE2EReport,
+    HfQwen2MlpLayerAdapter,
+    HfQwen2MlpRfHook,
+    build_hf_qwen_mlp_rf_hook,
+    is_transformers_available,
+    qwen2_forward_with_rf_mlp,
+    require_transformers,
+    run_hf_qwen05b_cpu_e2e,
+)
 from .vllm_paged_e2e import (
     VllmPagedFullLayerE2EReport,
     VllmPagedKvBatchSpec,
@@ -312,6 +323,15 @@ __all__ = [
     "run_torch_vllm_mlp_rf_e2e",
     "run_torch_vllm_hybrid_full_e2e",
     "run_vllm_qwen2_mlp_rf_e2e",
+    "DEFAULT_QWEN05B_MODEL",
+    "HfQwen05bCpuE2EReport",
+    "HfQwen2MlpLayerAdapter",
+    "HfQwen2MlpRfHook",
+    "build_hf_qwen_mlp_rf_hook",
+    "is_transformers_available",
+    "qwen2_forward_with_rf_mlp",
+    "require_transformers",
+    "run_hf_qwen05b_cpu_e2e",
     "run_vllm_mlp_rf_e2e_auto",
     "VllmPagedKvBatchSpec",
     "VllmPagedFullLayerE2EReport",
