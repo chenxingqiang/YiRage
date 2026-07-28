@@ -264,6 +264,7 @@ ignore = ["E501", "E203", "B008"]
 minversion = "7.0"
 addopts = "-ra -q --strict-markers"
 testpaths = ["tests/python", "tests/integration"]
+pythonpath = ["python", "tests/python"]
 python_files = ["test_*.py"]
 markers = [
     "unit: Unit tests",

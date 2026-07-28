@@ -128,6 +128,23 @@ test-cpu-cert-full-profile:
 test-cpu-demos:
 	python3 -m pytest tests/integration/test_cpu_demos.py tests/integration/test_cpu_demo_loop.py tests/integration/test_cpu_loop_close.py -v --tb=short
 
+test-serving-cpu-cert:
+	PYTHONPATH=python python3 scripts/serving_cpu_cert.py
+
+test-serving-yirage-core:
+	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python:. python3 scripts/serving_cpu_cert.py --yirage-core
+
+test-serving-yirage-core-pytest:
+	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python:. python3 -m pytest tests/python/test_runtime_fusion_yirage_core.py -v --tb=short
+
+test-serving-cpu-cert-full:
+	PYTHONPATH=python python3 scripts/serving_cpu_cert.py --full
+
+test-serving-cpu-cert-pytest:
+	PYTHONPATH=python:tests/python python3 -m pytest tests/python/test_runtime_fusion_s1.py tests/python/test_runtime_fusion_s2_s3.py tests/python/test_runtime_fusion_s4_kv.py tests/python/test_runtime_fusion_s5_sm.py tests/python/test_runtime_fusion_s6_radix.py tests/python/test_runtime_fusion_s7_multi_capsule.py tests/python/test_runtime_fusion_s8_vllm_bench.py tests/python/test_runtime_fusion_s9_sglang_meta.py tests/python/test_runtime_fusion_s10_sglang_plugin.py tests/python/test_runtime_fusion_s11_vllm_e2e.py tests/python/test_runtime_fusion_s12_sglang_e2e.py tests/python/test_runtime_fusion_s13_vllm_paged_e2e.py tests/python/test_runtime_fusion_s14_yirage_core_e2e.py tests/python/test_runtime_fusion_s15_maca_serving.py tests/python/test_runtime_fusion_s16_metax_tiers.py tests/python/test_runtime_fusion_s17_maca_generation.py tests/python/test_runtime_fusion_s18_maca_baseline.py tests/integration/test_serving_cpu_cert.py -v --tb=short
+
 test-cpu-cert-walkthrough-profile:
 	PYTHONPATH=. python3 scripts/cpu_certification.py --json --walkthrough-profile
 

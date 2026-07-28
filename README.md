@@ -1528,6 +1528,8 @@ For a complete example with local validation, benchmarking, and YiRage superopti
 
 We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
+**Cloud Agent / autonomous loops:** follow [AGENTS.md](AGENTS.md) § [Agent Development Protocol](AGENTS.md#agent-development-protocolmandatory) (TDD, phased Design→Verification, real-environment validation, no mock/smoke cert paths, minimal file creation, human approval for critical changes).
+
 ### Adding a New Backend
 
 1. Implement `BackendInterface`
