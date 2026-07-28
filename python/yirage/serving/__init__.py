@@ -251,11 +251,15 @@ from .yirage_exec import (
     bench_superoptimize_down_matmul,
     build_gate_up_seed_graph,
     build_mlp_down_seed_graph,
+    build_serving_cpu_search_config,
     is_yirage_core_available,
     require_yirage_core,
+    resolve_serving_num_workers,
+    resolve_serving_use_coordinator,
     resolve_serving_use_ray,
     serving_superoptimize_ray_kwargs,
     superoptimize_down_matmul_cpu,
+    superoptimize_down_matmul_via_coordinator,
 )
 
 __all__ = [
@@ -442,7 +446,11 @@ __all__ = [
     "require_yirage_core",
     "YirageServingMlpRunner",
     "superoptimize_down_matmul_cpu",
+    "superoptimize_down_matmul_via_coordinator",
+    "build_serving_cpu_search_config",
     "resolve_serving_use_ray",
+    "resolve_serving_use_coordinator",
+    "resolve_serving_num_workers",
     "serving_superoptimize_ray_kwargs",
     "apply_serving_kn_down_matmul_tractability",
     "bench_superoptimize_down_matmul",

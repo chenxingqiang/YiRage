@@ -205,22 +205,38 @@ class SearchWorker:
                 backend=config.get("backend", "cuda"),
                 griddims=griddims,
                 blockdims=blockdims,
+                franges=config.get("franges"),
                 verbose=config.get("verbose", False),
                 is_formal_verified=config.get("formal_verify", False),
             )
 
-            # Build serializable result (CyKNGraph cannot be pickled across Ray workers)
+            # Serialize graphs so coordinator can rebuild KNGraph (CyKNGraph is not picklable)
+            from yirage.core import cy_to_json
+
+            graphs_out = []
             candidates = []
-            for i, _g in enumerate(new_graphs):
-                candidates.append(
-                    {
-                        "graph_id": i,
-                        "verified": True,
-                    }
-                )
+            for i, g in enumerate(new_graphs):
+                fd, path = tempfile.mkstemp(suffix=".json", prefix="yirage_worker_graph_")
+                os.close(fd)
+                try:
+                    cy_to_json(g, path)
+                    with open(path, "r", encoding="utf-8") as gf:
+                        graph_json_text = gf.read()
+                finally:
+                    try:
+                        os.unlink(path)
+                    except OSError:
+                        pass
+                entry = {
+                    "graph_id": i,
+                    "verified": True,
+                    "graph_json": graph_json_text,
+                }
+                graphs_out.append(entry)
+                candidates.append(entry)
 
             return {
-                "graphs": candidates,
+                "graphs": graphs_out,
                 "candidates": candidates,
                 "best": candidates[0] if candidates else None,
                 "feedback": (

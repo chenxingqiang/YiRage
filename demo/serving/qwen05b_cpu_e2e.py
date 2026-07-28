@@ -71,6 +71,17 @@ def main() -> int:
         default=None,
         help="decode MLP backend (default: yirage_cpu when yirage.core built)",
     )
+    p.add_argument(
+        "--use-ray",
+        action="store_true",
+        help="Use DistributedSearchCoordinator for down matmul superoptimize",
+    )
+    p.add_argument(
+        "--ray-workers",
+        type=int,
+        default=None,
+        help="Ray/coordinator worker count (YIRAGE_SERVING_RAY_WORKERS)",
+    )
     p.add_argument("--quick", action="store_true")
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
@@ -94,6 +105,12 @@ def main() -> int:
             ld = os.environ["LD_LIBRARY_PATH"]
 
     mlp_backend = args.mlp_backend
+    if args.use_ray:
+        os.environ["YIRAGE_SERVING_USE_RAY"] = "1"
+        os.environ.setdefault("YIRAGE_SERVING_USE_COORDINATOR", "1")
+    if args.ray_workers is not None:
+        os.environ["YIRAGE_SERVING_RAY_WORKERS"] = str(max(1, args.ray_workers))
+
     if mlp_backend == "yirage_cpu":
         mlp_backend = BACKEND_YIRAGE_CPU
         require_yirage_core()
