@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_real_test_utils import require_vllm_installed, serving, torch  # noqa: F401
 
 
 def test_torch_vllm_mlp_rf_e2e_parity(serving):
@@ -63,11 +63,8 @@ def test_vllm_e2e_auto_returns_report(serving):
     assert report.parity_ok
 
 
-@pytest.mark.skipif(
-    not __import__("yirage.serving.vllm_plugin", fromlist=["is_vllm_available"]).is_vllm_available(),
-    reason="requires installed vllm",
-)
 def test_vllm_qwen2_mlp_rf_e2e_real(serving):
+    require_vllm_installed()
     pytest.importorskip("transformers")
     report = serving.run_vllm_qwen2_mlp_rf_e2e(
         hidden_size=64,

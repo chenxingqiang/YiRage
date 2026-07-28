@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from serving_real_test_utils import require_vllm_installed
+
 
 def _import_serving():
     root = Path(__file__).resolve().parents[2]
@@ -85,11 +87,8 @@ def test_segment_torch_bench_archive_parity(serving):
     assert hybrid.mean_ms > 0
 
 
-@pytest.mark.skipif(
-    not __import__("yirage.serving.vllm_plugin", fromlist=["is_vllm_available"]).is_vllm_available(),
-    reason="requires installed vllm",
-)
 def test_vllm_plugin_requires_real_package(serving):
+    require_vllm_installed()
     serving.require_vllm()
     assert serving.is_vllm_available()
 

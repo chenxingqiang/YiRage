@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_real_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
 
 
 def test_resolve_yirage_maca_generation_backend(serving):
@@ -75,10 +75,7 @@ def test_sglang_metax_hybrid_full_e2e_auto(serving):
 
 
 @pytest.mark.skipif(
-    not __import__(
-        "yirage.serving.sglang_metax_plugin",
-        fromlist=["is_sglang_metax_available"],
-    ).is_sglang_metax_available(),
+    not maca_integration_enabled(),
     reason="requires sglang on MetaX host or YIRAGE_MACA_INTEGRATION=1",
 )
 def test_sglang_metax_real_fork_e2e(serving):

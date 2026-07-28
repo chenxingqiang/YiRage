@@ -109,6 +109,7 @@ def serving_cpu_cert_manifest(
         ),
         CertStage("real_torch_e2e", "smoke", "demo/serving/real_torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
+        CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),
     ]
     if yirage_core:
         stages.extend(
@@ -201,6 +202,7 @@ def run_serving_cpu_cert(*, quick: bool = True, yirage_core: bool = False) -> Ce
         report.serving_version = str(info.get("version"))
         serving.require_torch()
         report.torch_device = serving.default_device()
+        serving.require_vllm_cpu_serving()
     except Exception as e:
         report.ok = False
         report.bootstrap_ok = False

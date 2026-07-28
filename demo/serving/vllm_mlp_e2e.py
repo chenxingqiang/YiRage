@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""vLLM-style MLP RF full-path e2e (real torch; real vllm when installed).
+"""vLLM Qwen2 MLP RF full-path e2e (requires real ``vllm`` on CPU Serving cert).
 
-Uses :func:`run_vllm_mlp_rf_e2e_auto` — torch hybrid path on CPU CI; native vLLM
-layer when ``pip install vllm transformers`` is available.
+CPU CI must install the vLLM CPU wheel::
+
+    bash scripts/setup_serving_vllm_cpu.sh
 
 ::
 
@@ -34,6 +35,7 @@ def _bootstrap():
     import yirage.serving as serving
 
     serving.require_torch()
+    serving.require_vllm_cpu_serving()
     return serving
 
 
@@ -46,23 +48,21 @@ def main() -> int:
     args = p.parse_args()
 
     serving = _bootstrap()
-    report = serving.run_vllm_mlp_rf_e2e_auto(
+    report = serving.run_vllm_qwen2_mlp_rf_e2e(
         hidden_size=args.hidden,
         intermediate_size=args.intermediate,
         batch=args.batch,
         bench=True,
     )
     payload = report.to_dict()
-    ok = bool(report.parity_ok)
+    ok = bool(report.parity_ok and report.plugin == "VllmQwen2MlpRfHook")
 
     if args.json:
         print(json.dumps(payload, indent=2, default=str))
     else:
-        print("vLLM-style MLP RF full-path e2e")
+        print("vLLM Qwen2 MLP RF full-path e2e (real vllm fork)")
         print(f"  plugin={payload['plugin']}")
         print(f"  parity_ok={report.parity_ok}")
-        if "rf_layer_ids" in payload:
-            print(f"  rf_layers={payload['rf_layer_ids']}")
         print("PASS" if ok else "FAIL")
     return 0 if ok else 1
 

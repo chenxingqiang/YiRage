@@ -79,6 +79,7 @@ from .vllm_plugin import (
     extract_qwen2_mlp_weights,
     is_vllm_available,
     require_vllm,
+    require_vllm_cpu_serving,
 )
 from .bootstrap import bootstrap_yirage_stub, import_serving, repo_root, require_numpy
 from .cpu_cert import (
@@ -297,6 +298,7 @@ __all__ = [
     "run_sglang_mlp_rf_e2e_auto",
     "is_vllm_available",
     "require_vllm",
+    "require_vllm_cpu_serving",
     "TorchDecoderMlpRfHook",
     "build_torch_mlp_rf_hook",
     "VLLM_QWEN2_MLP_ATTACH",

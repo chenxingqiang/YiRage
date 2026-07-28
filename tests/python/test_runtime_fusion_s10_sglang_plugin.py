@@ -10,7 +10,7 @@ from typing import Any, List, Optional
 import numpy as np
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_real_test_utils import sglang_available, serving, torch  # noqa: F401
 
 
 @dataclass
@@ -73,10 +73,7 @@ def test_sglang_qwen2_hook_raises_without_package(serving):
         serving.build_sglang_qwen2_mlp_rf_hook(object())
 
 
-@pytest.mark.skipif(
-    not __import__("yirage.serving.sglang_plugin", fromlist=["is_sglang_available"]).is_sglang_available(),
-    reason="requires installed sglang",
-)
+@pytest.mark.skipif(not sglang_available(), reason="requires installed sglang")
 def test_sglang_plugin_requires_real_package(serving):
     serving.require_sglang()
     assert serving.is_sglang_available()

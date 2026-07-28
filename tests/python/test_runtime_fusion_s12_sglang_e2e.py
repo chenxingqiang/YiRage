@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_real_test_utils import sglang_available, serving, torch  # noqa: F401
 
 
 def test_torch_sglang_mlp_rf_e2e_partial_radix(serving):
@@ -75,10 +75,7 @@ def test_sglang_e2e_auto_returns_report(serving):
     assert report.parity_ok
 
 
-@pytest.mark.skipif(
-    not __import__("yirage.serving.sglang_plugin", fromlist=["is_sglang_available"]).is_sglang_available(),
-    reason="requires installed sglang",
-)
+@pytest.mark.skipif(not sglang_available(), reason="requires installed sglang")
 def test_sglang_qwen2_mlp_rf_e2e_real(serving):
     pytest.importorskip("transformers")
     report = serving.run_sglang_qwen2_mlp_rf_e2e(
