@@ -185,12 +185,13 @@ int cython_search(yirage::kernel::Graph const *input_graph,
             c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
           }
           if (s == "1" || s == "true" || s == "yes" || s == "on") {
-            // Serving down-proj: prefer plain KN matmul; allow 1 TB matmul tile if needed.
-            config.max_num_threadblock_graphs = 1;
-            config.max_num_kernel_graph_op = 2;
-            config.max_num_threadblock_graph_op = 1;
-            config.knop_to_explore = {type::KN_MATMUL_OP, type::KN_CUSTOMIZED_OP};
-            config.tbop_to_explore = {type::TB_MATMUL_OP};
+            // Serving down-proj: plain KN matmul only (no TB customized — LLM K dims explode).
+            config.max_num_threadblock_graphs = 0;
+            if (std::getenv("YIRAGE_CPU_MAX_KN_GRAPH_OP") == nullptr) {
+              config.max_num_kernel_graph_op = 4;
+            }
+            config.knop_to_explore = {type::KN_MATMUL_OP};
+            config.tbop_to_explore = {};
           }
         }
       } else {

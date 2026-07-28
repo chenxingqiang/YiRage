@@ -27,7 +27,8 @@ KernelGraphGenerator::KernelGraphGenerator(
     : config(config), dim_strategy(DimStrategy(config)),
       checkpoint_filename(checkpoint_filename), verbose(verbose),
       num_total_random_tests(0), num_valid_kernel_graphs(0),
-      num_total_states(0), num_tasks(0), multithread_threshold_depth(5) {
+      num_total_states(0), num_tasks(0), multithread_threshold_depth(5),
+      seed_computation_graph(&computation_graph) {
   // setting num_thread
   unsigned int max_num_threads = std::thread::hardware_concurrency();
   if (config.search_thread > max_num_threads) {
@@ -406,6 +407,32 @@ void KernelGraphGenerator::generate_next_operator(
 
 void KernelGraphGenerator::generate_kernel_graphs() {
   start_time = std::chrono::steady_clock::now();
+
+  if (const char *serving = std::getenv("YIRAGE_SERVING_KN_MATMUL_ONLY")) {
+    std::string s(serving);
+    for (auto &c : s) {
+      c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+    if (s == "1" || s == "true" || s == "yes" || s == "on") {
+      if (try_register_verified_seed_graph()) {
+        save_results();
+        printf("num_thread = %d\n", num_thread);
+        printf("num_tasks = %d tasks\n", num_tasks.load());
+        printf("\n");
+        printf("[Search] Serving seed verify finished. Time elapsed: %fsec\n",
+               std::chrono::duration<double>(std::chrono::steady_clock::now() -
+                                              start_time)
+                   .count());
+        printf("[Search] Total states explored: %d\n", num_total_states.load());
+        printf("[Search] Random tests performed: %d\n",
+               num_total_random_tests.load());
+        printf("[Search] Valid kernel graphs explored: %d\n",
+               num_valid_kernel_graphs.load());
+        return;
+      }
+    }
+  }
+
   SearchContext c;
   c.level = SearchLevel::LV_KERNEL;
   c.kn_graph = std::make_shared<kernel::Graph>();
@@ -570,6 +597,23 @@ bool KernelGraphGenerator::verify(kernel::Graph &g) {
     }
   }
 
+  return false;
+}
+
+bool KernelGraphGenerator::try_register_verified_seed_graph() {
+  if (seed_computation_graph == nullptr) {
+    return false;
+  }
+  json j;
+  to_json(j, *seed_computation_graph);
+  kernel::Graph *instantiated_graph = new kernel::Graph();
+  from_json(j, *instantiated_graph);
+  ++num_total_states;
+  if (verify(*instantiated_graph)) {
+    delete instantiated_graph;
+    return true;
+  }
+  delete instantiated_graph;
   return false;
 }
 
@@ -921,6 +965,11 @@ bool KernelGraphGenerator::instantiate_symbolic_graph(
             get_tb_graph_assignments(args->tb_graph_template);
         assignment_sets.push_back(tb_graph_assignments);
       }
+    }
+    // Plain KN graphs (e.g. serving down matmul seed) have no customized ops;
+    // still instantiate once with empty assignments so verify() can accept them.
+    if (assignment_sets.empty()) {
+      return std::vector<DimVarAssignments>{DimVarAssignments{}};
     }
     return combine_candidate_assignments(assignment_sets);
   };

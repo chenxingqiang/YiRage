@@ -68,6 +68,10 @@ private:
   // Verifier
   std::shared_ptr<Verifier> verifier;
 
+  kernel::Graph const *seed_computation_graph;
+
+  bool try_register_verified_seed_graph();
+
   void generate_next_operator(
       SearchContext &c,
       std::function<bool(SearchContext const &)> const &verify,

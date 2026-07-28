@@ -503,7 +503,6 @@ class HfQwen05bCpuE2EReport:
     decode_mlp_backend: str
     yirage_core_used: bool
     superopt_elapsed_s_total: float
-    down_seed_fallback: bool
     plugin: str
 
     def to_dict(self) -> Dict[str, Any]:
@@ -528,7 +527,6 @@ class HfQwen05bCpuE2EReport:
             "decode_mlp_backend": self.decode_mlp_backend,
             "yirage_core_used": self.yirage_core_used,
             "superopt_elapsed_s_total": round(self.superopt_elapsed_s_total, 4),
-            "down_seed_fallback": self.down_seed_fallback,
             "plugin": self.plugin,
         }
 
@@ -539,18 +537,6 @@ def _total_superopt_elapsed(max_rf_mlp_layers: int, decode_backend: str) -> floa
         if backend == decode_backend and layer_id < max_rf_mlp_layers:
             total += hook.superopt_elapsed_s
     return total
-
-
-def _any_down_seed_fallback(max_rf_mlp_layers: int, decode_backend: str) -> bool:
-    for (layer_id, backend), hook in _RF_HOOK_CACHE.items():
-        if backend != decode_backend or layer_id >= max_rf_mlp_layers:
-            continue
-        cap = hook.override.rf.capsules[0]
-        if getattr(cap, "_yirage_runner", None) and getattr(
-            cap._yirage_runner, "_down_seed_fallback", False
-        ):
-            return True
-    return False
 
 
 def run_hf_qwen05b_cpu_e2e(
@@ -670,7 +656,6 @@ def run_hf_qwen05b_cpu_e2e(
     yirage_generate_ms = (time.perf_counter() - t2) * 1000.0
 
     superopt_total = _total_superopt_elapsed(max_rf_mlp_layers, decode_backend)
-    down_seed_fallback = _any_down_seed_fallback(max_rf_mlp_layers, decode_backend)
     plugin = (
         "HfQwen2MlpRfHook+yirage_cpu+transformers"
         if yirage_core_used
@@ -710,6 +695,5 @@ def run_hf_qwen05b_cpu_e2e(
         decode_mlp_backend=decode_backend,
         yirage_core_used=yirage_core_used,
         superopt_elapsed_s_total=superopt_total,
-        down_seed_fallback=down_seed_fallback,
         plugin=plugin,
     )

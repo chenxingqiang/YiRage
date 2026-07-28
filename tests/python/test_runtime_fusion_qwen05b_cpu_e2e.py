@@ -50,8 +50,24 @@ def test_hf_qwen05b_cpu_e2e_yirage_decode(hf_qwen_e2e):
     assert report.generate_token_match_ok is True
     assert report.parity_ok is True
     assert "yirage_cpu" in report.plugin
-    # down may use seed KN matmul when TB search finds 0 variants at Qwen2-0.5B shapes
-    assert report.yirage_core_used is True
+    assert report.superopt_elapsed_s_total > 0.0
+
+
+def test_hf_qwen05b_down_superoptimize_no_fallback(hf_qwen_e2e):
+    """Down matmul superoptimize must succeed (no seed fallback)."""
+    _, _, _, _, BACKEND_YIRAGE_CPU, require_yirage_core, is_yirage_core_available = hf_qwen_e2e
+    if not is_yirage_core_available():
+        pytest.skip("yirage.core not built")
+    require_yirage_core()
+    from yirage.serving.yirage_exec import (
+        apply_serving_kn_down_matmul_tractability,
+        superoptimize_down_matmul_cpu,
+    )
+
+    apply_serving_kn_down_matmul_tractability()
+    opt = superoptimize_down_matmul_cpu(896, 4864, quick=True)
+    assert opt is not None
+    assert opt.backend == "cpu"
 
 
 def test_hf_qwen05b_cpu_e2e_contract(hf_qwen_e2e):

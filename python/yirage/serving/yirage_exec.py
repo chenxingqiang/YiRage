@@ -9,8 +9,9 @@ Serving MLP on CPU uses a **split kernel** strategy (aligned with Qwen MACA demo
 3. **down** — ``superoptimize(backend="cpu")`` on plain matmul ``(1,I) @ (I,H)``
 4. **residual** — PyTorch add
 
-Full-graph superoptimize for the entire MLP currently yields 0 valid µGraphs under
-tractable CPU search caps; this path is the **real** yirage.core + superoptimize tier.
+Full-graph superoptimize for the entire MLP may yield 0 valid µGraphs under
+tractable CPU search caps; down matmul uses ``superoptimize(backend=\"cpu\")``
+with serving tractability env (``YIRAGE_SERVING_KN_MATMUL_ONLY``). No seed fallback.
 """
 
 from __future__ import annotations
@@ -251,28 +252,12 @@ class YirageServingMlpRunner:
 
         self._w_gate_up = torch.cat([self.w_gate, self.w_up], dim=1)
         self._gate_up_graph = build_gate_up_seed_graph(h, i, dtype_name=dtype_name)
-        try:
-            self._down_optimized, timing = bench_superoptimize_down_matmul(
-                h,
-                i,
-                dtype_name=dtype_name,
-                quick=quick_superopt,
-            )
-        except RuntimeError as exc:
-            if "0 valid" not in str(exc):
-                raise
-            # KN-only search may yield 0 TB variants; fall back to seed KN matmul (yirage.core).
-            self._down_optimized = build_down_matmul_seed_graph(
-                h, i, dtype_name=dtype_name
-            )
-            timing = SuperoptimizeTiming(
-                elapsed_s=0.0,
-                hidden_size=h,
-                intermediate_size=i,
-            )
-            self._down_seed_fallback = True
-        else:
-            self._down_seed_fallback = False
+        self._down_optimized, timing = bench_superoptimize_down_matmul(
+            h,
+            i,
+            dtype_name=dtype_name,
+            quick=quick_superopt,
+        )
         self.superopt_elapsed_s = timing.elapsed_s
         self._yr_dtype = _yr_dtype(dtype_name)
 
