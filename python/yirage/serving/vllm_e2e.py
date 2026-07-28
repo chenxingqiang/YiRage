@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S11: vLLM-style MLP RF full-path e2e (torch measured + optional real ``vllm``).
+"""S11: vLLM-style MLP RF full-path e2e (torch measured + optional ``vllm``).
 
 Full path = engine Attention → RF MLP hook → parity vs engine MLP, optionally
 multi-layer :class:`~yirage.serving.hybrid_model.HybridModelOverride`.
@@ -92,7 +92,7 @@ class VllmHybridE2EReport:
 
 
 def _vllm_native_mlp_forward(vllm_decoder_layer, hidden_after_attn):
-    """Reference MLP on a real vLLM Qwen2 decoder layer (post-attn hidden)."""
+    """Reference MLP on a vLLM Qwen2 decoder layer (post-attn hidden)."""
     require_torch()
     import torch
 
@@ -102,7 +102,7 @@ def _vllm_native_mlp_forward(vllm_decoder_layer, hidden_after_attn):
             return vllm_decoder_layer.mlp(normed)
         except (AttributeError, RuntimeError, NotImplementedError):
             # CPU wheel: freshly constructed layers may lack cpu_linear kernels;
-            # fall back to torch reference using weights extracted from real vLLM modules.
+            # fall back to torch reference using weights extracted from vLLM modules.
             adapter = _VllmMlpLayerAdapter(
                 extract_qwen2_mlp_weights(vllm_decoder_layer)
             )
@@ -130,7 +130,7 @@ def build_minimal_vllm_qwen2_decoder_layer(
     layer_id: int = 0,
     device: Optional[str] = None,
 ):
-    """Construct a tiny real ``Qwen2DecoderLayer`` (requires ``vllm`` + ``transformers``)."""
+    """Construct a tiny ``Qwen2DecoderLayer`` (requires ``vllm`` + ``transformers``)."""
     require_vllm()
     require_torch()
     ensure_vllm_single_process_runtime()
@@ -305,7 +305,7 @@ def run_vllm_qwen2_mlp_rf_e2e(
     iters: int = 8,
     bench: bool = True,
 ) -> VllmMlpRfE2EReport:
-    """Real vLLM Qwen2 layer: RF MLP hook vs native ``layer.mlp`` (requires ``vllm``)."""
+    """vLLM Qwen2 layer: RF MLP hook vs native ``layer.mlp`` (requires ``vllm``)."""
     require_vllm()
     require_torch()
     import torch
@@ -371,7 +371,7 @@ def run_vllm_mlp_rf_e2e_auto(
     layer_id: int = 0,
     bench: bool = True,
 ) -> Union[VllmMlpRfE2EReport, VllmHybridE2EReport]:
-    """Run real vLLM e2e when installed; else torch hybrid full path."""
+    """Run vLLM e2e when installed; else torch hybrid full path."""
     if is_vllm_available():
         return run_vllm_qwen2_mlp_rf_e2e(
             hidden_size=hidden_size,

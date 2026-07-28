@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 pytestmark = pytest.mark.skipif(

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""vLLM Qwen2 MLP RF full-path e2e (requires real ``vllm`` on CPU Serving cert).
+"""vLLM Qwen2 MLP RF full-path e2e (requires ``vllm`` on CPU Serving cert).
 
 CPU CI must install the vLLM CPU wheel::
 
@@ -60,7 +60,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(payload, indent=2, default=str))
     else:
-        print("vLLM Qwen2 MLP RF full-path e2e (real vllm fork)")
+        print("vLLM Qwen2 MLP RF full-path e2e")
         print(f"  plugin={payload['plugin']}")
         print(f"  parity_ok={report.parity_ok}")
         print("PASS" if ok else "FAIL")

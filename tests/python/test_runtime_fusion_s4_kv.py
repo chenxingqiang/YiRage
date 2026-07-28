@@ -7,7 +7,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_block_tables_to_paged_kv_basic(serving):

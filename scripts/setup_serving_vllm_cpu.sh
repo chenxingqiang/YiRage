@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-# Install vLLM CPU wheel + transformers for Serving Loop real fork e2e.
+# Install vLLM CPU wheel + transformers for Serving Loop fork e2e.
 set -euo pipefail
 
 VLLM_VERSION="${VLLM_VERSION:-0.26.0}"

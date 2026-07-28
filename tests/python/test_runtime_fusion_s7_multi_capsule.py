@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_split_mlp_pipeline_names(serving):

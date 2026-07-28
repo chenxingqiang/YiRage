@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S8 contracts: real torch MLP RF hook + segment bench archive (no mock)."""
+"""S8 contracts: torch MLP RF hook + segment bench archive (no mock)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from serving_real_test_utils import require_vllm_installed
+from serving_test_utils import require_vllm_installed
 
 
 def _import_serving():
@@ -39,7 +39,7 @@ def test_is_vllm_available_bool(serving):
     assert isinstance(serving.is_vllm_available(), bool)
 
 
-def test_torch_mlp_rf_hook_real_forward(serving):
+def test_torch_mlp_rf_hook_forward(serving):
     serving.require_torch()
     import torch
 
@@ -87,7 +87,7 @@ def test_segment_torch_bench_archive_parity(serving):
     assert hybrid.mean_ms > 0
 
 
-def test_vllm_plugin_requires_real_package(serving):
+def test_vllm_plugin_requires_package(serving):
     require_vllm_installed()
     serving.require_vllm()
     assert serving.is_vllm_available()

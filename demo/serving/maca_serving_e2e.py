@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""MACA serving meta + full-layer MLP RF e2e (real torch).
+"""MACA serving meta + full-layer MLP RF e2e (torch).
 
 ::
 

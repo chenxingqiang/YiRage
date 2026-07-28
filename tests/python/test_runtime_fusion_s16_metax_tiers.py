@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S16: MetaX tiers — yirage_maca capsule + SGLang-metax e2e (real torch)."""
+"""S16: MetaX tiers — yirage_maca capsule + SGLang-metax e2e (torch)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
+from serving_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
 
 
 def test_rf_step_meta_for_sglang_metax_merges_maca(serving):

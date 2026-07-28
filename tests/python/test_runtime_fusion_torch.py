@@ -1,13 +1,13 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Real PyTorch execution + latency measurement for RuntimeFusion (no mock)."""
+"""PyTorch execution + latency measurement for RuntimeFusion (no mock)."""
 
 from __future__ import annotations
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
-def test_torch_mlp_capsule_real_forward(serving, torch):
+def test_torch_mlp_capsule_forward(serving, torch):
     cap = serving.MlpFusionCapsule.from_random(
         hidden_size=32,
         intermediate_size=64,

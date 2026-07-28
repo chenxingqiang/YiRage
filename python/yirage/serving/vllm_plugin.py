@@ -50,7 +50,7 @@ def require_vllm() -> None:
 
 
 def require_vllm_cpu_serving() -> None:
-    """CPU Serving cert gate: real vLLM fork e2e must run (no skip)."""
+    """CPU Serving cert gate: vLLM fork e2e must run (no skip)."""
     if not is_vllm_available():
         raise RuntimeError(
             "CPU Serving verification requires `pip install vllm transformers`. "

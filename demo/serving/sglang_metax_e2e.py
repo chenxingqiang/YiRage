@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""SGLang-metax MLP RF e2e with MACA serving meta (real torch measured path).
+"""SGLang-metax MLP RF e2e with MACA serving meta (torch measured path).
 
 Torch surrogate runs on CPU CI; real SGLang-metax tier when ``sglang`` + MetaX host::
 

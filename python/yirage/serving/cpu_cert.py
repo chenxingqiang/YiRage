@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU certification runner for RuntimeFusion Serving Loops (S1–Sn).
 
-All stages use **real PyTorch** tensor execution.
+All stages use **PyTorch** tensor execution.
 
 **Policy (permanent):** Do NOT add ``demo/serving/*smoke*.py``, ``--contract-only``,
 or NumPy stub (``EngineModelStub`` / ``BACKEND_NUMPY_REF``) cert paths.
@@ -39,7 +39,7 @@ class CertStage:
 def serving_cpu_cert_manifest(
     *, quick: bool = True, yirage_core: bool = False
 ) -> List[CertStage]:
-    """Ordered stages for Serving Loop verification (real torch only)."""
+    """Ordered stages for Serving Loop verification (torch only)."""
     stages: List[CertStage] = [
         CertStage("s1_contract", "pytest", "tests/python/test_runtime_fusion_s1.py"),
         CertStage("s2_s3_contract", "pytest", "tests/python/test_runtime_fusion_s2_s3.py"),
@@ -103,11 +103,11 @@ def serving_cpu_cert_manifest(
             "tests/python/test_runtime_fusion_s18_maca_baseline.py",
         ),
         CertStage(
-            "real_torch_contract",
+            "torch_contract",
             "pytest",
-            "tests/python/test_runtime_fusion_real_torch.py",
+            "tests/python/test_runtime_fusion_torch.py",
         ),
-        CertStage("real_torch_e2e", "smoke", "demo/serving/real_torch_e2e.py"),
+        CertStage("torch_e2e", "smoke", "demo/serving/torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
         CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),
     ]
@@ -290,7 +290,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.json:
         print(json.dumps(report.to_dict(), indent=2))
     else:
-        mode = "real-torch"
+        mode = "torch"
         if yirage_core:
             mode += "+yirage-core"
         print(f"Serving cert (RuntimeFusion S1–S18, {mode})")

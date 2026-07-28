@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_parse_radix_hit_mask_basic(serving):

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_resolve_sm_worker_quota_defaults(serving):
@@ -122,5 +122,5 @@ def test_hybrid_forward_respects_sm_budget_skip(serving, torch):
 def test_serving_cpu_cert_manifest_includes_s5(serving):
     names = [s.name for s in serving.serving_cpu_cert_manifest(quick=True)]
     assert "s5_contract" in names
-    assert "real_torch_e2e" in names
+    assert "torch_e2e" in names
     assert "s8_contract" in names

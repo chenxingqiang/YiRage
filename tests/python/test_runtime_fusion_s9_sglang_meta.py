@@ -1,12 +1,12 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S9: SGLang ForwardBatch-style meta → RF StepMeta bridge (real torch)."""
+"""S9: SGLang ForwardBatch-style meta → RF StepMeta bridge (torch)."""
 
 from __future__ import annotations
 
 import numpy as np
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_extend_lens_to_radix_hit_mask(serving):

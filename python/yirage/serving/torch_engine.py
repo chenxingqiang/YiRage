@@ -75,7 +75,7 @@ class TorchDecoderLayer:
 
 
 class TorchEngineModel:
-    """Stack of :class:`TorchDecoderLayer` — real torch forward for parity/bench."""
+    """Stack of :class:`TorchDecoderLayer` — torch forward for parity/bench."""
 
     def __init__(
         self,

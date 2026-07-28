@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S15: MACA serving meta bridge + vLLM-metax plugin tier (real torch)."""
+"""S15: MACA serving meta bridge + vLLM-metax plugin tier (torch)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
+from serving_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
 
 
 def test_maca_serving_rf_spec_meta(serving):

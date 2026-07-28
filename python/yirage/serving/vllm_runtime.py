@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Minimal single-process vLLM runtime for CPU Serving e2e (real ``vllm`` fork).
+"""Minimal single-process vLLM runtime for CPU Serving e2e (``vllm`` fork).
 
 Requires the **CPU wheel** on headless CI::
 

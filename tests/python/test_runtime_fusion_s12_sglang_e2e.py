@@ -1,12 +1,12 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S12: SGLang ForwardBatch full-path MLP RF e2e (real torch; real sglang when installed)."""
+"""S12: SGLang ForwardBatch full-path MLP RF e2e (torch; sglang when installed)."""
 
 from __future__ import annotations
 
 import pytest
 
-from serving_real_test_utils import sglang_available, serving, torch  # noqa: F401
+from serving_test_utils import sglang_available, serving, torch  # noqa: F401
 
 
 def test_torch_sglang_mlp_rf_e2e_partial_radix(serving):
@@ -76,7 +76,7 @@ def test_sglang_e2e_auto_returns_report(serving):
 
 
 @pytest.mark.skipif(not sglang_available(), reason="requires installed sglang")
-def test_sglang_qwen2_mlp_rf_e2e_real(serving):
+def test_sglang_qwen2_mlp_rf_e2e(serving):
     pytest.importorskip("transformers")
     report = serving.run_sglang_qwen2_mlp_rf_e2e(
         hidden_size=64,

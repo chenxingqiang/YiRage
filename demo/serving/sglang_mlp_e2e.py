@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""SGLang ForwardBatch MLP RF full-path e2e (real torch; real sglang when installed).
+"""SGLang ForwardBatch MLP RF full-path e2e (torch; sglang when installed).
 
 ::
 

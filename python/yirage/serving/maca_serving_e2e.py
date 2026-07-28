@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S15: MACA serving meta + full-layer MLP RF hook e2e (real torch).
+"""S15: MACA serving meta + full-layer MLP RF hook e2e (torch).
 
 Full path = every decoder layer routes MLP through RuntimeFusion while
 ``MacaServingRfSpec`` bridges 64-warp / C500 SM constraints into each ``RF.step``.
