@@ -71,9 +71,12 @@ from .hf_qwen_cpu_e2e import (
     HfQwen2MlpLayerAdapter,
     HfQwen2MlpRfHook,
     build_hf_qwen_mlp_rf_hook,
+    greedy_decode_with_rf_mlp,
     is_transformers_available,
+    qwen2_decode_step_with_rf_mlp,
     qwen2_forward_with_rf_mlp,
     require_transformers,
+    resolve_hf_qwen_mlp_backend,
     run_hf_qwen05b_cpu_e2e,
 )
 from .vllm_paged_e2e import (
@@ -330,6 +333,9 @@ __all__ = [
     "build_hf_qwen_mlp_rf_hook",
     "is_transformers_available",
     "qwen2_forward_with_rf_mlp",
+    "qwen2_decode_step_with_rf_mlp",
+    "greedy_decode_with_rf_mlp",
+    "resolve_hf_qwen_mlp_backend",
     "require_transformers",
     "run_hf_qwen05b_cpu_e2e",
     "run_vllm_mlp_rf_e2e_auto",

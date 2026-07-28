@@ -60,6 +60,12 @@ def apply_serving_cpu_search_tractability() -> None:
     from scripts.cpu_cert_utils import apply_plain_matmul_search_tractability
 
     apply_plain_matmul_search_tractability()
+    os.environ["YIRAGE_SERVING_KN_MATMUL_ONLY"] = "1"
+
+
+def apply_serving_kn_down_matmul_tractability() -> None:
+    """KN-only down matmul search for Qwen-scale serving (no TB explore)."""
+    apply_serving_cpu_search_tractability()
 
 
 def superoptimize_kwargs(*, quick: bool = True) -> Dict[str, Any]:
@@ -71,7 +77,7 @@ def superoptimize_kwargs(*, quick: bool = True) -> Dict[str, Any]:
         "use_ray": False,
         "use_graph_dataset": False,
         "use_cached_graphs": False,
-        "use_persistent_cache": False,
+        "use_persistent_cache": True,
         "warmup_iters": 1,
         "profile_iters": 5 if quick else 20,
         "verbose": False,
@@ -157,7 +163,7 @@ def superoptimize_down_matmul_cpu(
 ):
     """Superoptimize down-projection matmul; raises if search finds nothing."""
     require_yirage_core()
-    apply_serving_cpu_search_tractability()
+    apply_serving_kn_down_matmul_tractability()
     graph = build_down_matmul_seed_graph(
         hidden_size,
         intermediate_size,
@@ -245,12 +251,28 @@ class YirageServingMlpRunner:
 
         self._w_gate_up = torch.cat([self.w_gate, self.w_up], dim=1)
         self._gate_up_graph = build_gate_up_seed_graph(h, i, dtype_name=dtype_name)
-        self._down_optimized, timing = bench_superoptimize_down_matmul(
-            h,
-            i,
-            dtype_name=dtype_name,
-            quick=quick_superopt,
-        )
+        try:
+            self._down_optimized, timing = bench_superoptimize_down_matmul(
+                h,
+                i,
+                dtype_name=dtype_name,
+                quick=quick_superopt,
+            )
+        except RuntimeError as exc:
+            if "0 valid" not in str(exc):
+                raise
+            # KN-only search may yield 0 TB variants; fall back to seed KN matmul (yirage.core).
+            self._down_optimized = build_down_matmul_seed_graph(
+                h, i, dtype_name=dtype_name
+            )
+            timing = SuperoptimizeTiming(
+                elapsed_s=0.0,
+                hidden_size=h,
+                intermediate_size=i,
+            )
+            self._down_seed_fallback = True
+        else:
+            self._down_seed_fallback = False
         self.superopt_elapsed_s = timing.elapsed_s
         self._yr_dtype = _yr_dtype(dtype_name)
 

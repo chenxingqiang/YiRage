@@ -12,17 +12,20 @@ CARGO="${CARGO:-/usr/local/cargo/bin/cargo}"
 
 echo "[setup] YiRage serving yirage.core tier"
 
-if [ ! -d deps/json/include/nlohmann/json.hpp ]; then
+if [ ! -d deps/json/include/nlohmann ]; then
   echo "[setup] cloning nlohmann/json..."
   mkdir -p deps/json
   git clone --depth 1 https://github.com/nlohmann/json.git deps/json/_src
-  ln -sfn _src/include deps/json/include
+  mkdir -p deps/json/include
+  cp -a deps/json/_src/include/nlohmann deps/json/include/
 fi
 
-if [ ! -d deps/cutlass/include/cutlass/cutlass.h ]; then
+if [ ! -d deps/cutlass/include/cutlass ]; then
   echo "[setup] cloning NVIDIA/cutlass..."
   git clone --depth 1 https://github.com/NVIDIA/cutlass.git deps/cutlass/_src
-  ln -sfn _src/include deps/cutlass/include
+  mkdir -p deps/cutlass/include
+  cp -a deps/cutlass/_src/include/cutlass deps/cutlass/include/
+  cp -a deps/cutlass/_src/include/cute deps/cutlass/include/ 2>/dev/null || true
 fi
 
 echo "[setup] building Rust search helpers..."

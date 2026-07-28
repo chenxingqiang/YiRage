@@ -118,6 +118,15 @@ def serving_cpu_cert_manifest(
         CertStage("qwen05b_cpu_e2e", "smoke", "demo/serving/qwen05b_cpu_e2e.py --quick"),
     ]
     if yirage_core:
+        stages.append(
+            CertStage(
+                "qwen05b_yirage_e2e",
+                "smoke",
+                "demo/serving/qwen05b_cpu_e2e.py --quick --mlp-backend yirage_cpu",
+                yirage_core=True,
+            )
+        )
+    if yirage_core:
         stages.extend(
             [
                 CertStage(
