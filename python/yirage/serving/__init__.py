@@ -247,11 +247,14 @@ from .sglang_metax_plugin import (
 )
 from .yirage_exec import (
     YirageServingMlpRunner,
+    apply_serving_kn_down_matmul_tractability,
     bench_superoptimize_down_matmul,
     build_gate_up_seed_graph,
     build_mlp_down_seed_graph,
     is_yirage_core_available,
     require_yirage_core,
+    resolve_serving_use_ray,
+    serving_superoptimize_ray_kwargs,
     superoptimize_down_matmul_cpu,
 )
 
@@ -439,6 +442,9 @@ __all__ = [
     "require_yirage_core",
     "YirageServingMlpRunner",
     "superoptimize_down_matmul_cpu",
+    "resolve_serving_use_ray",
+    "serving_superoptimize_ray_kwargs",
+    "apply_serving_kn_down_matmul_tractability",
     "bench_superoptimize_down_matmul",
     "build_gate_up_seed_graph",
     "build_mlp_down_seed_graph",

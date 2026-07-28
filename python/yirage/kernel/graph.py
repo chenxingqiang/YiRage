@@ -4101,9 +4101,16 @@ class KNGraph:
             except Exception:
                 pass
 
-        # Ray distributed search
+        # Ray distributed search — partition griddims, or blockdims when m=1 (decode)
         start_time = time.perf_counter()
-        if use_ray and griddims is not None and len(griddims) > 1:
+        ray_partition_axis = None
+        if use_ray:
+            if griddims is not None and len(griddims) > 1:
+                ray_partition_axis = "grid"
+            elif blockdims is not None and len(blockdims) > 1:
+                ray_partition_axis = "block"
+
+        if ray_partition_axis is not None:
             try:
                 import ray
 
@@ -4114,25 +4121,29 @@ class KNGraph:
                     ray.init(num_cpus=num_cpus, ignore_reinit_error=True)
                     print(f"✓ Ray initialized with {num_cpus} CPUs")
 
-                # Partition grid dimensions across workers
-                actual_workers = num_workers or min(8, len(griddims))
+                dim_list = griddims if ray_partition_axis == "grid" else blockdims
+                actual_workers = num_workers or min(8, len(dim_list))
                 partitions = [[] for _ in range(actual_workers)]
-                for i, gd in enumerate(griddims):
-                    partitions[i % actual_workers].append(gd)
+                for i, val in enumerate(dim_list):
+                    partitions[i % actual_workers].append(val)
 
+                axis_label = "grid" if ray_partition_axis == "grid" else "block"
                 print(
-                    f"✓ Ray distributed search: {actual_workers} workers, {len(griddims)} grid configs"
+                    f"✓ Ray distributed search: {actual_workers} workers, "
+                    f"{len(dim_list)} {axis_label} configs"
                 )
 
                 @ray.remote(num_cpus=1)
                 def search_partition(
                     graph_json_path,
                     output_json_path,
-                    partition_griddims,
+                    partition_values,
+                    partition_axis,
                     backend,
                     imaps,
                     omaps,
-                    blockdims,
+                    all_griddims,
+                    all_blockdims,
                     fmaps,
                     franges,
                     previous_checkpoint,
@@ -4140,18 +4151,23 @@ class KNGraph:
                     default_config,
                     is_formal_verified,
                 ):
-                    """Search a partition of grid dimensions, save results to JSON"""
+                    """Search a partition of grid or block dimensions, save results to JSON"""
                     from yirage.core import search as core_search, cy_from_json, cy_to_json
 
-                    # Load graph from JSON file
                     cygraph = cy_from_json(graph_json_path)
+                    if partition_axis == "grid":
+                        worker_griddims = partition_values
+                        worker_blockdims = all_blockdims
+                    else:
+                        worker_griddims = all_griddims
+                        worker_blockdims = partition_values
                     results = core_search(
                         cygraph,
                         backend=backend,
                         imaps=imaps,
                         omaps=omaps,
-                        griddims=partition_griddims,
-                        blockdims=blockdims,
+                        griddims=worker_griddims,
+                        blockdims=worker_blockdims,
                         fmaps=fmaps,
                         franges=franges,
                         previous_checkpoint=previous_checkpoint,
@@ -4159,8 +4175,6 @@ class KNGraph:
                         default_config=default_config,
                         is_formal_verified=is_formal_verified,
                     )
-                    # Save results to JSON file (avoid pickle of CyKNGraph)
-                    # Return count instead of actual graphs
                     for i, g in enumerate(results):
                         cy_to_json(g, f"{output_json_path}_{i}.json")
                     return len(results)
@@ -4189,9 +4203,11 @@ class KNGraph:
                                 graph_json_path,
                                 output_path,
                                 partition,
+                                ray_partition_axis,
                                 backend,
                                 imaps,
                                 omaps,
+                                griddims,
                                 blockdims,
                                 fmaps,
                                 franges,

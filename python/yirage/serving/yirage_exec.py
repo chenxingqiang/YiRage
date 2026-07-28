@@ -10,8 +10,12 @@ Serving MLP on CPU uses a **split kernel** strategy (aligned with Qwen MACA demo
 4. **residual** — PyTorch add
 
 Full-graph superoptimize for the entire MLP may yield 0 valid µGraphs under
-tractable CPU search caps; down matmul uses ``superoptimize(backend=\"cpu\")``
-with serving tractability env (``YIRAGE_SERVING_KN_MATMUL_ONLY``). No seed fallback.
+tractable CPU search caps. Down matmul uses ``superoptimize(backend=\"cpu\")``.
+
+**Search tiers** (no seed fallback):
+- Default (``YIRAGE_SERVING_USE_RAY`` unset): seed fingerprint verify — fast smoke
+- ``YIRAGE_SERVING_USE_RAY=1``: full CPU search + Ray partitions ``blockdims``
+  when decode ``m=1`` (griddims=1); uses ``resolve_cpu_search_space`` + TB explore
 """
 
 from __future__ import annotations
@@ -56,33 +60,71 @@ def _yr_dtype(name: str):
     raise ValueError(f"unsupported yirage dtype name: {name!r}")
 
 
-def apply_serving_cpu_search_tractability() -> None:
+def resolve_serving_use_ray(*, default: bool = False) -> bool:
+    """Opt-in Ray for serving CPU superoptimize (``YIRAGE_SERVING_USE_RAY=1``).
+
+    Ray partitions ``griddims`` when ``m>1``, or ``blockdims`` for decode ``m=1``.
+    """
+    raw = os.environ.get("YIRAGE_SERVING_USE_RAY", "")
+    if raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def serving_superoptimize_ray_kwargs(*, default: bool = False) -> Dict[str, Any]:
+    """``use_ray`` / ``num_workers`` kwargs for serving ``superoptimize``."""
+    use_ray = resolve_serving_use_ray(default=default)
+    if not use_ray:
+        return {"use_ray": False}
+    workers_raw = os.environ.get("YIRAGE_SERVING_RAY_WORKERS", "")
+    kwargs: Dict[str, Any] = {"use_ray": True}
+    if workers_raw.strip():
+        kwargs["num_workers"] = max(1, int(workers_raw))
+    return kwargs
+
+
+def apply_serving_cpu_search_tractability(*, use_ray: Optional[bool] = None) -> None:
     """Cap CPU search for serving plain-matmul superoptimize smoke."""
     from scripts.cpu_cert_utils import apply_plain_matmul_search_tractability
 
     apply_plain_matmul_search_tractability()
-    os.environ["YIRAGE_SERVING_KN_MATMUL_ONLY"] = "1"
+    ray = resolve_serving_use_ray() if use_ray is None else use_ray
+    if ray:
+        os.environ["YIRAGE_SERVING_USE_RAY"] = "1"
+        os.environ.pop("YIRAGE_SERVING_KN_MATMUL_ONLY", None)
+    else:
+        os.environ["YIRAGE_SERVING_KN_MATMUL_ONLY"] = "1"
+        os.environ.pop("YIRAGE_SERVING_USE_RAY", None)
 
 
-def apply_serving_kn_down_matmul_tractability() -> None:
-    """KN-only down matmul search for Qwen-scale serving (no TB explore)."""
-    apply_serving_cpu_search_tractability()
+def apply_serving_kn_down_matmul_tractability(*, use_ray: Optional[bool] = None) -> None:
+    """Serving down matmul search tractability (seed verify or Ray full search)."""
+    apply_serving_cpu_search_tractability(use_ray=use_ray)
 
 
 def superoptimize_kwargs(*, quick: bool = True) -> Dict[str, Any]:
-    return {
+    use_ray = resolve_serving_use_ray()
+    kwargs: Dict[str, Any] = {
         "backend": "cpu",
-        "griddims": [(1, 1, 1)],
-        "blockdims": [(32, 1, 1)],
-        "franges": [1],
-        "use_ray": False,
         "use_graph_dataset": False,
         "use_cached_graphs": False,
         "use_persistent_cache": True,
         "warmup_iters": 1,
         "profile_iters": 5 if quick else 20,
         "verbose": False,
+        **serving_superoptimize_ray_kwargs(),
     }
+    if use_ray:
+        # Auto CPU search space (multi blockdim → Ray when m=1 decode)
+        return kwargs
+    kwargs.update(
+        {
+            "griddims": [(1, 1, 1)],
+            "blockdims": [(32, 1, 1)],
+            "franges": [1],
+        }
+    )
+    return kwargs
 
 
 def build_gate_up_seed_graph(

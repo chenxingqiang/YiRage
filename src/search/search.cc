@@ -414,7 +414,16 @@ void KernelGraphGenerator::generate_kernel_graphs() {
       c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
     }
     if (s == "1" || s == "true" || s == "yes" || s == "on") {
-      if (try_register_verified_seed_graph()) {
+      bool use_ray_serving = false;
+      if (const char *ray = std::getenv("YIRAGE_SERVING_USE_RAY")) {
+        std::string rs(ray);
+        for (auto &c : rs) {
+          c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        }
+        use_ray_serving =
+            (rs == "1" || rs == "true" || rs == "yes" || rs == "on");
+      }
+      if (!use_ray_serving && try_register_verified_seed_graph()) {
         save_results();
         printf("num_thread = %d\n", num_thread);
         printf("num_tasks = %d tasks\n", num_tasks.load());
