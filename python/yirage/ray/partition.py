@@ -125,46 +125,101 @@ def create_partitions(
 
     partitions = []
 
-    # Partition by grid_dim
-    grids_per_partition = max(1, (len(grid_dims) + num_partitions - 1) // num_partitions)
+    # Partition by grid_dim when multiple grids; else block_dim (decode m=1)
+    if len(grid_dims) > 1:
+        dims_per_partition = max(
+            1, (len(grid_dims) + num_partitions - 1) // num_partitions
+        )
+        for i in range(num_partitions):
+            start_idx = i * dims_per_partition
+            end_idx = min(start_idx + dims_per_partition, len(grid_dims))
+            if start_idx >= len(grid_dims):
+                partition = SearchPartition(
+                    partition_id=i,
+                    total_partitions=num_partitions,
+                    estimated_candidates=0,
+                )
+            else:
+                partition_grids = grid_dims[start_idx:end_idx]
+                estimated = (
+                    len(partition_grids)
+                    * len(block_dims)
+                    * max(1, len(imaps))
+                    * max(1, len(omaps))
+                    * max(1, len(franges))
+                )
+                partition = SearchPartition(
+                    partition_id=i,
+                    total_partitions=num_partitions,
+                    grid_dim_range=partition_grids,
+                    block_dim_range=block_dims,
+                    imap_range=imaps,
+                    omap_range=omaps,
+                    fmap_range=fmaps,
+                    frange_range=franges,
+                    estimated_candidates=estimated,
+                )
+            partitions.append(partition)
+        return partitions
 
+    if len(block_dims) > 1:
+        blocks_per_partition = max(
+            1, (len(block_dims) + num_partitions - 1) // num_partitions
+        )
+        for i in range(num_partitions):
+            start_idx = i * blocks_per_partition
+            end_idx = min(start_idx + blocks_per_partition, len(block_dims))
+            if start_idx >= len(block_dims):
+                partition = SearchPartition(
+                    partition_id=i,
+                    total_partitions=num_partitions,
+                    estimated_candidates=0,
+                )
+            else:
+                partition_blocks = block_dims[start_idx:end_idx]
+                estimated = (
+                    len(grid_dims)
+                    * len(partition_blocks)
+                    * max(1, len(imaps))
+                    * max(1, len(omaps))
+                    * max(1, len(franges))
+                )
+                partition = SearchPartition(
+                    partition_id=i,
+                    total_partitions=num_partitions,
+                    grid_dim_range=grid_dims,
+                    block_dim_range=partition_blocks,
+                    imap_range=imaps,
+                    omap_range=omaps,
+                    fmap_range=fmaps,
+                    frange_range=franges,
+                    estimated_candidates=estimated,
+                )
+            partitions.append(partition)
+        return partitions
+
+    # Single grid + single block — replicate full space to each worker
     for i in range(num_partitions):
-        start_idx = i * grids_per_partition
-        end_idx = min(start_idx + grids_per_partition, len(grid_dims))
-
-        if start_idx >= len(grid_dims):
-            # Empty partition
-            partition = SearchPartition(
+        estimated = (
+            len(grid_dims)
+            * len(block_dims)
+            * max(1, len(imaps))
+            * max(1, len(omaps))
+            * max(1, len(franges))
+        )
+        partitions.append(
+            SearchPartition(
                 partition_id=i,
                 total_partitions=num_partitions,
-                estimated_candidates=0,
-            )
-        else:
-            partition_grids = grid_dims[start_idx:end_idx]
-
-            # Estimate candidates
-            estimated = (
-                len(partition_grids)
-                * len(block_dims)
-                * max(1, len(imaps))
-                * max(1, len(omaps))
-                * max(1, len(franges))
-            )
-
-            partition = SearchPartition(
-                partition_id=i,
-                total_partitions=num_partitions,
-                grid_dim_range=partition_grids,
+                grid_dim_range=grid_dims,
                 block_dim_range=block_dims,
                 imap_range=imaps,
                 omap_range=omaps,
                 fmap_range=fmaps,
                 frange_range=franges,
-                estimated_candidates=estimated,
+                estimated_candidates=estimated if i == 0 else 0,
             )
-
-        partitions.append(partition)
-
+        )
     return partitions
 
 

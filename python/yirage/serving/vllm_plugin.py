@@ -49,6 +49,27 @@ def require_vllm() -> None:
         )
 
 
+def require_vllm_cpu_serving() -> None:
+    """CPU Serving cert gate: vLLM fork e2e must run (no skip)."""
+    if not is_vllm_available():
+        raise RuntimeError(
+            "CPU Serving verification requires `pip install vllm transformers`. "
+            "On CPU-only CI use: bash scripts/setup_serving_vllm_cpu.sh"
+        )
+    try:
+        from vllm.platforms import current_platform
+
+        if getattr(current_platform, "device_type", "") != "cpu" and not __import__(
+            "torch"
+        ).cuda.is_available():
+            raise RuntimeError(
+                "Headless CPU CI requires the vLLM **CPU** wheel. "
+                "Run: bash scripts/setup_serving_vllm_cpu.sh"
+            )
+    except ImportError:
+        pass
+
+
 @dataclass(frozen=True)
 class VllmMlpWeightView:
     """YiRage-shaped MLP weights extracted from a vLLM Qwen2 decoder layer."""
@@ -80,6 +101,15 @@ def _linear_weight_t(linear) -> Any:
     return w.T
 
 
+def _split_gate_up_weights(gate_up_linear) -> tuple[Any, Any]:
+    """Split fused ``gate_up_proj`` into gate/up matrices (vLLM 0.26+ layout)."""
+    w = _linear_weight_t(gate_up_linear)
+    if w.shape[1] % 2 != 0:
+        raise ValueError(f"gate_up_proj last dim must be even, got {tuple(w.shape)}")
+    mid = w.shape[1] // 2
+    return w[:, :mid], w[:, mid:]
+
+
 def extract_qwen2_mlp_weights(vllm_decoder_layer, *, layer_id: Optional[int] = None) -> VllmMlpWeightView:
     """Extract MLP tensors from an installed vLLM ``Qwen2DecoderLayer``."""
     require_vllm()
@@ -88,8 +118,13 @@ def extract_qwen2_mlp_weights(vllm_decoder_layer, *, layer_id: Optional[int] = N
     mlp = vllm_decoder_layer.mlp
     rms = norm.weight
     hidden_size = int(rms.shape[0])
-    w_gate = _linear_weight_t(mlp.gate_proj)
-    w_up = _linear_weight_t(mlp.up_proj)
+    if hasattr(mlp, "gate_proj") and hasattr(mlp, "up_proj"):
+        w_gate = _linear_weight_t(mlp.gate_proj)
+        w_up = _linear_weight_t(mlp.up_proj)
+    elif hasattr(mlp, "gate_up_proj"):
+        w_gate, w_up = _split_gate_up_weights(mlp.gate_up_proj)
+    else:
+        raise AttributeError("unsupported vLLM Qwen2 MLP layout (expected gate/up or gate_up_proj)")
     w_down = _linear_weight_t(mlp.down_proj)
     intermediate_size = int(w_gate.shape[1])
     device = str(rms.device) if hasattr(rms, "device") else None

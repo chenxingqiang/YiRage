@@ -9,8 +9,14 @@ Serving MLP on CPU uses a **split kernel** strategy (aligned with Qwen MACA demo
 3. **down** — ``superoptimize(backend="cpu")`` on plain matmul ``(1,I) @ (I,H)``
 4. **residual** — PyTorch add
 
-Full-graph superoptimize for the entire MLP currently yields 0 valid µGraphs under
-tractable CPU search caps; this path is the **real** yirage.core + superoptimize tier.
+Full-graph superoptimize for the entire MLP may yield 0 valid µGraphs under
+tractable CPU search caps. Down matmul uses ``superoptimize(backend=\"cpu\")``.
+
+**Search tiers** (no seed fallback):
+- Default (``YIRAGE_SERVING_USE_RAY`` unset): seed fingerprint verify — fast smoke
+- ``YIRAGE_SERVING_USE_RAY=1`` / ``YIRAGE_SERVING_USE_COORDINATOR=1``:
+  ``DistributedSearchCoordinator.parallel_search`` with CPU search space;
+  partitions ``blockdims`` when decode ``m=1`` (griddims=1)
 """
 
 from __future__ import annotations
@@ -55,27 +61,86 @@ def _yr_dtype(name: str):
     raise ValueError(f"unsupported yirage dtype name: {name!r}")
 
 
-def apply_serving_cpu_search_tractability() -> None:
+def resolve_serving_use_ray(*, default: bool = False) -> bool:
+    """Opt-in Ray for serving CPU superoptimize (``YIRAGE_SERVING_USE_RAY=1``).
+
+    Ray partitions ``griddims`` when ``m>1``, or ``blockdims`` for decode ``m=1``.
+    """
+    raw = os.environ.get("YIRAGE_SERVING_USE_RAY", "")
+    if raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def resolve_serving_num_workers(*, default: int = 2) -> int:
+    raw = os.environ.get("YIRAGE_SERVING_RAY_WORKERS", "")
+    if raw.strip():
+        return max(1, int(raw))
+    return max(1, default)
+
+
+def resolve_serving_use_coordinator(*, default: bool = False) -> bool:
+    """Use ``DistributedSearchCoordinator`` (default on when ``YIRAGE_SERVING_USE_RAY=1``)."""
+    raw = os.environ.get("YIRAGE_SERVING_USE_COORDINATOR", "")
+    if raw == "":
+        return resolve_serving_use_ray(default=default)
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def serving_superoptimize_ray_kwargs(*, default: bool = False) -> Dict[str, Any]:
+    """``use_ray`` / ``num_workers`` kwargs for serving ``superoptimize``."""
+    use_ray = resolve_serving_use_ray(default=default)
+    if not use_ray:
+        return {"use_ray": False}
+    workers_raw = os.environ.get("YIRAGE_SERVING_RAY_WORKERS", "")
+    kwargs: Dict[str, Any] = {"use_ray": True}
+    if workers_raw.strip():
+        kwargs["num_workers"] = max(1, int(workers_raw))
+    return kwargs
+
+
+def apply_serving_cpu_search_tractability(*, use_ray: Optional[bool] = None) -> None:
     """Cap CPU search for serving plain-matmul superoptimize smoke."""
     from scripts.cpu_cert_utils import apply_plain_matmul_search_tractability
 
     apply_plain_matmul_search_tractability()
+    ray = resolve_serving_use_ray() if use_ray is None else use_ray
+    if ray:
+        os.environ["YIRAGE_SERVING_USE_RAY"] = "1"
+        os.environ.pop("YIRAGE_SERVING_KN_MATMUL_ONLY", None)
+    else:
+        os.environ["YIRAGE_SERVING_KN_MATMUL_ONLY"] = "1"
+        os.environ.pop("YIRAGE_SERVING_USE_RAY", None)
+
+
+def apply_serving_kn_down_matmul_tractability(*, use_ray: Optional[bool] = None) -> None:
+    """Serving down matmul search tractability (seed verify or Ray full search)."""
+    apply_serving_cpu_search_tractability(use_ray=use_ray)
 
 
 def superoptimize_kwargs(*, quick: bool = True) -> Dict[str, Any]:
-    return {
+    use_ray = resolve_serving_use_ray()
+    kwargs: Dict[str, Any] = {
         "backend": "cpu",
-        "griddims": [(1, 1, 1)],
-        "blockdims": [(32, 1, 1)],
-        "franges": [1],
-        "use_ray": False,
         "use_graph_dataset": False,
         "use_cached_graphs": False,
-        "use_persistent_cache": False,
+        "use_persistent_cache": True,
         "warmup_iters": 1,
         "profile_iters": 5 if quick else 20,
         "verbose": False,
+        **serving_superoptimize_ray_kwargs(),
     }
+    if use_ray:
+        # Auto CPU search space (multi blockdim → Ray when m=1 decode)
+        return kwargs
+    kwargs.update(
+        {
+            "griddims": [(1, 1, 1)],
+            "blockdims": [(32, 1, 1)],
+            "franges": [1],
+        }
+    )
+    return kwargs
 
 
 def build_gate_up_seed_graph(
@@ -148,6 +213,131 @@ def build_down_matmul_seed_graph(
     return graph
 
 
+def build_serving_cpu_search_config(graph) -> Dict[str, Any]:
+    """CPU search config for ``DistributedSearchCoordinator`` (decode m=1 → blockdim partition)."""
+    from yirage.backends.cpu.config import apply_cpu_search_env, resolve_cpu_search_space
+
+    cygraph = graph.cygraph if hasattr(graph, "cygraph") else graph
+    cpu_config = resolve_cpu_search_space(cygraph)
+    apply_cpu_search_env(cpu_config)
+    return {
+        "griddims": list(cpu_config.get("grid_dims_to_explore", [(1, 1, 1)])),
+        "blockdims": list(cpu_config.get("block_dims_to_explore", [(32, 1, 1)])),
+        "franges": list(cpu_config.get("franges_to_explore", [1])),
+        "fmaps": [-1],
+        "verbose": False,
+    }
+
+
+def _kngraph_from_graph_json(graph_json_text: str):
+    """Rebuild executable ``KNGraph`` from worker/coordinator JSON payload."""
+    import os
+    import tempfile
+
+    from yirage.core import cy_from_json
+    from yirage.kernel.graph import KNGraph
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        f.write(graph_json_text)
+        temp_path = f.name
+    try:
+        cygraph = cy_from_json(temp_path)
+        return KNGraph(cygraph, backend="cpu")
+    finally:
+        os.unlink(temp_path)
+
+
+def _profile_and_pick_best_kngraph(
+    graphs: Sequence[Any],
+    *,
+    quick: bool = True,
+) -> Any:
+    """Profile candidate µGraphs on CPU and return the fastest executable graph."""
+    import time
+
+    import torch
+    from yirage.core import convert_dtype_to_torch_type
+    from yirage.kernel.graph import _cpu_runtime_context
+
+    if not graphs:
+        raise RuntimeError("no graphs to profile")
+    if len(graphs) == 1:
+        graphs[0].backend = "cpu"
+        return graphs[0]
+
+    warmup_iters = 1
+    profile_iters = 5 if quick else 20
+    best_graph: Any = None
+    best_perf = float("inf")
+
+    for g in graphs:
+        dtensors = g.cygraph.get_input_dtensors()
+        input_tensors: List[Any] = []
+        for t in dtensors:
+            dims, strides = g.cygraph.get_input_dtensor_shape_and_stride(t)
+            dtype = convert_dtype_to_torch_type(t.dtype)
+            x = torch.randn(dims, dtype=dtype, device="cpu")
+            x = torch.as_strided(x, size=dims, stride=strides)
+            input_tensors.append(x)
+
+        with _cpu_runtime_context():
+            for _ in range(warmup_iters):
+                try:
+                    g(inputs=input_tensors)
+                except Exception:
+                    continue
+            start_time = time.perf_counter()
+            for _ in range(profile_iters):
+                try:
+                    g(inputs=input_tensors)
+                except Exception:
+                    break
+            end_time = time.perf_counter()
+        elapsed_ms = (end_time - start_time) / profile_iters * 1000
+        if elapsed_ms < best_perf:
+            best_perf = elapsed_ms
+            best_graph = g
+
+    if best_graph is None:
+        raise RuntimeError("CPU profile found no executable µGraph")
+    best_graph.backend = "cpu"
+    return best_graph
+
+
+def superoptimize_down_matmul_via_coordinator(graph, *, quick: bool = True):
+    """Distributed CPU search via ``DistributedSearchCoordinator``; raises on 0 valid µGraphs."""
+    from yirage.ray.coordinator import DistributedSearchCoordinator
+
+    apply_serving_kn_down_matmul_tractability(use_ray=True)
+    search_config = build_serving_cpu_search_config(graph)
+    num_workers = resolve_serving_num_workers()
+    use_ray = resolve_serving_use_ray(default=True)
+
+    coord = DistributedSearchCoordinator(num_workers=num_workers, use_ray=use_ray)
+    try:
+        out = coord.parallel_search(
+            computation_graph=graph,
+            config=search_config,
+            backend="cpu",
+            collect_feedback=False,
+            verbose=False,
+        )
+    finally:
+        coord.shutdown()
+
+    kn_graphs: List[Any] = []
+    for entry in out.get("graphs") or []:
+        graph_json = entry.get("graph_json")
+        if graph_json:
+            kn_graphs.append(_kngraph_from_graph_json(graph_json))
+
+    if not kn_graphs:
+        raise RuntimeError(
+            "DistributedSearchCoordinator found 0 valid µGraphs for down matmul"
+        )
+    return _profile_and_pick_best_kngraph(kn_graphs, quick=quick)
+
+
 def superoptimize_down_matmul_cpu(
     hidden_size: int,
     intermediate_size: int,
@@ -157,12 +347,14 @@ def superoptimize_down_matmul_cpu(
 ):
     """Superoptimize down-projection matmul; raises if search finds nothing."""
     require_yirage_core()
-    apply_serving_cpu_search_tractability()
+    apply_serving_kn_down_matmul_tractability()
     graph = build_down_matmul_seed_graph(
         hidden_size,
         intermediate_size,
         dtype_name=dtype_name,
     )
+    if resolve_serving_use_coordinator():
+        return superoptimize_down_matmul_via_coordinator(graph, quick=quick)
     optimized = graph.superoptimize(**superoptimize_kwargs(quick=quick))
     if optimized is None:
         raise RuntimeError(

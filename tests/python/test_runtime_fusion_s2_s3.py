@@ -1,10 +1,10 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S2/S3: MLP Override + first-K hybrid (real torch)."""
+"""S2/S3: MLP Override + first-K hybrid (torch)."""
 
 from __future__ import annotations
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_qwen2_mlp_hf_attach_map(serving):

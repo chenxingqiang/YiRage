@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_parse_radix_hit_mask_basic(serving):
@@ -93,4 +93,4 @@ def test_hybrid_partial_radix_shrink_matches_manual(serving, torch):
 
 
 def test_rf_inspect_version_s6(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"

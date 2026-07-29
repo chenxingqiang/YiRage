@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S15: MACA serving meta bridge + vLLM-metax plugin tier (real torch)."""
+"""S15: MACA serving meta bridge + vLLM-metax plugin tier (torch)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
 
 
 def test_maca_serving_rf_spec_meta(serving):
@@ -76,10 +76,7 @@ def test_vllm_metax_hook_raises_without_tier(serving):
 
 
 @pytest.mark.skipif(
-    not __import__(
-        "yirage.serving.vllm_metax_plugin",
-        fromlist=["is_vllm_metax_available"],
-    ).is_vllm_metax_available(),
+    not maca_integration_enabled(),
     reason="requires vllm on MetaX host or YIRAGE_MACA_INTEGRATION=1",
 )
 def test_vllm_metax_plugin_requires_tier(serving):
@@ -94,7 +91,7 @@ def test_yirage_maca_tier_inspect(serving):
 
 
 def test_rf_inspect_version_s15(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"
 
 
 def test_backend_yirage_maca_constant(serving):

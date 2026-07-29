@@ -1,8 +1,8 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Shared helpers: real torch serving tests only (no numpy stub engine).
+"""Shared helpers for Serving Loop pytest (torch execution; no numpy stub engine).
 
-Policy: Serving verification lives in pytest + ``real_torch_e2e`` /
+Policy: Serving verification lives in pytest + ``torch_e2e`` /
 ``segment_torch_bench`` only — do NOT add ``demo/serving/*smoke*.py``.
 See AGENTS.md § Serving 验证禁令.
 """
@@ -10,11 +10,46 @@ See AGENTS.md § Serving 验证禁令.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 import types
 from pathlib import Path
 
 import pytest
+
+
+def maca_integration_enabled() -> bool:
+    """MetaX / MACA tier tests opt-in only (not CPU Serving cert)."""
+    return os.environ.get("YIRAGE_MACA_INTEGRATION") == "1"
+
+
+def vllm_available() -> bool:
+    """True when ``vllm`` is importable (does not load ``yirage.core``)."""
+    try:
+        import vllm  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def sglang_available() -> bool:
+    """True when ``sglang`` is importable (optional tier; does not load ``yirage.core``)."""
+    try:
+        import sglang  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def require_vllm_installed() -> None:
+    """Fail pytest when vLLM is missing — CPU Serving cert gate."""
+    if not vllm_available():
+        pytest.fail(
+            "CPU Serving verification requires `pip install vllm transformers`. "
+            "vLLM Qwen2 fork e2e must not be skipped on CPU."
+        )
 
 
 def import_serving():

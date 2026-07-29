@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S13: vLLM PagedAttention meta + full-layer MLP RF hook e2e (real torch).
+"""S13: vLLM PagedAttention meta + full-layer MLP RF hook e2e (torch).
 
 Full path = every decoder layer routes MLP through RuntimeFusion while
 ``block_tables``/``seq_lens`` bridge into ``paged_kv_*`` on each ``RF.step``.

@@ -1,12 +1,12 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S13: vLLM PagedAttention + full-layer MLP RF hook e2e (real torch)."""
+"""S13: vLLM PagedAttention + full-layer MLP RF hook e2e (torch)."""
 
 from __future__ import annotations
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_vllm_paged_kv_batch_spec_meta(serving):
@@ -48,4 +48,4 @@ def test_vllm_paged_auto_entry(serving):
 
 
 def test_rf_inspect_version_s13(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"

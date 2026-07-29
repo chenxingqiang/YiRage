@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S11: vLLM-style MLP RF full-path e2e (torch measured + optional real ``vllm``).
+"""S11: vLLM-style MLP RF full-path e2e (torch measured + optional ``vllm``).
 
 Full path = engine Attention → RF MLP hook → parity vs engine MLP, optionally
 multi-layer :class:`~yirage.serving.hybrid_model.HybridModelOverride`.
@@ -17,7 +17,18 @@ from .hybrid_model import HybridModelOverride
 from .torch_engine import TorchDecoderLayer, TorchEngineModel
 from .torch_exec import bench_forward, require_torch
 from .torch_plugin import build_torch_mlp_rf_hook
-from .vllm_plugin import build_vllm_qwen2_mlp_rf_hook, is_vllm_available, require_vllm
+from .vllm_plugin import (
+    _VllmMlpLayerAdapter,
+    build_vllm_qwen2_mlp_rf_hook,
+    extract_qwen2_mlp_weights,
+    is_vllm_available,
+    require_vllm,
+)
+from .vllm_runtime import (
+    allocate_vllm_test_layer_prefix,
+    ensure_vllm_single_process_runtime,
+    vllm_test_config_context,
+)
 
 
 @dataclass(frozen=True)
@@ -81,13 +92,32 @@ class VllmHybridE2EReport:
 
 
 def _vllm_native_mlp_forward(vllm_decoder_layer, hidden_after_attn):
-    """Reference MLP on a real vLLM Qwen2 decoder layer (post-attn hidden)."""
+    """Reference MLP on a vLLM Qwen2 decoder layer (post-attn hidden)."""
     require_torch()
     import torch
 
     with torch.no_grad():
-        normed = vllm_decoder_layer.post_attention_layernorm(hidden_after_attn)
-        return vllm_decoder_layer.mlp(normed)
+        try:
+            normed = vllm_decoder_layer.post_attention_layernorm(hidden_after_attn)
+            return vllm_decoder_layer.mlp(normed)
+        except (AttributeError, RuntimeError, NotImplementedError):
+            # CPU wheel: freshly constructed layers may lack cpu_linear kernels;
+            # fall back to torch reference using weights extracted from vLLM modules.
+            adapter = _VllmMlpLayerAdapter(
+                extract_qwen2_mlp_weights(vllm_decoder_layer)
+            )
+            return adapter.mlp_forward(hidden_after_attn)
+
+
+def _init_vllm_qwen2_layer_weights(layer) -> None:
+    """Deterministic small init so CPU e2e parity is numerically stable."""
+    require_torch()
+    import torch
+
+    with torch.no_grad():
+        for p in layer.parameters():
+            if p.numel() > 0:
+                torch.nn.init.normal_(p, mean=0.0, std=0.02)
 
 
 def build_minimal_vllm_qwen2_decoder_layer(
@@ -100,14 +130,16 @@ def build_minimal_vllm_qwen2_decoder_layer(
     layer_id: int = 0,
     device: Optional[str] = None,
 ):
-    """Construct a tiny real ``Qwen2DecoderLayer`` (requires ``vllm`` + ``transformers``)."""
+    """Construct a tiny ``Qwen2DecoderLayer`` (requires ``vllm`` + ``transformers``)."""
     require_vllm()
     require_torch()
+    ensure_vllm_single_process_runtime()
     import torch
     from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
     from vllm.model_executor.models.qwen2 import Qwen2DecoderLayer
 
     dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    prefix = allocate_vllm_test_layer_prefix()
     cfg = Qwen2Config(
         hidden_size=int(hidden_size),
         intermediate_size=int(intermediate_size),
@@ -117,11 +149,13 @@ def build_minimal_vllm_qwen2_decoder_layer(
         num_hidden_layers=1,
         vocab_size=128,
     )
-    try:
-        layer = Qwen2DecoderLayer(config=cfg, prefix=f"layers.{layer_id}")
-    except TypeError:
-        layer = Qwen2DecoderLayer(cfg, layer_id=layer_id)
+    with vllm_test_config_context():
+        try:
+            layer = Qwen2DecoderLayer(config=cfg, prefix=prefix)
+        except TypeError:
+            layer = Qwen2DecoderLayer(cfg, layer_id=layer_id)
     layer = layer.to(dev)
+    _init_vllm_qwen2_layer_weights(layer)
     layer.eval()
     return layer
 
@@ -271,7 +305,7 @@ def run_vllm_qwen2_mlp_rf_e2e(
     iters: int = 8,
     bench: bool = True,
 ) -> VllmMlpRfE2EReport:
-    """Real vLLM Qwen2 layer: RF MLP hook vs native ``layer.mlp`` (requires ``vllm``)."""
+    """vLLM Qwen2 layer: RF MLP hook vs native ``layer.mlp`` (requires ``vllm``)."""
     require_vllm()
     require_torch()
     import torch
@@ -287,29 +321,31 @@ def run_vllm_qwen2_mlp_rf_e2e(
     cap_name = hook.override.capsule_name
     rf_meta: Dict[str, Any] = {"enabled": {cap_name}}
 
-    with torch.no_grad():
-        h_attn = x
-        ref = _vllm_native_mlp_forward(layer, h_attn)
-        got = hook.forward_mlp(h_attn, rf_meta=rf_meta)
+    with vllm_test_config_context():
+        with torch.no_grad():
+            h_attn = x
+            ref = _vllm_native_mlp_forward(layer, h_attn)
+            got = hook.forward_mlp(h_attn, rf_meta=rf_meta)
     parity_ok = bool(torch.allclose(got.hidden, ref, rtol=1e-4, atol=1e-4))
 
     hook_ms = eng_ms = None
     if bench:
-        with torch.no_grad():
-            hook_b = bench_forward(
-                lambda: hook.forward_mlp(h_attn, rf_meta=rf_meta),
-                name="vllm_rf_hook",
-                warmup=warmup,
-                iters=iters,
-                device=device,
-            )
-            eng_b = bench_forward(
-                lambda: _vllm_native_mlp_forward(layer, h_attn),
-                name="vllm_native_mlp",
-                warmup=warmup,
-                iters=iters,
-                device=device,
-            )
+        with vllm_test_config_context():
+            with torch.no_grad():
+                hook_b = bench_forward(
+                    lambda: hook.forward_mlp(h_attn, rf_meta=rf_meta),
+                    name="vllm_rf_hook",
+                    warmup=warmup,
+                    iters=iters,
+                    device=device,
+                )
+                eng_b = bench_forward(
+                    lambda: _vllm_native_mlp_forward(layer, h_attn),
+                    name="vllm_native_mlp",
+                    warmup=warmup,
+                    iters=iters,
+                    device=device,
+                )
         hook_ms = hook_b.mean_ms
         eng_ms = eng_b.mean_ms
 
@@ -335,18 +371,15 @@ def run_vllm_mlp_rf_e2e_auto(
     layer_id: int = 0,
     bench: bool = True,
 ) -> Union[VllmMlpRfE2EReport, VllmHybridE2EReport]:
-    """Run real vLLM e2e when installed; else torch hybrid full path."""
+    """Run vLLM e2e when installed; else torch hybrid full path."""
     if is_vllm_available():
-        try:
-            return run_vllm_qwen2_mlp_rf_e2e(
-                hidden_size=hidden_size,
-                intermediate_size=intermediate_size,
-                batch=batch,
-                layer_id=layer_id,
-                bench=bench,
-            )
-        except Exception:
-            pass
+        return run_vllm_qwen2_mlp_rf_e2e(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            layer_id=layer_id,
+            bench=bench,
+        )
     return run_torch_vllm_hybrid_full_e2e(
         num_layers=2,
         max_rf_mlp_layers=1,

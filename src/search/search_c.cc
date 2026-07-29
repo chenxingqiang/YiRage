@@ -179,6 +179,21 @@ int cython_search(yirage::kernel::Graph const *input_graph,
             };
           }
         }
+        if (const char *kn = std::getenv("YIRAGE_SERVING_KN_MATMUL_ONLY")) {
+          std::string s(kn);
+          for (auto &c : s) {
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+          }
+          if (s == "1" || s == "true" || s == "yes" || s == "on") {
+            // Serving down-proj: plain KN matmul only (no TB customized — LLM K dims explode).
+            config.max_num_threadblock_graphs = 0;
+            if (std::getenv("YIRAGE_CPU_MAX_KN_GRAPH_OP") == nullptr) {
+              config.max_num_kernel_graph_op = 4;
+            }
+            config.knop_to_explore = {type::KN_MATMUL_OP};
+            config.tbop_to_explore = {};
+          }
+        }
       } else {
         config.warp_size = 1;  // other backends
       }

@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S18: mcPytorch baseline generation archive + SGLang-metax multi-layer real fork."""
+"""S18: mcPytorch baseline generation archive + SGLang-metax multi-layer fork."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
 
 
 def test_mcpytorch_baseline_name_constant(serving):
@@ -25,7 +25,7 @@ def test_yirage_maca_generation_mcpytorch_baseline_archive(serving):
         iters=4,
         backend=serving.BACKEND_TORCH,
     )
-    assert baseline.version == "s18"
+    assert baseline.version == "s19"
     assert baseline.summary.baseline_name == serving.MCPYTORCH_BASELINE_NAME
     assert baseline.summary.parity_ok
     assert baseline.summary.baseline_decode_step_ms > 0
@@ -37,8 +37,8 @@ def test_yirage_maca_generation_mcpytorch_baseline_archive(serving):
     assert payload["summary"]["speedup_vs_baseline"] > 0
 
 
-def test_sglang_metax_multilayer_real_fork_auto(serving):
-    fork = serving.run_sglang_metax_multilayer_real_fork_auto(
+def test_sglang_metax_multilayer_fork_auto(serving):
+    fork = serving.run_sglang_metax_multilayer_fork_auto(
         layer_ids=[0, 1],
         hidden_size=16,
         intermediate_size=32,
@@ -52,21 +52,18 @@ def test_sglang_metax_multilayer_real_fork_auto(serving):
 
 
 @pytest.mark.skipif(
-    not __import__(
-        "yirage.serving.sglang_metax_plugin",
-        fromlist=["is_sglang_metax_available"],
-    ).is_sglang_metax_available(),
+    not maca_integration_enabled(),
     reason="requires sglang on MetaX host or YIRAGE_MACA_INTEGRATION=1",
 )
-def test_sglang_metax_multilayer_real_fork_e2e(serving):
-    fork = serving.run_sglang_metax_multilayer_real_fork_e2e(
+def test_sglang_metax_multilayer_fork_e2e(serving):
+    fork = serving.run_sglang_metax_multilayer_fork_e2e(
         layer_ids=[0, 1],
         hidden_size=16,
         intermediate_size=32,
         batch=2,
         bench=False,
     )
-    assert fork.real_fork
+    assert fork.fork
     assert fork.parity_ok
     assert all(r.plugin == "SglangMetaxQwen2MlpRfHook" for r in fork.layer_reports)
 
@@ -92,4 +89,4 @@ def test_mcpytorch_baseline_with_maca_backend(serving):
 
 
 def test_rf_inspect_version_s18(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"

@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""Real torch e2e: HybridModelOverride + RF + SM budget + latency (no mock).
+"""Torch e2e: HybridModelOverride + RF + SM budget + latency.
 
 Requires PyTorch (CPU or CUDA)::
 
-    PYTHONPATH=python python3 demo/serving/real_torch_e2e.py
+    PYTHONPATH=python python3 demo/serving/torch_e2e.py
 """
 
 from __future__ import annotations
@@ -88,7 +88,7 @@ def main() -> int:
         )
 
     report = {
-        "real_torch_e2e": True,
+        "torch_e2e": True,
         "device": model.device,
         "engine": model.inspect(),
         "hybrid": hybrid.inspect(),
@@ -106,7 +106,7 @@ def main() -> int:
     if args.json:
         print(json.dumps(report, indent=2, default=str))
     else:
-        print("Real torch RuntimeFusion e2e")
+        print("Torch RuntimeFusion e2e")
         print(f"  device={model.device} layers={args.layers} k={args.k}")
         print(f"  full_match={full_match} rf={full.rf_layer_ids}")
         print(f"  tight_sm_match={tight_match} rf={tight.rf_layer_ids}")

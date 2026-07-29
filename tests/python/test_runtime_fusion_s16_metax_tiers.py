@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S16: MetaX tiers — yirage_maca capsule + SGLang-metax e2e (real torch)."""
+"""S16: MetaX tiers — yirage_maca capsule + SGLang-metax e2e (torch)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
 
 
 def test_rf_step_meta_for_sglang_metax_merges_maca(serving):
@@ -75,10 +75,7 @@ def test_sglang_metax_hook_raises_without_tier(serving):
 
 
 @pytest.mark.skipif(
-    not __import__(
-        "yirage.serving.sglang_metax_plugin",
-        fromlist=["is_sglang_metax_available"],
-    ).is_sglang_metax_available(),
+    not maca_integration_enabled(),
     reason="requires sglang on MetaX host or YIRAGE_MACA_INTEGRATION=1",
 )
 def test_sglang_metax_plugin_requires_tier(serving):
@@ -139,4 +136,4 @@ def test_yirage_maca_full_layer_e2e(serving):
 
 
 def test_rf_inspect_version_s16(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"

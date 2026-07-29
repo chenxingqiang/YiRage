@@ -11,7 +11,7 @@ BACKEND_NUMPY_REF = "numpy_ref"  # offline reference only; not used in serving c
 
 
 def default_serving_backend() -> str:
-    """Prefer real torch execution when PyTorch is installed."""
+    """Prefer torch execution when PyTorch is installed."""
     try:
         import torch  # noqa: F401
 
@@ -20,7 +20,7 @@ def default_serving_backend() -> str:
         return BACKEND_NUMPY_REF
 
 
-def is_real_backend(backend: str) -> bool:
+def is_exec_backend(backend: str) -> bool:
     return backend in (BACKEND_TORCH, BACKEND_YIRAGE_CPU, BACKEND_YIRAGE_MACA)
 
 

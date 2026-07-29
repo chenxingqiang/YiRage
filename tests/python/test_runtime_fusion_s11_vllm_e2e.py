@@ -1,12 +1,12 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S11: vLLM full-path MLP RF e2e (real torch; real vllm when installed)."""
+"""S11: vLLM full-path MLP RF e2e (torch; vllm when installed)."""
 
 from __future__ import annotations
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import require_vllm_installed, serving, torch  # noqa: F401
 
 
 def test_torch_vllm_mlp_rf_e2e_parity(serving):
@@ -63,11 +63,8 @@ def test_vllm_e2e_auto_returns_report(serving):
     assert report.parity_ok
 
 
-@pytest.mark.skipif(
-    not __import__("yirage.serving.vllm_plugin", fromlist=["is_vllm_available"]).is_vllm_available(),
-    reason="requires installed vllm",
-)
-def test_vllm_qwen2_mlp_rf_e2e_real(serving):
+def test_vllm_qwen2_mlp_rf_e2e(serving):
+    require_vllm_installed()
     pytest.importorskip("transformers")
     report = serving.run_vllm_qwen2_mlp_rf_e2e(
         hidden_size=64,
@@ -81,4 +78,4 @@ def test_vllm_qwen2_mlp_rf_e2e_real(serving):
 
 
 def test_rf_inspect_version_s11(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"

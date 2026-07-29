@@ -1,10 +1,10 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S1: FusionPlan / MLP FusionCapsule / RuntimeFusion.step (real torch)."""
+"""S1: FusionPlan / MLP FusionCapsule / RuntimeFusion.step (torch)."""
 
 from __future__ import annotations
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import serving, torch  # noqa: F401
 
 
 def test_fusion_plan_mlp_dict_has_standard_identity(serving):
@@ -70,5 +70,5 @@ def test_runtime_fusion_inspect_lists_capsule(serving):
     rf = serving.RuntimeFusion([cap])
     info = rf.inspect()
     assert info["runtime"] == "RuntimeFusion"
-    assert info["version"] == "s18"
+    assert info["version"] == "s19"
     assert info["capsules"][0]["plan"]["backend"] == serving.BACKEND_TORCH

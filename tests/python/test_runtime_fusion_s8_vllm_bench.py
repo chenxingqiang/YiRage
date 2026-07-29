@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S8 contracts: real torch MLP RF hook + segment bench archive (no mock)."""
+"""S8 contracts: torch MLP RF hook + segment bench archive (no mock)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,8 @@ import types
 from pathlib import Path
 
 import pytest
+
+from serving_test_utils import require_vllm_installed
 
 
 def _import_serving():
@@ -37,7 +39,7 @@ def test_is_vllm_available_bool(serving):
     assert isinstance(serving.is_vllm_available(), bool)
 
 
-def test_torch_mlp_rf_hook_real_forward(serving):
+def test_torch_mlp_rf_hook_forward(serving):
     serving.require_torch()
     import torch
 
@@ -79,17 +81,14 @@ def test_segment_torch_bench_archive_parity(serving):
         warmup=1,
         iters=5,
     )
-    assert archive.version == "s18"
+    assert archive.version == "s19"
     hybrid = next(r for r in archive.rows if r.name == "segment_hybrid_torch")
     assert hybrid.parity_ok
     assert hybrid.mean_ms > 0
 
 
-@pytest.mark.skipif(
-    not __import__("yirage.serving.vllm_plugin", fromlist=["is_vllm_available"]).is_vllm_available(),
-    reason="requires installed vllm",
-)
-def test_vllm_plugin_requires_real_package(serving):
+def test_vllm_plugin_requires_package(serving):
+    require_vllm_installed()
     serving.require_vllm()
     assert serving.is_vllm_available()
 
@@ -102,4 +101,4 @@ def test_vllm_hook_raises_without_package(serving):
 
 
 def test_rf_inspect_version_s8(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"

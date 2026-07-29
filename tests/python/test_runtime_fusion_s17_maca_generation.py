@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S17: yirage_maca generation latency archive + SGLang-metax real fork e2e."""
+"""S17: yirage_maca generation latency archive + SGLang-metax fork e2e."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import os
 
 import pytest
 
-from serving_real_test_utils import serving, torch  # noqa: F401
+from serving_test_utils import maca_integration_enabled, serving, torch  # noqa: F401
 
 
 def test_resolve_yirage_maca_generation_backend(serving):
@@ -53,7 +53,7 @@ def test_yirage_maca_generation_bench_archive(serving):
         iters=4,
         backend=serving.BACKEND_TORCH,
     )
-    assert archive.version == "s18"
+    assert archive.version == "s19"
     hybrid = next(r for r in archive.rows if r.name == "hybrid_decode_step")
     assert hybrid.parity_ok
     assert hybrid.mean_ms > 0
@@ -75,14 +75,11 @@ def test_sglang_metax_hybrid_full_e2e_auto(serving):
 
 
 @pytest.mark.skipif(
-    not __import__(
-        "yirage.serving.sglang_metax_plugin",
-        fromlist=["is_sglang_metax_available"],
-    ).is_sglang_metax_available(),
+    not maca_integration_enabled(),
     reason="requires sglang on MetaX host or YIRAGE_MACA_INTEGRATION=1",
 )
-def test_sglang_metax_real_fork_e2e(serving):
-    fork = serving.run_sglang_metax_real_fork_e2e(
+def test_sglang_metax_fork_e2e(serving):
+    fork = serving.run_sglang_metax_fork_e2e(
         hidden_size=16,
         intermediate_size=32,
         batch=2,
@@ -90,7 +87,7 @@ def test_sglang_metax_real_fork_e2e(serving):
         max_rf_mlp_layers=1,
         bench=False,
     )
-    assert fork.real_fork
+    assert fork.fork
     assert fork.parity_ok
     assert fork.hook.plugin == "SglangMetaxQwen2MlpRfHook"
 
@@ -114,4 +111,4 @@ def test_yirage_maca_generation_with_maca_backend(serving):
 
 
 def test_rf_inspect_version_s17(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"
