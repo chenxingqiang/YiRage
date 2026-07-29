@@ -283,7 +283,7 @@ def run_yirage_maca_generation_bench_archive(
         bench_iters=1,
     )
 
-    archive = ServingBenchArchive(version="s19", device=model.device)
+    archive = ServingBenchArchive(version="s20", device=model.device)
     archive.rows.append(
         ServingBenchArchiveRow(
             name=eng_step.name,
@@ -457,7 +457,7 @@ def run_yirage_maca_generation_mcpytorch_baseline_archive(
     )
 
     baseline_archive = YirageMacaGenerationBaselineArchive(
-        version="s19",
+        version="s20",
         device=archive.device,
         archive=archive,
         summary=summary,

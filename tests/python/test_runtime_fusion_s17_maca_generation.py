@@ -53,7 +53,7 @@ def test_yirage_maca_generation_bench_archive(serving):
         iters=4,
         backend=serving.BACKEND_TORCH,
     )
-    assert archive.version == "s19"
+    assert archive.version == "s20"
     hybrid = next(r for r in archive.rows if r.name == "hybrid_decode_step")
     assert hybrid.parity_ok
     assert hybrid.mean_ms > 0
@@ -111,4 +111,4 @@ def test_yirage_maca_generation_with_maca_backend(serving):
 
 
 def test_rf_inspect_version_s17(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s20"

@@ -117,6 +117,11 @@ def serving_cpu_cert_manifest(
             "pytest",
             "tests/python/test_runtime_fusion_s19_yirage_cpu_search.py",
         ),
+        CertStage(
+            "s20_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s20_coordinator_ray.py",
+        ),
         CertStage("torch_e2e", "smoke", "demo/serving/torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
         CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),
