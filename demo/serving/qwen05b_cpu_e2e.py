@@ -92,6 +92,16 @@ def main() -> int:
         action="store_true",
         help="AccelForge prescreen for coordinator results (YIRAGE_SERVING_ACCELFORGE_PRESCREEN=1)",
     )
+    p.add_argument(
+        "--all-rf-layers",
+        action="store_true",
+        help="Superoptimize down matmul for all decoder layers (archive/e2e)",
+    )
+    p.add_argument(
+        "--archive-json",
+        default=None,
+        help="Write search-tier ServingBenchArchive JSON to this path",
+    )
     p.add_argument("--quick", action="store_true")
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
@@ -105,6 +115,8 @@ def main() -> int:
         resolve_backend,
         root,
     ) = _bootstrap()
+
+    from yirage.serving.hf_qwen_cpu_e2e import run_hf_qwen05b_search_tier_bench_archive
 
     os.environ.setdefault("YIRAGE_BACKEND", "cpu")
     ld = os.environ.get("LD_LIBRARY_PATH", "")
@@ -136,14 +148,23 @@ def main() -> int:
         if mlp_backend == BACKEND_YIRAGE_CPU:
             require_yirage_core()
 
-    report = run_e2e(
+    run_kwargs = dict(
         model_id=args.model or default_model,
         prompt=args.prompt,
         max_new_tokens=args.max_new_tokens,
         max_rf_mlp_layers=args.max_rf_mlp_layers,
         mlp_backend=mlp_backend,
         quick=args.quick,
+        all_rf_layers=args.all_rf_layers,
     )
+
+    if args.archive_json:
+        report, archive = run_hf_qwen05b_search_tier_bench_archive(**run_kwargs)
+        archive_path = Path(args.archive_json)
+        archive_path.parent.mkdir(parents=True, exist_ok=True)
+        archive.write_json(archive_path)
+    else:
+        report = run_e2e(**run_kwargs)
     payload = report.to_dict()
     ok = bool(report.parity_ok and report.num_layers >= 1)
 

@@ -27,7 +27,12 @@ from .layer_override import (
 )
 from .runtime_fusion import RuntimeFusion, StepMeta
 from .torch_exec import require_torch, to_torch
-from .yirage_exec import is_yirage_core_available, require_yirage_core, resolve_serving_search_tier
+from .yirage_exec import (
+    inspect_serving_search_tier,
+    is_yirage_core_available,
+    require_yirage_core,
+    resolve_serving_search_tier,
+)
 
 
 DEFAULT_QWEN05B_MODEL = "Qwen/Qwen2-0.5B"
@@ -541,6 +546,107 @@ def _total_superopt_elapsed(max_rf_mlp_layers: int, decode_backend: str) -> floa
     return total
 
 
+def collect_per_layer_superopt_stats(
+    max_rf_mlp_layers: int,
+    decode_backend: str,
+) -> List[Dict[str, Any]]:
+    """Per-layer down-matmul superoptimize timing from RF hook cache."""
+    rows: List[Dict[str, Any]] = []
+    for (layer_id, backend), hook in sorted(_RF_HOOK_CACHE.items(), key=lambda x: x[0][0]):
+        if backend != decode_backend or layer_id >= max_rf_mlp_layers:
+            continue
+        rows.append(
+            {
+                "layer_id": int(layer_id),
+                "backend": backend,
+                "superopt_elapsed_s": round(float(hook.superopt_elapsed_s), 6),
+            }
+        )
+    return rows
+
+
+def build_qwen_search_tier_bench_archive(
+    report: HfQwen05bCpuE2EReport,
+    *,
+    per_layer: Sequence[Mapping[str, Any]],
+    search_tier: Optional[Mapping[str, Any]] = None,
+    version: str = "s25",
+) -> "ServingBenchArchive":
+    """Build search-tier bench archive JSON from a Qwen CPU e2e report."""
+    from .bench_archive import ServingBenchArchive, ServingBenchArchiveRow
+
+    tier = dict(search_tier or inspect_serving_search_tier())
+    archive = ServingBenchArchive(
+        version=version,
+        device=report.device,
+        search_tier=tier,
+    )
+    archive.rows.append(
+        ServingBenchArchiveRow(
+            name="qwen05b_yirage_e2e",
+            mean_ms=report.yirage_generate_ms,
+            iters=1,
+            device=report.device,
+            parity_ok=report.parity_ok,
+            extras={
+                "model_id": report.model_id,
+                "serving_search_tier": report.serving_search_tier,
+                "used_rf_mlp_layers": report.used_rf_mlp_layers,
+                "num_layers": report.num_layers,
+                "all_rf_layers": report.used_rf_mlp_layers >= report.num_layers,
+                "superopt_elapsed_s_total": report.superopt_elapsed_s_total,
+                "yirage_core_used": report.yirage_core_used,
+            },
+        )
+    )
+    for row in per_layer:
+        layer_id = int(row["layer_id"])
+        archive.rows.append(
+            ServingBenchArchiveRow(
+                name=f"superopt_layer_{layer_id}",
+                mean_ms=float(row.get("superopt_elapsed_s", 0.0)) * 1000.0,
+                iters=1,
+                device=report.device,
+                parity_ok=True,
+                extras=dict(row),
+            )
+        )
+    return archive
+
+
+def run_hf_qwen05b_search_tier_bench_archive(
+    *,
+    model_id: str = DEFAULT_QWEN05B_MODEL,
+    prompt: str = "The capital of France is",
+    max_new_tokens: int = 16,
+    max_rf_mlp_layers: int = 2,
+    mlp_backend: Optional[str] = None,
+    quick: bool = False,
+    all_rf_layers: bool = False,
+    archive_version: str = "s25",
+) -> Tuple[HfQwen05bCpuE2EReport, "ServingBenchArchive"]:
+    """Run Qwen e2e and emit search-tier ``ServingBenchArchive`` JSON payload."""
+    report = run_hf_qwen05b_cpu_e2e(
+        model_id=model_id,
+        prompt=prompt,
+        max_new_tokens=max_new_tokens,
+        max_rf_mlp_layers=max_rf_mlp_layers,
+        mlp_backend=mlp_backend,
+        quick=quick,
+        all_rf_layers=all_rf_layers,
+    )
+    per_layer = collect_per_layer_superopt_stats(
+        report.used_rf_mlp_layers,
+        report.decode_mlp_backend,
+    )
+    archive = build_qwen_search_tier_bench_archive(
+        report,
+        per_layer=per_layer,
+        version=archive_version,
+    )
+    return report, archive
+
+
 def run_hf_qwen05b_cpu_e2e(
     *,
     model_id: str = DEFAULT_QWEN05B_MODEL,
@@ -549,6 +655,7 @@ def run_hf_qwen05b_cpu_e2e(
     max_rf_mlp_layers: int = 2,
     mlp_backend: Optional[str] = None,
     quick: bool = False,
+    all_rf_layers: bool = False,
 ) -> HfQwen05bCpuE2EReport:
     """Load Qwen2-0.5B on CPU: generate + RF/yirage MLP decode parity."""
     require_transformers()
@@ -562,10 +669,13 @@ def run_hf_qwen05b_cpu_e2e(
 
     if quick:
         max_new_tokens = min(max_new_tokens, 8)
-        max_rf_mlp_layers = min(max_rf_mlp_layers, 1)
+        if not all_rf_layers:
+            max_rf_mlp_layers = min(max_rf_mlp_layers, 1)
 
     model, tokenizer, device = _load_qwen05b_cpu(model_id=model_id)
     cfg = model.config
+    if all_rf_layers:
+        max_rf_mlp_layers = int(cfg.num_hidden_layers)
     input_ids, attention_mask = _prepare_model_inputs(model, tokenizer, prompt, device=device)
 
     t0 = time.perf_counter()

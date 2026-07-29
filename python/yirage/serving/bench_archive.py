@@ -164,15 +164,19 @@ class ServingBenchArchive:
     device: str
     rows: List[ServingBenchArchiveRow] = field(default_factory=list)
     created_unix: float = field(default_factory=time.time)
+    search_tier: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload: Dict[str, Any] = {
             "serving_bench_archive": True,
             "version": self.version,
             "device": self.device,
             "created_unix": self.created_unix,
             "rows": [r.to_dict() for r in self.rows],
         }
+        if self.search_tier is not None:
+            payload["search_tier"] = self.search_tier
+        return payload
 
     def write_json(self, path: Path) -> None:
         path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
