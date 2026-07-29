@@ -106,6 +106,12 @@ class SearchWorker:
         partition = json.loads(partition_json)
         config = json.loads(config_json)
 
+        serving_env = config.pop("serving_env", None)
+        if serving_env:
+            from yirage.serving.yirage_exec import apply_serving_env
+
+            apply_serving_env(serving_env)
+
         # Execute search based on available backend
         if self._backend == "cython":
             result = self._search_cython(graph_json, partition, config, collect_feedback)

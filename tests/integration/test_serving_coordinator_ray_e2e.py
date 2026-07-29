@@ -55,6 +55,26 @@ def tiny_down_graph(yirage_exec):
 
 
 @pytest.mark.skipif(not RAY_AVAILABLE, reason="Ray not installed")
+def test_serving_coordinator_full_tb_ray_down_matmul(yirage_exec, tiny_down_graph, monkeypatch):
+    """Full TB search + Ray coordinator (tiny shape); workers must inherit serving_env."""
+    monkeypatch.setenv("YIRAGE_SERVING_FULL_TB_SEARCH", "1")
+    monkeypatch.setenv("YIRAGE_SERVING_USE_RAY", "1")
+    monkeypatch.setenv("YIRAGE_SERVING_USE_COORDINATOR", "1")
+    monkeypatch.setenv("YIRAGE_SERVING_RAY_WORKERS", "2")
+    yirage_exec.apply_serving_kn_down_matmul_tractability(use_ray=True)
+
+    cfg = yirage_exec.build_serving_cpu_search_config(tiny_down_graph)
+    assert cfg["serving_env"].get("YIRAGE_SERVING_FULL_TB_SEARCH") == "1"
+
+    opt = yirage_exec.superoptimize_down_matmul_via_coordinator(
+        tiny_down_graph,
+        quick=True,
+    )
+    assert opt is not None
+    assert opt.backend == "cpu"
+
+
+@pytest.mark.skipif(not RAY_AVAILABLE, reason="Ray not installed")
 def test_serving_coordinator_ray_down_matmul(yirage_exec, tiny_down_graph, monkeypatch):
     """Ray-backed DistributedSearchCoordinator for serving down matmul (tiny shape)."""
     monkeypatch.setenv("YIRAGE_SERVING_USE_RAY", "1")
