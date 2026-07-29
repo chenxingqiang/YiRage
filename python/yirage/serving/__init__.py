@@ -71,6 +71,8 @@ from .hf_qwen_cpu_e2e import (
     HfQwen2MlpLayerAdapter,
     HfQwen2MlpRfHook,
     build_hf_qwen_mlp_rf_hook,
+    build_qwen_search_tier_bench_archive,
+    collect_per_layer_superopt_stats,
     greedy_decode_with_rf_mlp,
     is_transformers_available,
     qwen2_decode_step_with_rf_mlp,
@@ -78,6 +80,7 @@ from .hf_qwen_cpu_e2e import (
     require_transformers,
     resolve_hf_qwen_mlp_backend,
     run_hf_qwen05b_cpu_e2e,
+    run_hf_qwen05b_search_tier_bench_archive,
 )
 from .vllm_paged_e2e import (
     VllmPagedFullLayerE2EReport,
@@ -356,6 +359,9 @@ __all__ = [
     "resolve_hf_qwen_mlp_backend",
     "require_transformers",
     "run_hf_qwen05b_cpu_e2e",
+    "run_hf_qwen05b_search_tier_bench_archive",
+    "build_qwen_search_tier_bench_archive",
+    "collect_per_layer_superopt_stats",
     "run_vllm_mlp_rf_e2e_auto",
     "VllmPagedKvBatchSpec",
     "VllmPagedFullLayerE2EReport",
