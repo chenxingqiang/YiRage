@@ -118,6 +118,21 @@ def resolve_serving_accelforge_prescreen(*, default: bool = False) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def resolve_serving_accelforge_latency_budget_ms() -> Optional[float]:
+    """Optional AccelForge latency budget (ms) for prescreen reject-path."""
+    raw = os.environ.get("YIRAGE_SERVING_ACCELFORGE_LATENCY_BUDGET_MS", "")
+    if not raw.strip():
+        return None
+    return float(raw)
+
+
+def _accelforge_prescreen_kwargs() -> Dict[str, Any]:
+    budget = resolve_serving_accelforge_latency_budget_ms()
+    if budget is None:
+        return {}
+    return {"latency_budget_ms": budget}
+
+
 def resolve_serving_search_tier() -> str:
     """Active serving down-matmul search tier label for e2e/cert reporting."""
     full_tb = resolve_serving_full_tb_search()
@@ -140,11 +155,34 @@ def inspect_serving_search_tier() -> Dict[str, Any]:
         "use_ray": resolve_serving_use_ray(),
         "use_coordinator": resolve_serving_use_coordinator(),
         "accelforge_prescreen": resolve_serving_accelforge_prescreen(),
+        "accelforge_latency_budget_ms": resolve_serving_accelforge_latency_budget_ms(),
         "ray_workers": resolve_serving_num_workers(),
     }
 
 
 _LAST_ACCELFORGE_PRESCREEN_STATS: Optional[Dict[str, Any]] = None
+
+
+def _load_accelforge_verifier_class():
+    """Import AccelForgeVerifier without executing broken ``yirage.rl`` package init."""
+    import importlib
+    import sys
+    import types
+    from pathlib import Path
+
+    rl_root = Path(__file__).resolve().parents[1] / "rl"
+    for name, sub in (
+        ("yirage.rl", rl_root),
+        ("yirage.rl.verifier", rl_root / "verifier"),
+        ("yirage.rl.hardware", rl_root / "hardware"),
+    ):
+        if name not in sys.modules:
+            pkg = types.ModuleType(name)
+            pkg.__path__ = [str(sub)]
+            sys.modules[name] = pkg
+
+    mod = importlib.import_module("yirage.rl.verifier.accelforge_verifier")
+    return mod.AccelForgeVerifier
 
 
 # Env keys propagated to Ray workers via coordinator ``serving_env`` payload.
@@ -369,13 +407,14 @@ def bench_serving_accelforge_prescreen(
         return stats
 
     try:
-        from yirage.rl.verifier.accelforge_verifier import AccelForgeVerifier
-    except ImportError:
+        AccelForgeVerifier = _load_accelforge_verifier_class()
+    except Exception:
         _LAST_ACCELFORGE_PRESCREEN_STATS = stats
         return stats
 
     stats["verifier_available"] = True
     verifier = AccelForgeVerifier()
+    prescreen_kwargs = _accelforge_prescreen_kwargs()
     accepted = 0
     rejected = 0
     sample: List[Dict[str, Any]] = []
@@ -383,7 +422,7 @@ def bench_serving_accelforge_prescreen(
         graph_json = entry.get("graph_json")
         if not graph_json:
             continue
-        result = verifier.prescreen_kernel(graph_json)
+        result = verifier.prescreen_kernel(graph_json, **prescreen_kwargs)
         row = {
             "accepted": bool(result.get("accepted", True)),
             "rejections": list(result.get("rejections") or []),
@@ -414,17 +453,18 @@ def _prescreen_coordinator_graph_entries(
         return list(entries)
 
     try:
-        from yirage.rl.verifier.accelforge_verifier import AccelForgeVerifier
-    except ImportError:
+        AccelForgeVerifier = _load_accelforge_verifier_class()
+    except Exception:
         return list(entries)
 
     verifier = AccelForgeVerifier()
+    prescreen_kwargs = _accelforge_prescreen_kwargs()
     accepted: List[Dict[str, Any]] = []
     for entry in entries:
         graph_json = entry.get("graph_json")
         if not graph_json:
             continue
-        result = verifier.prescreen_kernel(graph_json)
+        result = verifier.prescreen_kernel(graph_json, **prescreen_kwargs)
         if result.get("accepted", True):
             accepted.append(entry)
     return accepted
