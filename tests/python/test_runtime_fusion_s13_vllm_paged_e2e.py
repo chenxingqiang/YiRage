@@ -48,4 +48,4 @@ def test_vllm_paged_auto_entry(serving):
 
 
 def test_rf_inspect_version_s13(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s20"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"

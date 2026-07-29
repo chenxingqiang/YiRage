@@ -14,6 +14,7 @@ tractable CPU search caps. Down matmul uses ``superoptimize(backend=\"cpu\")``.
 
 **Search tiers** (no seed fallback):
 - Default (``YIRAGE_SERVING_USE_RAY`` unset): seed fingerprint verify — fast smoke
+- ``YIRAGE_SERVING_FULL_TB_SEARCH=1``: tractable TB-customized matmul search (no seed verify)
 - ``YIRAGE_SERVING_USE_RAY=1`` / ``YIRAGE_SERVING_USE_COORDINATOR=1``:
   ``DistributedSearchCoordinator.parallel_search`` with CPU search space;
   partitions ``blockdims`` when decode ``m=1`` (griddims=1)
@@ -99,6 +100,29 @@ def serving_superoptimize_ray_kwargs(*, default: bool = False) -> Dict[str, Any]
     return kwargs
 
 
+def resolve_serving_full_tb_search(*, default: bool = False) -> bool:
+    """Opt-in tractable TB-customized down matmul search (no seed-verify shortcut)."""
+    raw = os.environ.get("YIRAGE_SERVING_FULL_TB_SEARCH", "")
+    if raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def apply_serving_full_tb_search_tractability(*, use_ray: Optional[bool] = None) -> None:
+    """Enable tractable TB matmul explore for serving (Qwen-scale K with capped search)."""
+    os.environ.pop("YIRAGE_SERVING_KN_MATMUL_ONLY", None)
+    os.environ["YIRAGE_SERVING_FULL_TB_SEARCH"] = "1"
+    os.environ["YIRAGE_CPU_MAX_KN_GRAPH_OP"] = "4"
+    os.environ["YIRAGE_CPU_MAX_TB_GRAPH_OP"] = "3"
+    os.environ["YIRAGE_CPU_MAX_TB_GRAPH_INPUTS"] = "2"
+    os.environ["YIRAGE_CPU_BENCH_MINIMAL_EXPLORE"] = "1"
+    ray = resolve_serving_use_ray() if use_ray is None else use_ray
+    if ray:
+        os.environ["YIRAGE_SERVING_USE_RAY"] = "1"
+    else:
+        os.environ.pop("YIRAGE_SERVING_USE_RAY", None)
+
+
 def apply_serving_cpu_search_tractability(*, use_ray: Optional[bool] = None) -> None:
     """Cap CPU search for serving plain-matmul superoptimize smoke."""
     from scripts.cpu_cert_utils import apply_plain_matmul_search_tractability
@@ -114,12 +138,16 @@ def apply_serving_cpu_search_tractability(*, use_ray: Optional[bool] = None) -> 
 
 
 def apply_serving_kn_down_matmul_tractability(*, use_ray: Optional[bool] = None) -> None:
-    """Serving down matmul search tractability (seed verify or Ray full search)."""
-    apply_serving_cpu_search_tractability(use_ray=use_ray)
+    """Serving down matmul search tractability (seed verify, full TB, or Ray)."""
+    if resolve_serving_full_tb_search():
+        apply_serving_full_tb_search_tractability(use_ray=use_ray)
+    else:
+        apply_serving_cpu_search_tractability(use_ray=use_ray)
 
 
 def superoptimize_kwargs(*, quick: bool = True) -> Dict[str, Any]:
     use_ray = resolve_serving_use_ray()
+    full_tb = resolve_serving_full_tb_search()
     kwargs: Dict[str, Any] = {
         "backend": "cpu",
         "use_graph_dataset": False,
@@ -131,7 +159,15 @@ def superoptimize_kwargs(*, quick: bool = True) -> Dict[str, Any]:
         **serving_superoptimize_ray_kwargs(),
     }
     if use_ray:
-        # Auto CPU search space (multi blockdim → Ray when m=1 decode)
+        return kwargs
+    if full_tb:
+        kwargs.update(
+            {
+                "griddims": [(1, 1, 1)],
+                "blockdims": [(128, 1, 1)],
+                "franges": [1],
+            }
+        )
         return kwargs
     kwargs.update(
         {

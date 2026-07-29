@@ -25,7 +25,7 @@ def test_yirage_maca_generation_mcpytorch_baseline_archive(serving):
         iters=4,
         backend=serving.BACKEND_TORCH,
     )
-    assert baseline.version == "s20"
+    assert baseline.version == "s21"
     assert baseline.summary.baseline_name == serving.MCPYTORCH_BASELINE_NAME
     assert baseline.summary.parity_ok
     assert baseline.summary.baseline_decode_step_ms > 0
@@ -89,4 +89,4 @@ def test_mcpytorch_baseline_with_maca_backend(serving):
 
 
 def test_rf_inspect_version_s18(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s20"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"

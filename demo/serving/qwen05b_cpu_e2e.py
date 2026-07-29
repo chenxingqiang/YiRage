@@ -72,7 +72,10 @@ def main() -> int:
         help="decode MLP backend (default: yirage_cpu when yirage.core built)",
     )
     p.add_argument(
-        "--use-ray",
+        "--full-tb",
+        action="store_true",
+        help="Use tractable TB-customized superoptimize (YIRAGE_SERVING_FULL_TB_SEARCH=1)",
+    )
         action="store_true",
         help="Use DistributedSearchCoordinator for down matmul superoptimize",
     )
@@ -105,6 +108,9 @@ def main() -> int:
             ld = os.environ["LD_LIBRARY_PATH"]
 
     mlp_backend = args.mlp_backend
+    if args.full_tb:
+        os.environ["YIRAGE_SERVING_FULL_TB_SEARCH"] = "1"
+        os.environ.pop("YIRAGE_SERVING_KN_MATMUL_ONLY", None)
     if args.use_ray:
         os.environ["YIRAGE_SERVING_USE_RAY"] = "1"
         os.environ.setdefault("YIRAGE_SERVING_USE_COORDINATOR", "1")

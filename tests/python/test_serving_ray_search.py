@@ -47,6 +47,16 @@ def test_apply_serving_tractability_ray_disables_seed_verify_env(yirage_exec, mo
     assert "YIRAGE_SERVING_KN_MATMUL_ONLY" not in os.environ
 
 
+def test_apply_serving_tractability_full_tb_disables_seed_verify(yirage_exec, monkeypatch):
+    monkeypatch.setenv("YIRAGE_SERVING_FULL_TB_SEARCH", "1")
+    monkeypatch.setenv("YIRAGE_SERVING_KN_MATMUL_ONLY", "1")
+    yirage_exec.apply_serving_kn_down_matmul_tractability(use_ray=False)
+    import os
+
+    assert os.environ.get("YIRAGE_SERVING_FULL_TB_SEARCH") == "1"
+    assert "YIRAGE_SERVING_KN_MATMUL_ONLY" not in os.environ
+
+
 def test_apply_serving_tractability_default_sets_seed_verify_env(yirage_exec, monkeypatch):
     monkeypatch.delenv("YIRAGE_SERVING_USE_RAY", raising=False)
     monkeypatch.delenv("YIRAGE_SERVING_KN_MATMUL_ONLY", raising=False)

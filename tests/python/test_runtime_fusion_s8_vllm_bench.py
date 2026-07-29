@@ -81,7 +81,7 @@ def test_segment_torch_bench_archive_parity(serving):
         warmup=1,
         iters=5,
     )
-    assert archive.version == "s20"
+    assert archive.version == "s21"
     hybrid = next(r for r in archive.rows if r.name == "segment_hybrid_torch")
     assert hybrid.parity_ok
     assert hybrid.mean_ms > 0
@@ -101,4 +101,4 @@ def test_vllm_hook_raises_without_package(serving):
 
 
 def test_rf_inspect_version_s8(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s20"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"

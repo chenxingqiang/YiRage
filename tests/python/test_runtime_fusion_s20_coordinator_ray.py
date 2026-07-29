@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_runtime_fusion_version_s20(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s20"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
 
 
 def test_s20_integration_module_exists():

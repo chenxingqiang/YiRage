@@ -78,4 +78,4 @@ def test_vllm_qwen2_mlp_rf_e2e(serving):
 
 
 def test_rf_inspect_version_s11(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s20"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
