@@ -25,10 +25,6 @@ def yirage_serving(serving):
     return serving
 
 
-def test_runtime_fusion_version_s19(yirage_serving):
-    info = yirage_serving.RuntimeFusion([]).inspect()
-    assert info["version"] == "s19"
-
 
 def test_qwen05b_default_backend_yirage_cpu(yirage_serving):
     assert (
@@ -71,6 +67,7 @@ def test_cpu_cert_manifest_includes_s19_and_ray_tier():
 
     base = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s19_contract" in base
+    assert "s20_contract" in base
     assert "qwen05b_contract" in base
 
     yc = [s.name for s in serving_cpu_cert_manifest(quick=True, yirage_core=True)]
