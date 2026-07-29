@@ -27,7 +27,24 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s25(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s25"
+    """S25 archive API remains callable with explicit archive_version=s25."""
+    from yirage.serving.exec_backend import BACKEND_YIRAGE_CPU
+    from yirage.serving.hf_qwen_cpu_e2e import (
+        DEFAULT_QWEN05B_MODEL,
+        is_transformers_available,
+        run_hf_qwen05b_search_tier_bench_archive,
+    )
+
+    if not is_transformers_available():
+        pytest.skip("transformers not installed")
+
+    _report, archive = run_hf_qwen05b_search_tier_bench_archive(
+        model_id=DEFAULT_QWEN05B_MODEL,
+        quick=True,
+        mlp_backend=BACKEND_YIRAGE_CPU,
+        archive_version="s25",
+    )
+    assert archive.version == "s25"
 
 
 def test_search_tier_archive_json_contract(yirage_serving):
@@ -45,6 +62,7 @@ def test_search_tier_archive_json_contract(yirage_serving):
         model_id=DEFAULT_QWEN05B_MODEL,
         quick=True,
         mlp_backend=BACKEND_YIRAGE_CPU,
+        archive_version="s25",
     )
     payload = archive.to_dict()
     assert payload["serving_bench_archive"] is True
@@ -71,6 +89,7 @@ def test_per_layer_superopt_rows(yirage_serving):
         model_id=DEFAULT_QWEN05B_MODEL,
         quick=True,
         mlp_backend=BACKEND_YIRAGE_CPU,
+        archive_version="s25",
     )
     layer_rows = [r for r in archive.rows if r.name.startswith("superopt_layer_")]
     assert len(layer_rows) == report.used_rf_mlp_layers
@@ -96,6 +115,7 @@ def test_all_rf_layers_search_tier_archive(yirage_serving):
         max_new_tokens=4,
         mlp_backend=BACKEND_YIRAGE_CPU,
         all_rf_layers=True,
+        archive_version="s25",
     )
     payload = archive.to_dict()
     assert report.used_rf_mlp_layers == report.num_layers == 24

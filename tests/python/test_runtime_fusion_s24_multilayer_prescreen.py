@@ -27,7 +27,7 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s24(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s25"
+    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s26"
 
 
 def test_accelforge_latency_budget_env(yirage_serving, monkeypatch):
