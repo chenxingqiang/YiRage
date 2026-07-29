@@ -76,6 +76,8 @@ def main() -> int:
         action="store_true",
         help="Use tractable TB-customized superoptimize (YIRAGE_SERVING_FULL_TB_SEARCH=1)",
     )
+    p.add_argument(
+        "--use-ray",
         action="store_true",
         help="Use DistributedSearchCoordinator for down matmul superoptimize",
     )

@@ -18,6 +18,8 @@ tractable CPU search caps. Down matmul uses ``superoptimize(backend=\"cpu\")``.
 - ``YIRAGE_SERVING_USE_RAY=1`` / ``YIRAGE_SERVING_USE_COORDINATOR=1``:
   ``DistributedSearchCoordinator.parallel_search`` with CPU search space;
   partitions ``blockdims`` when decode ``m=1`` (griddims=1)
+- Full TB + Ray: combine both; ``serving_env`` propagated to workers via coordinator config
+- ``YIRAGE_SERVING_ACCELFORGE_PRESCREEN=1``: optional AccelForge prescreen before profiling
 """
 
 from __future__ import annotations
@@ -106,6 +108,42 @@ def resolve_serving_full_tb_search(*, default: bool = False) -> bool:
     if raw == "":
         return default
     return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+def resolve_serving_accelforge_prescreen(*, default: bool = False) -> bool:
+    """Opt-in AccelForge prescreen before coordinator result profiling."""
+    raw = os.environ.get("YIRAGE_SERVING_ACCELFORGE_PRESCREEN", "")
+    if raw == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+# Env keys propagated to Ray workers via coordinator ``serving_env`` payload.
+_SERVING_ENV_KEYS: Tuple[str, ...] = (
+    "YIRAGE_SERVING_FULL_TB_SEARCH",
+    "YIRAGE_SERVING_KN_MATMUL_ONLY",
+    "YIRAGE_CPU_MAX_KN_GRAPH_OP",
+    "YIRAGE_CPU_MAX_TB_GRAPH_OP",
+    "YIRAGE_CPU_MAX_TB_GRAPH_INPUTS",
+    "YIRAGE_CPU_BENCH_MINIMAL_EXPLORE",
+    "YIRAGE_SERVING_USE_RAY",
+)
+
+
+def snapshot_serving_env() -> Dict[str, Optional[str]]:
+    """Capture serving search env for Ray worker replay (``None`` → unset on worker)."""
+    return {key: os.environ.get(key) for key in _SERVING_ENV_KEYS}
+
+
+def apply_serving_env(env: Optional[Dict[str, Optional[str]]]) -> None:
+    """Apply ``serving_env`` snapshot on a search worker process."""
+    if not env:
+        return
+    for key, value in env.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
 
 def apply_serving_full_tb_search_tractability(*, use_ray: Optional[bool] = None) -> None:
@@ -256,13 +294,42 @@ def build_serving_cpu_search_config(graph) -> Dict[str, Any]:
     cygraph = graph.cygraph if hasattr(graph, "cygraph") else graph
     cpu_config = resolve_cpu_search_space(cygraph)
     apply_cpu_search_env(cpu_config)
-    return {
+    config: Dict[str, Any] = {
         "griddims": list(cpu_config.get("grid_dims_to_explore", [(1, 1, 1)])),
         "blockdims": list(cpu_config.get("block_dims_to_explore", [(32, 1, 1)])),
         "franges": list(cpu_config.get("franges_to_explore", [1])),
         "fmaps": [-1],
         "verbose": False,
+        "serving_env": snapshot_serving_env(),
     }
+    if resolve_serving_full_tb_search():
+        config["griddims"] = [(1, 1, 1)]
+        config["blockdims"] = [(128, 1, 1)]
+        config["franges"] = [1]
+    return config
+
+
+def _prescreen_coordinator_graph_entries(
+    entries: Sequence[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Optional AccelForge prescreen; returns accepted entries (no-op when disabled)."""
+    if not resolve_serving_accelforge_prescreen():
+        return list(entries)
+    try:
+        from yirage.rl.verifier.accelforge_verifier import AccelForgeVerifier
+    except ImportError:
+        return list(entries)
+
+    verifier = AccelForgeVerifier()
+    accepted: List[Dict[str, Any]] = []
+    for entry in entries:
+        graph_json = entry.get("graph_json")
+        if not graph_json:
+            continue
+        result = verifier.prescreen_kernel(graph_json)
+        if result.get("accepted", True):
+            accepted.append(entry)
+    return accepted
 
 
 def _kngraph_from_graph_json(graph_json_text: str):
@@ -361,11 +428,12 @@ def superoptimize_down_matmul_via_coordinator(graph, *, quick: bool = True):
     finally:
         coord.shutdown()
 
+    raw_entries = [e for e in (out.get("graphs") or []) if e.get("graph_json")]
+    screened_entries = _prescreen_coordinator_graph_entries(raw_entries)
+
     kn_graphs: List[Any] = []
-    for entry in out.get("graphs") or []:
-        graph_json = entry.get("graph_json")
-        if graph_json:
-            kn_graphs.append(_kngraph_from_graph_json(graph_json))
+    for entry in screened_entries:
+        kn_graphs.append(_kngraph_from_graph_json(entry["graph_json"]))
 
     if not kn_graphs:
         raise RuntimeError(
