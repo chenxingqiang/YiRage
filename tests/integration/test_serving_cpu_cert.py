@@ -38,6 +38,7 @@ def test_serving_cpu_cert_manifest_has_core_stages():
     assert "s18_contract" in names
     assert "torch_e2e" in names
     assert "qwen05b_contract" in names
+    assert "s19_contract" in names
     assert "segment_torch_bench" in names
     assert "vllm_mlp_e2e" in names
     assert "qwen05b_cpu_e2e" in names
@@ -47,7 +48,7 @@ def test_serving_cpu_cert_quick_passes():
     run_cert, _ = _bootstrap()
     report = run_cert(quick=True)
     assert report.bootstrap_ok is True
-    assert report.serving_version == "s18"
+    assert report.serving_version == "s19"
     assert report.torch_device in {"cpu", "cuda"}
     failed = [(s.name, s.returncode, s.stderr_tail) for s in report.stages if not s.ok]
     assert report.ok is True, failed

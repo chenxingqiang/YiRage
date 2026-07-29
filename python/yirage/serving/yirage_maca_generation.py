@@ -283,7 +283,7 @@ def run_yirage_maca_generation_bench_archive(
         bench_iters=1,
     )
 
-    archive = ServingBenchArchive(version="s18", device=model.device)
+    archive = ServingBenchArchive(version="s19", device=model.device)
     archive.rows.append(
         ServingBenchArchiveRow(
             name=eng_step.name,
@@ -457,12 +457,12 @@ def run_yirage_maca_generation_mcpytorch_baseline_archive(
     )
 
     baseline_archive = YirageMacaGenerationBaselineArchive(
-        version="s18",
+        version="s19",
         device=archive.device,
         archive=archive,
         summary=summary,
     )
-    baseline_archive.archive.version = "s18"
+    baseline_archive.archive.version = "s19"
     for row in baseline_archive.archive.rows:
         row.extras.setdefault("baseline", MCPYTORCH_BASELINE_NAME)
         if row.name == "hybrid_decode_step":

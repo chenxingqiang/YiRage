@@ -89,4 +89,4 @@ def test_segment_hybrid_mixed_paths(serving, torch):
 
 
 def test_rf_inspect_version_s7(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s18"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s19"

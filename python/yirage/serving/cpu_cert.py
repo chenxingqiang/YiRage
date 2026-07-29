@@ -112,6 +112,11 @@ def serving_cpu_cert_manifest(
             "pytest",
             "tests/python/test_runtime_fusion_qwen05b_cpu_e2e.py",
         ),
+        CertStage(
+            "s19_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s19_yirage_cpu_search.py",
+        ),
         CertStage("torch_e2e", "smoke", "demo/serving/torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
         CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),
@@ -129,6 +134,12 @@ def serving_cpu_cert_manifest(
     if yirage_core:
         stages.extend(
             [
+                CertStage(
+                    "serving_ray_contract",
+                    "pytest",
+                    "tests/python/test_serving_ray_search.py",
+                    yirage_core=True,
+                ),
                 CertStage(
                     "yirage_core_contract",
                     "pytest",

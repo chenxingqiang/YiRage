@@ -203,7 +203,8 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 | **S15** | **MACA serving meta + vLLM-metax 插件 tier** | `maca_serving_meta.MacaServingRfSpec` + `vllm_metax_plugin` + `maca_serving_e2e` | `test_runtime_fusion_s15_maca_serving.py`；`maca_serving_e2e.py` | **done** |
 | **S16** | **yirage_maca 全层 capsule + SGLang-metax 对称 tier** | `YirageMacaServingMlpRunner` + `yirage_maca_e2e` + `sglang_metax_plugin` + `sglang_metax_e2e` | `test_runtime_fusion_s16_metax_tiers.py`；`yirage_maca_full_e2e.py`（MetaX VM）；`sglang_metax_e2e.py` | **done** |
 | **S17** | **yirage_maca generation latency 归档 + SGLang-metax 真 fork e2e** | `yirage_maca_generation` decode loop + bench archive + `run_sglang_metax_fork_e2e` | `test_runtime_fusion_s17_maca_generation.py`；`yirage_maca_generation_bench.py` | **done** |
-| **S18** | **generation mcPytorch baseline JSON + SGLang-metax 多层 real fork** | `run_yirage_maca_generation_mcpytorch_baseline_archive` + `run_sglang_metax_multilayer_fork_e2e` | `test_runtime_fusion_s18_maca_baseline.py`；`yirage_maca_generation_bench.py --baseline-json` | **done（本轮）** |
+| **S18** | **generation mcPytorch baseline JSON + SGLang-metax 多层 real fork** | `run_yirage_maca_generation_mcpytorch_baseline_archive` + `run_sglang_metax_multilayer_fork_e2e` | `test_runtime_fusion_s18_maca_baseline.py`；`yirage_maca_generation_bench.py --baseline-json` | **done** |
+| **S19** | **Qwen2-0.5B YiRage CPU superoptimize + coordinator cert tier** | `hf_qwen_cpu_e2e` + `yirage_exec.superoptimize_down_matmul_via_coordinator` + `DistributedSearchCoordinator` | `test_runtime_fusion_s19_yirage_cpu_search.py`；`test_serving_ray_search.py`；`qwen05b_cpu_e2e.py --use-ray` | **done（本轮）** |
 
 **明确不做什么（反模式）**：
 
@@ -228,7 +229,7 @@ PYTHONPATH=. /opt/conda/bin/python3 benchmark/maca_vs_pytorch.py --quick
 **唯一认可的 Serving 验证栈**：
 
 ```bash
-make test-serving-cpu-cert-pytest   # S1–S18 real torch pytest
+make test-serving-cpu-cert-pytest   # S1–S19 real torch pytest
 make test-serving-cpu-cert          # 上式 + torch_e2e + segment_torch_bench
 ```
 
@@ -664,7 +665,8 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S15（2026-07-27，MACA serving + vLLM-metax tier）**：闸门：图级/契约层。`MacaServingRfSpec`（64-warp/C500 SM meta 桥）+ `VllmMetaxQwen2MlpRfHook` + 全层 `maca_serving_e2e`；`BACKEND_YIRAGE_MACA` scaffold；RF version **s15**。验证：`test_runtime_fusion_s15_maca_serving.py` + `maca_serving_e2e.py`。下一轮：**S16** — MetaX VM `yirage_maca` 全层 capsule e2e 或 SGLang-metax 对称 tier。
 - **Serving Loop S16（2026-07-27，yirage_maca 全层 + SGLang-metax tier）**：闸门：图级/执行层。`YirageMacaServingMlpRunner` + `MlpFusionCapsule(backend=yirage_maca)` + `yirage_maca_e2e`；`sglang_metax_plugin` + `sglang_metax_e2e`（ForwardBatch + MACA meta）；RF version **s16**。验证：`test_runtime_fusion_s16_metax_tiers.py` + `sglang_metax_e2e.py`（CPU torch）；MetaX VM `yirage_maca_full_e2e.py`。下一轮：**S17** — MetaX VM 全路径 yirage_maca generation latency 归档；SGLang-metax 真 fork e2e。
 - **Serving Loop S17（2026-07-27，yirage_maca generation + SGLang-metax real fork）**：闸门：感知/图级层。`yirage_maca_generation` 多步 decode loop + `run_yirage_maca_generation_bench_archive`；`run_sglang_metax_fork_e2e` + `run_sglang_metax_hybrid_full_e2e_auto`；RF version **s17**。验证：`test_runtime_fusion_s17_maca_generation.py` + `yirage_maca_generation_bench.py`（CPU torch）；MetaX VM maca backend generation。下一轮：**S18** — MetaX VM generation latency JSON 归档 vs mcPytorch；SGLang-metax 多层 real fork。
-- **Serving Loop S18（2026-07-27，mcPytorch baseline + SGLang-metax multi-layer fork）**：闸门：感知/基准层。`run_yirage_maca_generation_mcpytorch_baseline_archive`（`speedup_vs_mcpytorch` JSON）；`run_sglang_metax_multilayer_fork_e2e/auto`；RF version **s18**。验证：`test_runtime_fusion_s18_maca_baseline.py` + `yirage_maca_generation_bench.py --baseline-json`。下一轮：**S19** — MetaX VM 真卡 baseline JSON nightly 归档；SGLang-metax 全层 stack real fork。
+- **Serving Loop S18（2026-07-27，mcPytorch baseline + SGLang-metax multi-layer fork）**：闸门：感知/基准层。`run_yirage_maca_generation_mcpytorch_baseline_archive`（`speedup_vs_mcpytorch` JSON）；`run_sglang_metax_multilayer_fork_e2e/auto`；RF version **s18**。验证：`test_runtime_fusion_s18_maca_baseline.py` + `yirage_maca_generation_bench.py --baseline-json`。下一轮：**S19** — Qwen2-0.5B YiRage CPU required superoptimize + coordinator cert tier。
+- **Serving Loop S19（2026-07-29，Qwen2-0.5B YiRage CPU search + coordinator cert）**：闸门：图级/搜索/契约层。`superoptimize_down_matmul_via_coordinator` + `DistributedSearchCoordinator`（blockdim 分区 decode m=1）；`test_runtime_fusion_s19_yirage_cpu_search.py` + `test_serving_ray_search.py` 纳入 `--yirage-core` cert；RF version **s19**；禁止 seed fallback。验证：pytest S19 + ray contract + qwen05b e2e。下一轮：**S20** — 896×4864 全 TB 融合搜索（无 seed-verify 捷径）或 Ray 真集群 coordinator e2e。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
