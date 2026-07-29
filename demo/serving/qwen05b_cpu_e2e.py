@@ -87,6 +87,11 @@ def main() -> int:
         default=None,
         help="Ray/coordinator worker count (YIRAGE_SERVING_RAY_WORKERS)",
     )
+    p.add_argument(
+        "--accelforge-prescreen",
+        action="store_true",
+        help="AccelForge prescreen for coordinator results (YIRAGE_SERVING_ACCELFORGE_PRESCREEN=1)",
+    )
     p.add_argument("--quick", action="store_true")
     p.add_argument("--json", action="store_true")
     args = p.parse_args()
@@ -116,6 +121,8 @@ def main() -> int:
     if args.use_ray:
         os.environ["YIRAGE_SERVING_USE_RAY"] = "1"
         os.environ.setdefault("YIRAGE_SERVING_USE_COORDINATOR", "1")
+    if args.accelforge_prescreen:
+        os.environ["YIRAGE_SERVING_ACCELFORGE_PRESCREEN"] = "1"
     if args.ray_workers is not None:
         os.environ["YIRAGE_SERVING_RAY_WORKERS"] = str(max(1, args.ray_workers))
 
@@ -152,6 +159,7 @@ def main() -> int:
             f"token_match={report.generate_token_match_ok}"
         )
         print(f"  superopt_s={payload['superopt_elapsed_s_total']}")
+        print(f"  serving_search_tier={payload.get('serving_search_tier', 'seed_verify')}")
         print(f"  generated={payload['generated_text'][:120]!r}")
         if report.yirage_core_used:
             print(f"  yirage_generated={payload['yirage_generated_text'][:120]!r}")

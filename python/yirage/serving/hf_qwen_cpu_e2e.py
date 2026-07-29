@@ -27,7 +27,7 @@ from .layer_override import (
 )
 from .runtime_fusion import RuntimeFusion, StepMeta
 from .torch_exec import require_torch, to_torch
-from .yirage_exec import is_yirage_core_available, require_yirage_core
+from .yirage_exec import is_yirage_core_available, require_yirage_core, resolve_serving_search_tier
 
 
 DEFAULT_QWEN05B_MODEL = "Qwen/Qwen2-0.5B"
@@ -504,6 +504,7 @@ class HfQwen05bCpuE2EReport:
     yirage_core_used: bool
     superopt_elapsed_s_total: float
     plugin: str
+    serving_search_tier: str = "seed_verify"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -528,6 +529,7 @@ class HfQwen05bCpuE2EReport:
             "yirage_core_used": self.yirage_core_used,
             "superopt_elapsed_s_total": round(self.superopt_elapsed_s_total, 4),
             "plugin": self.plugin,
+            "serving_search_tier": self.serving_search_tier,
         }
 
 
@@ -696,4 +698,5 @@ def run_hf_qwen05b_cpu_e2e(
         yirage_core_used=yirage_core_used,
         superopt_elapsed_s_total=superopt_total,
         plugin=plugin,
+        serving_search_tier=resolve_serving_search_tier(),
     )

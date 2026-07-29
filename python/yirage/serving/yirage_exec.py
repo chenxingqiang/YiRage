@@ -118,6 +118,35 @@ def resolve_serving_accelforge_prescreen(*, default: bool = False) -> bool:
     return raw.strip().lower() in ("1", "true", "yes", "on")
 
 
+def resolve_serving_search_tier() -> str:
+    """Active serving down-matmul search tier label for e2e/cert reporting."""
+    full_tb = resolve_serving_full_tb_search()
+    use_ray = resolve_serving_use_ray()
+    prescreen = resolve_serving_accelforge_prescreen()
+    if full_tb and use_ray:
+        return "full_tb_ray_accelforge" if prescreen else "full_tb_ray"
+    if use_ray:
+        return "ray_coordinator" if resolve_serving_use_coordinator() else "ray"
+    if full_tb:
+        return "full_tb"
+    return "seed_verify"
+
+
+def inspect_serving_search_tier() -> Dict[str, Any]:
+    """JSON-serializable serving search tier snapshot."""
+    return {
+        "tier": resolve_serving_search_tier(),
+        "full_tb_search": resolve_serving_full_tb_search(),
+        "use_ray": resolve_serving_use_ray(),
+        "use_coordinator": resolve_serving_use_coordinator(),
+        "accelforge_prescreen": resolve_serving_accelforge_prescreen(),
+        "ray_workers": resolve_serving_num_workers(),
+    }
+
+
+_LAST_ACCELFORGE_PRESCREEN_STATS: Optional[Dict[str, Any]] = None
+
+
 # Env keys propagated to Ray workers via coordinator ``serving_env`` payload.
 _SERVING_ENV_KEYS: Tuple[str, ...] = (
     "YIRAGE_SERVING_FULL_TB_SEARCH",
@@ -309,12 +338,81 @@ def build_serving_cpu_search_config(graph) -> Dict[str, Any]:
     return config
 
 
+def last_serving_accelforge_prescreen_stats() -> Optional[Dict[str, Any]]:
+    """Stats from the most recent coordinator AccelForge prescreen (if any)."""
+    return _LAST_ACCELFORGE_PRESCREEN_STATS
+
+
+def bench_serving_accelforge_prescreen(
+    entries: Sequence[Dict[str, Any]],
+    *,
+    enabled: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Bench AccelForge prescreen on coordinator graph entries; returns accept/reject stats."""
+    global _LAST_ACCELFORGE_PRESCREEN_STATS
+
+    prescreen_on = (
+        resolve_serving_accelforge_prescreen()
+        if enabled is None
+        else enabled
+    )
+    input_count = sum(1 for e in entries if e.get("graph_json"))
+    stats: Dict[str, Any] = {
+        "enabled": prescreen_on,
+        "input_count": input_count,
+        "accepted_count": input_count,
+        "rejected_count": 0,
+        "verifier_available": False,
+    }
+    if not prescreen_on or input_count == 0:
+        _LAST_ACCELFORGE_PRESCREEN_STATS = stats
+        return stats
+
+    try:
+        from yirage.rl.verifier.accelforge_verifier import AccelForgeVerifier
+    except ImportError:
+        _LAST_ACCELFORGE_PRESCREEN_STATS = stats
+        return stats
+
+    stats["verifier_available"] = True
+    verifier = AccelForgeVerifier()
+    accepted = 0
+    rejected = 0
+    sample: List[Dict[str, Any]] = []
+    for entry in entries:
+        graph_json = entry.get("graph_json")
+        if not graph_json:
+            continue
+        result = verifier.prescreen_kernel(graph_json)
+        row = {
+            "accepted": bool(result.get("accepted", True)),
+            "rejections": list(result.get("rejections") or []),
+        }
+        if len(sample) < 4:
+            sample.append(row)
+        if row["accepted"]:
+            accepted += 1
+        else:
+            rejected += 1
+    stats["accepted_count"] = accepted
+    stats["rejected_count"] = rejected
+    stats["sample"] = sample
+    _LAST_ACCELFORGE_PRESCREEN_STATS = stats
+    return stats
+
+
 def _prescreen_coordinator_graph_entries(
     entries: Sequence[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
     """Optional AccelForge prescreen; returns accepted entries (no-op when disabled)."""
     if not resolve_serving_accelforge_prescreen():
+        bench_serving_accelforge_prescreen(entries, enabled=False)
         return list(entries)
+
+    stats = bench_serving_accelforge_prescreen(entries, enabled=True)
+    if not stats.get("verifier_available"):
+        return list(entries)
+
     try:
         from yirage.rl.verifier.accelforge_verifier import AccelForgeVerifier
     except ImportError:

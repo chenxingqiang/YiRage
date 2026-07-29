@@ -26,7 +26,7 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s22(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s22"
+    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s23"
 
 
 def test_snapshot_serving_env_full_tb(yirage_serving, monkeypatch):
