@@ -8,6 +8,10 @@
 [![Python](https://img.shields.io/badge/Python-3.8+-green.svg)](https://www.python.org/)
 [![GitHub](https://img.shields.io/badge/GitHub-YiRage-blue)](https://github.com/chenxingqiang/YiRage)
 
+<img src="docs/yirage-architecture.drawio.svg" alt="YiRage Architecture: RuntimeFusion embedded in vLLM/SGLang with multi-backend search and execution" width="100%" />
+
+*Architecture source (editable in [draw.io](https://app.diagrams.net/)): [`docs/yirage-architecture.drawio`](docs/yirage-architecture.drawio)*
+
 </div>
 
 ---
@@ -19,6 +23,8 @@
 **YiRage** (Yield Revolutionary AGile Engine) provides comprehensive **multi-backend support** for LLM inference optimization across diverse hardware platforms.
 
 ### Multi-Backend Optimization Focus
+
+YiRage embeds **RuntimeFusion (RF)** into inference engines (vLLM / SGLang): the engine keeps scheduling and KV ownership; RF selects **FusionCapsule** blocks per decode step from cached **FusionPlan** search results, with same-backend search/profile/execute across CUDA, MACA, CPU, and other targets.
 
 - Unified optimization workflow across CUDA, ROCm, CPU, MPS, Ascend, MACA, TPU, XPU, FPGA, Triton, NKI, and MLIR backends
 - **Same-backend hardware optimization**: search, profile, cache, and execute on the **installed target** (CPU on CPU, CUDA on GPU)—not cross-backend mixes such as CPU search with CUDA execution

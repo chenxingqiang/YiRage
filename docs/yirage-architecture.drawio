@@ -1,0 +1,161 @@
+<mxfile host="app.diagrams.net" agent="YiRage" version="24.7.17">
+  <diagram name="YiRage Architecture" id="yirage-arch-v2">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="780" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="YiRage Architecture — RuntimeFusion × Multi-Backend" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="200" y="16" width="800" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="engine-layer" value="Inference Engine (scheduling owner)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=6" parent="1" vertex="1">
+          <mxGeometry x="60" y="64" width="1080" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="vllm" value="vLLM&#xa;continuous batch · PagedAttention" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf" parent="1" vertex="1">
+          <mxGeometry x="90" y="96" width="220" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="sglang" value="SGLang&#xa;RadixAttention · extend meta" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf" parent="1" vertex="1">
+          <mxGeometry x="330" y="96" width="220" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="engine-meta" value="meta: block_table · seq_lens · radix hit · SM budget · batch" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="580" y="96" width="540" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="rf-layer" value="RuntimeFusion (RF) — dynamic fusion runtime" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=6" parent="1" vertex="1">
+          <mxGeometry x="60" y="160" width="1080" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="rf-step" value="RF.step(inputs, meta)&#xa;select 0..N capsules per decode step" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="90" y="194" width="260" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="capsule-mlp" value="FusionCapsule: MLP&#xa;gate_up + down (yirage.core)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="380" y="194" width="200" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="capsule-seg" value="FusionCapsule: segment&#xa;gate_up → down pipeline" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#82b366;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="610" y="194" width="200" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="rf-fallback" value="skip / fallback → engine native ops" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="840" y="194" width="280" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="search-layer" value="Search &amp; Plan (offline / warm-up)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=6" parent="1" vertex="1">
+          <mxGeometry x="60" y="272" width="1080" height="88" as="geometry" />
+        </mxCell>
+        <mxCell id="superopt" value="superoptimize(backend)&#xa;KN/TB graph search" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="90" y="306" width="180" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="fusionplan" value="FusionPlan / µGraph&#xa;profile + fingerprint verify" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="300" y="306" width="200" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="cache" value="MuGraph persistent cache&#xa;shape bucket restore" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="530" y="306" width="200" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="ray" value="Ray / Coordinator&#xa;distributed search (optional)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#d6b656;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="760" y="306" width="200" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="serving-tier" value="Serving tiers: seed_verify · full_tb · full_tb_ray" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="990" y="306" width="130" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="api-layer" value="Python API &amp; Backend Manager (C++)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;verticalAlign=top;spacingTop=6" parent="1" vertex="1">
+          <mxGeometry x="60" y="384" width="1080" height="72" as="geometry" />
+        </mxCell>
+        <mxCell id="kngraph" value="KNGraph / TBGraph&#xa;transpiler → kernels" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="90" y="416" width="160" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="backend-reg" value="BackendRegistry&#xa;search + execute same backend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="280" y="416" width="180" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="yirage-core" value="yirage.core&#xa;Cython runtime" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="490" y="416" width="140" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="serving-pkg" value="yirage.serving&#xa;RF · Capsule · cert" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#6c8ebf;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="660" y="416" width="160" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="maca-config" value="MACA config&#xa;warp=64 · mxcc" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="850" y="416" width="130" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="cpu-mlir" value="CPU MLIR JIT&#xa;(optional)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11" parent="1" vertex="1">
+          <mxGeometry x="1010" y="416" width="110" height="32" as="geometry" />
+        </mxCell>
+        <mxCell id="backends-title" value="Backend Implementations" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="60" y="476" width="1080" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="be-cuda" value="CUDA&#xa;nvcc · warp 32" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="80" y="528" width="100" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="be-maca" value="MACA&#xa;mxcc · warp 64" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="200" y="528" width="100" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="be-cpu" value="CPU&#xa;OpenMP · MKL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="320" y="528" width="100" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="be-mps" value="MPS&#xa;Apple GPU" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="440" y="528" width="100" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="be-ascend" value="Ascend&#xa;CANN" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcccc;strokeColor=#cc0000;fontSize=10;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="560" y="528" width="100" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="be-rocm" value="ROCm&#xa;AMD GPU" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="680" y="528" width="100" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="be-triton" value="Triton&#xa;DSL kernels" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=10;fontStyle=1" parent="1" vertex="1">
+          <mxGeometry x="800" y="528" width="100" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="be-more" value="+ TPU · XPU · FPGA · MLIR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="920" y="528" width="200" height="56" as="geometry" />
+        </mxCell>
+        <mxCell id="hw-layer" value="Hardware Targets" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;verticalAlign=top;spacingTop=6" parent="1" vertex="1">
+          <mxGeometry x="60" y="608" width="1080" height="64" as="geometry" />
+        </mxCell>
+        <mxCell id="hw1" value="NVIDIA GPU" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="90" y="636" width="120" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="hw2" value="MetaX C500/C550" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="230" y="636" width="120" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="hw3" value="x86 / ARM CPU" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="370" y="636" width="120" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="hw4" value="Apple Silicon" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="510" y="636" width="120" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="hw5" value="Huawei Ascend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffcccc;strokeColor=#cc0000;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="650" y="636" width="120" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="hw6" value="AWS Neuron · Intel XPU" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10" parent="1" vertex="1">
+          <mxGeometry x="790" y="636" width="160" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="note" value="Engine owns scheduling &amp; KV; RF owns fusion identity per step" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontSize=11;fontStyle=2;fontColor=#666666" parent="1" vertex="1">
+          <mxGeometry x="200" y="688" width="800" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;endArrow=classic;" edge="1" parent="1" source="engine-layer" target="rf-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;endArrow=classic;" edge="1" parent="1" source="rf-layer" target="search-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;endArrow=classic;dashed=1;" edge="1" parent="1" source="search-layer" target="fusionplan">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="260" />
+              <mxPoint x="400" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="a4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;endArrow=classic;" edge="1" parent="1" source="search-layer" target="api-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;endArrow=classic;" edge="1" parent="1" source="api-layer" target="backends-title">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;strokeWidth=2;endArrow=classic;dashed=1;" edge="1" parent="1" source="backends-title" target="hw-layer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" value="feeds capsules" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;dashed=1;endArrow=classic;" edge="1" parent="1" source="fusionplan" target="capsule-mlp">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="270" />
+              <mxPoint x="480" y="270" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
