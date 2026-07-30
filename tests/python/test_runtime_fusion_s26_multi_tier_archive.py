@@ -148,6 +148,7 @@ def test_seed_verify_tier_archive_json_contract(yirage_serving):
         model_id=DEFAULT_QWEN05B_MODEL,
         quick=True,
         mlp_backend=BACKEND_YIRAGE_CPU,
+        archive_version="s26",
     )
     payload = archive.to_dict()
     assert validate_serving_bench_archive(payload) == []

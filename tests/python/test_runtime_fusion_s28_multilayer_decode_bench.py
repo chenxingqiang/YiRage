@@ -27,7 +27,20 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s28(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s28"
+    """S28 multilayer decode bench API remains callable with version=s28."""
+    from yirage.serving.hf_qwen_cpu_e2e import DEFAULT_QWEN05B_MODEL, is_transformers_available
+    from yirage.serving.qwen_decode_bench import run_qwen_multilayer_decode_bench
+
+    if not is_transformers_available():
+        pytest.skip("transformers not installed")
+
+    report = run_qwen_multilayer_decode_bench(
+        model_id=DEFAULT_QWEN05B_MODEL,
+        max_rf_mlp_layers=2,
+        quick=True,
+        version="s28",
+    )
+    assert report.to_dict()["version"] == "s28"
 
 
 def test_multilayer_decode_bench_json_contract(yirage_serving):

@@ -105,6 +105,46 @@ def validate_serving_bench_archive(payload: Mapping[str, Any]) -> List[str]:
     return errors
 
 
+def validate_serving_multi_tier_bench_archive(payload: Mapping[str, Any]) -> List[str]:
+    """Return validation errors for a combined multi-tier archive (empty list means OK)."""
+    errors: List[str] = []
+    if not payload.get("serving_multi_tier_bench_archive"):
+        errors.append("missing serving_multi_tier_bench_archive=true marker")
+    version = payload.get("version")
+    if not isinstance(version, str) or not version:
+        errors.append("missing version string")
+    tiers = payload.get("tiers")
+    if not isinstance(tiers, dict) or len(tiers) < 2:
+        errors.append("tiers must be a dict with at least 2 preset archives")
+        return errors
+    for tier_name, tier_payload in tiers.items():
+        if not isinstance(tier_payload, dict):
+            errors.append(f"tiers[{tier_name}] must be an object")
+            continue
+        tier_errors = validate_serving_bench_archive(tier_payload)
+        errors.extend(f"tiers[{tier_name}]: {err}" for err in tier_errors)
+    compare = payload.get("compare")
+    if not isinstance(compare, dict):
+        errors.append("compare block required for multi-tier archive")
+    else:
+        if "baseline" not in compare or "candidate" not in compare:
+            errors.append("compare must include baseline and candidate summaries")
+        if compare.get("ok") is not True:
+            errors.append("compare.ok must be true")
+    return errors
+
+
+def validate_serving_search_tier_archive(payload: Mapping[str, Any]) -> List[str]:
+    """Validate single-tier or multi-tier serving search archive JSON."""
+    if payload.get("serving_multi_tier_bench_archive"):
+        return validate_serving_multi_tier_bench_archive(payload)
+    return validate_serving_bench_archive(payload)
+
+
+def is_serving_multi_tier_bench_archive(payload: Mapping[str, Any]) -> bool:
+    return bool(payload.get("serving_multi_tier_bench_archive"))
+
+
 def extract_tier_summary(payload: Mapping[str, Any]) -> Dict[str, Any]:
     """Summarize one archive for nightly tier compare."""
     rows = [r for r in payload.get("rows", []) if isinstance(r, dict)]
@@ -177,7 +217,7 @@ class ServingMultiTierBenchArchive:
 def build_multi_tier_bench_archive(
     tier_archives: Mapping[str, ServingBenchArchive | Mapping[str, Any]],
     *,
-    version: str = "s26",
+    version: str = "s29",
     compare_baseline: str = _DEFAULT_COMPARE_BASELINE,
     compare_candidate: str = _DEFAULT_COMPARE_CANDIDATE,
 ) -> ServingMultiTierBenchArchive:
@@ -228,10 +268,41 @@ def serving_bench_archive_metadata(
     return meta
 
 
+def serving_multi_tier_bench_archive_metadata(
+    payload: Mapping[str, Any],
+    *,
+    archive_path: Optional[str | Path] = None,
+    validation_ok: bool = True,
+    quick: bool = False,
+) -> Dict[str, Any]:
+    """Sidecar metadata for multi-tier nightly archive artifacts."""
+    tiers = payload.get("tiers") if isinstance(payload.get("tiers"), dict) else {}
+    tier_names = sorted(str(name) for name in tiers.keys())
+    compare = payload.get("compare") if isinstance(payload.get("compare"), dict) else {}
+    meta: Dict[str, Any] = {
+        "serving_multi_tier_bench_archive_metadata": True,
+        "validation_ok": validation_ok,
+        "quick": quick,
+        "version": payload.get("version"),
+        "device": payload.get("device"),
+        "tier_names": tier_names,
+        "compare_ok": bool(compare.get("ok")),
+        "superopt_slowdown_vs_baseline": compare.get("superopt_slowdown_vs_baseline"),
+        "created_unix": payload.get("created_unix"),
+    }
+    if archive_path is not None:
+        path = Path(archive_path)
+        meta["archive_path"] = str(path)
+        if path.is_file():
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            meta["archive_sha256"] = digest
+    return meta
+
+
 def run_serving_search_tier_bench_archive_for_preset(
     tier_name: str,
     *,
-    archive_version: str = "s26",
+    archive_version: str = "s29",
     **run_kwargs: Any,
 ) -> Tuple[Any, ServingBenchArchive]:
     """Run Qwen search-tier archive under a named tier preset."""
@@ -250,7 +321,7 @@ def run_serving_search_tier_bench_archive_for_preset(
 def run_serving_multi_tier_bench_archive(
     tier_names: Sequence[str] = ("seed_verify",),
     *,
-    archive_version: str = "s26",
+    archive_version: str = "s29",
     compare_baseline: str = _DEFAULT_COMPARE_BASELINE,
     compare_candidate: str = _DEFAULT_COMPARE_CANDIDATE,
     **run_kwargs: Any,

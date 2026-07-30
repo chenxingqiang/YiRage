@@ -40,23 +40,40 @@ def main() -> int:
     from yirage.serving.search_tier_archive import (
         load_serving_bench_archive,
         serving_bench_archive_metadata,
-        validate_serving_bench_archive,
+        serving_multi_tier_bench_archive_metadata,
+        validate_serving_search_tier_archive,
+        is_serving_multi_tier_bench_archive,
     )
 
     payload = load_serving_bench_archive(args.path)
-    errors = validate_serving_bench_archive(payload)
+    errors = validate_serving_search_tier_archive(payload)
     if errors:
         print(json.dumps({"ok": False, "errors": errors}, indent=2))
         return 1
 
-    summary = {"ok": True, "tier": (payload.get("search_tier") or {}).get("tier")}
+    summary = {"ok": True}
+    if is_serving_multi_tier_bench_archive(payload):
+        compare = payload.get("compare") if isinstance(payload.get("compare"), dict) else {}
+        summary["multi_tier"] = True
+        summary["compare_ok"] = bool(compare.get("ok"))
+        summary["superopt_slowdown_vs_baseline"] = compare.get("superopt_slowdown_vs_baseline")
+    else:
+        summary["tier"] = (payload.get("search_tier") or {}).get("tier")
     if args.metadata_output:
-        metadata = serving_bench_archive_metadata(
-            payload,
-            archive_path=args.path,
-            validation_ok=True,
-            quick=args.quick,
-        )
+        if is_serving_multi_tier_bench_archive(payload):
+            metadata = serving_multi_tier_bench_archive_metadata(
+                payload,
+                archive_path=args.path,
+                validation_ok=True,
+                quick=args.quick,
+            )
+        else:
+            metadata = serving_bench_archive_metadata(
+                payload,
+                archive_path=args.path,
+                validation_ok=True,
+                quick=args.quick,
+            )
         Path(args.metadata_output).write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
         summary["metadata_output"] = args.metadata_output
         summary["quick"] = metadata.get("quick")
