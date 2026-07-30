@@ -113,7 +113,7 @@ FusionPlan 库    ← superoptimize / profile / shape-bucket cache
 | **文档先于符号大挪移** | S0/S1 完成品牌与概念切断；`MuGraphStore` 等改名另开 Chore |
 | **验证通过再沉淀** | RF/serving pytest 或 e2e demo 通过后再更新 `AGENTS.md` |
 | **执行前价值闸门** | 每轮对照 [Serving 分阶](#serving-loop-分阶路线-s0sn) 与四轮自问 |
-| **Loop 真实价值判断** | 每轮策略前判定 **做/不做/降级**；合并后写入 [轮次笔记](#当前轮次笔记serving--maca由-agent-持续追加) 的 **价值** 字段（见 [Loop 真实价值判断](#loop-真实价值判断每轮必写)） |
+| **Loop 真实价值判断** | 每轮策略前按 [设计目标](#设计目标价值评价锚点) 判定 **做/不做/降级**；合并后写入 [轮次笔记](#当前轮次笔记serving--maca由-agent-持续追加) 的 **价值** 字段 |
 | **行为性价比** | 禁止 stub 插件 / torch 回退 / **NumPy stub smoke** 冒充 RuntimeFusion |
 
 ### Agent 行为性价比审查（每步必做）
@@ -131,48 +131,82 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 
 ### Loop 真实价值判断（每轮必写）
 
-每一轮 Loop（Serving **S{n}** / MACA **R{n}**）在 **策略层写代码之前** 须完成一次 **真实价值判断**，并在 **PR 描述** 与 **合并后的轮次笔记** 中各写 **1～3 句话**。目的：避免「registry 闭合、纯文档、无证据 bench、回退冒充正式路径」类低价值轮次被合并。
+每一轮 Loop（Serving **S{n}** / MACA **R{n}**）在 **策略层写代码之前** 须完成一次 **真实价值判断**，并在 **PR 描述** 与 **合并后的轮次笔记** 中各写 **1～3 句话**。
+
+**核心要求**：价值 **必须围绕 [设计目标](#设计目标价值评价锚点) 评价**——先回答「本轮推进了哪条设计目标、哪一行 RF/MACA 矩阵」，再给出四档结论；**禁止**仅用「pytest 绿了 / bench 跑了 / 文档写了」代替设计对齐。
+
+#### 设计目标（价值评价锚点）
+
+价值判断的**唯一参照系**是 YiRage 产品/design 目标，而非孤立性能数字或提交量。
+
+| # | 设计目标 | 一句话检验 |
+|---|----------|------------|
+| **G1** | **引擎原生协同** | 是否让 vLLM/SGLang **保留**调度、PagedAttention、Radix、连续批处理，RF **只**编排 FusionCapsule？ |
+| **G2** | **弹性融合（非编译霸权）** | 是否增强「按 step meta 选择/跳过/收缩 Capsule」，而非整网/MegaKernel/MPK 独占？ |
+| **G3** | **FusionPlan → Capsule → RF.step 链路** | 是否闭合搜索期 Plan 裁成 Capsule、经 `RF.step` 在 serving 路径可验证地执行？ |
+| **G4** | **Capsule 边界与 meta 桥** | 是否推进 MLP/decoder 片段 Capsule、KV/`block_table`、Radix hit、SM 预算等 **meta 打针**？ |
+| **G5** | **正确性先于吞吐** | 是否有 Capsule/RF **numerical parity**（real torch / 真卡）证据，再谈 latency？ |
+| **G6** | **MACA/CUDA 支撑 Serving** | （支撑轨）是否解除 **Serving 在 MetaX/CUDA 上跑 Capsule** 的编译/ABI/parity 阻塞？ |
+
+**反模式（默认低价值-拒绝）**：单 Attention 替换、offline demo 抛光、Mirage/MPK/µGraph 对外叙事、孤立 beat cuBLAS/mcPytorch、registry/命名闭合、stub/torch 回退冒充 RF。
 
 #### 何时写
 
 | 时机 | 写什么 |
 |------|--------|
-| **策略前（闸门）** | 判定本轮 **做 / 不做 / 降级**；若 **不做**，改选 backlog 并记录原因 |
-| **PR 描述** | 「价值判断」小节：结论 + 1 条证据指针（pytest / bench JSON / MetaX 日志） |
+| **策略前（闸门）** | 勾选 **G1–G6** 中本轮主服务项；判定 **做 / 不做 / 降级** |
+| **PR 描述** | 「价值判断」：**设计目标对齐（Gx）** + 四档结论 + 1 条证据 |
 | **合并后进化** | 轮次笔记必填 **价值** 字段（见下方模板） |
 
 #### 价值结论（四档，必选其一）
 
-| 结论 | 含义 | 合并门槛 |
-|------|------|----------|
-| **高价值** | 直接闭合 RF 矩阵 / CUDA parity / serving 主瓶颈；有可复现 **正式路径** 证据 | 对应验证入口全绿 |
-| **中价值** | 工具/契约/感知层；为下一轮主瓶颈 **解除阻塞** 或建立 **可回归基线** | 须有 pytest 或 archive JSON；不得宣称已完成性能 parity |
-| **低价值-拒绝** | offline 抛光、命名/registry 闭合、无 RF/MACA 主瓶颈、或无法用正式路径验证 | **不得合并**；改选 backlog |
-| **支撑轨** | 仅因 Serving 被编译/ABI 阻塞或用户点名而做的 MACA 轮 | MetaX 真卡验证（MACA）；或文档化 gap |
+四档结论 **必须** 能追溯到上表 **G1–G6**（主轨至少 **G1+G3 或 G4** 之一；支撑轨 **G6**）。
+
+| 结论 | 含义（相对设计目标） | 合并门槛 |
+|------|----------------------|----------|
+| **高价值** | 直接推进 **G1–G5** 之一并闭合 [RF 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 一行；或 **G6** 且解除 Serving 真机阻塞 | 矩阵对应验证入口全绿 |
+| **中价值** | 为 **G3/G4/G5** 建立可回归基线、解除下一档主瓶颈，**且不**宣称已完成引擎嵌入 | pytest / archive JSON + 写明服务的 **Gx** |
+| **低价值-拒绝** | 不服务 **G1–G6**；或强化反模式（编译霸权、offline 抛光、回退冒充 RF） | **不得合并** |
+| **支撑轨** | 仅 **G6**：Serving 被 MACA/CUDA 编译或 ABI 阻塞，或用户显式点名 | MetaX/NVIDIA 正式路径证据 |
 
 #### 策略卡片 + 轮次笔记模板（必填字段）
 
 ```text
 价值：<高价值|中价值|低价值-拒绝|支撑轨> — <一句话结论>
-理由：<闭合哪条矩阵/backlog；为何不是低价值>
-证据：<pytest 名 / bench JSON 键 / make target / MetaX 命令>
-拒绝项：<若曾考虑但未做的工作，及原因；无则写「无」>
+设计目标：<G1–G6 编号 + 如何推进/不推进>
+矩阵：<RuntimeFusion 能力矩阵 或 MACA 矩阵 哪一行>
+理由：<为何服务设计目标；为何不是低价值>
+证据：<pytest / bench JSON / e2e demo / MetaX 命令>
+拒绝项：<未做且违背或不服务设计目标的工作；无则写「无」>
 ```
 
-**示例（Serving S27）**：
+**示例（Serving S27，围绕设计目标）**：
 
 ```text
-价值：中价值 — 建立 q_len=1 decode-step 可复现 bench（native vs RF），parity 优先于 speedup。
-理由：闭合「融合 vs 引擎 eager」感知 gap；为 S28 多层与 nightly 对比提供 JSON 基线。
-证据：test_runtime_fusion_s27_qwen_decode_bench.py；benchmark/serving_qwen_decode_bench.py --quick（parity_ok，speedup~0.87–1.0×）。
-拒绝项：未做 MLP-only 微 bench（cache deepcopy 噪声未剥离）— 留 S30。
+价值：中价值 — decode-step bench 验证 G3/G5：FusionPlan 裁出的 MLP Capsule 在 HF decode 路径与 native parity。
+设计目标：G3（Plan→Capsule 在 q_len=1 可测）、G5（parity 先于 speedup）；未触及 G1 引擎插件或 G4 KV 桥。
+矩阵：yirage_cpu MLP Capsule 执行（partial S14）+ 感知基线，非新矩阵 tier。
+理由：无 bench 则无法判断 RF 混合路径是否值得继续扩层；speedup~0.87–1.0× 说明尚未 beat eager，价值在正确性门禁。
+证据：test_runtime_fusion_s27_qwen_decode_bench.py；serving_qwen_decode_bench.py --quick（parity_ok）。
+拒绝项：MLP-only 微 bench（未剥离 cache deepcopy）— 不服务 G1/G4，留 S30。
+```
+
+**示例（Serving S29，围绕设计目标）**：
+
+```text
+价值：中价值 — tier archive 服务 G3：为 FusionPlan 搜索 tier（seed_verify vs full_tb_ray）提供选型证据。
+设计目标：G3（Plan 搜索成本可见）；不直接推进 G1/G2 引擎嵌入。
+矩阵：FusionPlan 搜索/缓存（partial）；nightly 量化 full_tb_ray 成本 ~500×。
+理由：设计目标要求 Plan 可缓存、可按 tier 选型；非 latency 优化轮。
+证据：make test-serving-search-tier-nightly-profile；compare_ok JSON。
+拒绝项：decode nightly artifact — 属 G5 延伸，留 S30。
 ```
 
 #### 与行为性价比审查的关系
 
 - **行为性价比**：逐步行动是否绕开根因（每步 1 句话）。
-- **真实价值判断**：**整轮**是否值得做（策略前 + PR + 笔记）。
-- 二者结论任一为「不足/拒绝」→ 停止落地或降级 backlog。
+- **真实价值判断**：**整轮**是否服务 **G1–G6 设计目标**（策略前 + PR + 笔记）。
+- 二者任一为「不足/拒绝」→ 停止落地或降级 backlog。
 
 ### 执行前闸门：框架目标与优化价值（每轮必做）
 
@@ -206,7 +240,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 4. **收益**：Capsule 通路 / 层覆盖 / KV 桥 / SM / Radix / e2e？性能向须写基线（eager 引擎 vs RF）。
 5. **验证入口**：`make test-serving-cpu-cert-pytest` 或 e2e demo；**禁止**新增 stub/smoke 脚本冒充完成。
 6. **机会成本**：是否挤掉更高优先级的 Capsule/`step` backlog？
-7. **真实价值**：本轮属于 [四档价值结论](#价值结论四档必选其一) 哪一档？若为 **低价值-拒绝** → 改选 backlog，不得开 PR。
+7. **真实价值**：本轮服务 [设计目标 G1–G6](#设计目标价值评价锚点) 哪几条？四档结论？若为 **低价值-拒绝**（不服务 G1–G6 或命中反模式）→ 改选 backlog，不得开 PR。
 
 **性能向轮次**（按后端）：
 
@@ -664,7 +698,7 @@ pytest tests/python/test_maca_config.py -v
 ### Cloud Agent 单轮检查清单（Serving 主轨）
 
 ```
-[ ] 0. 闸门：策略卡片（含 Serving S{n} + 真机验证）+ [行为性价比审查](#agent-行为性价比审查每步必做) + [Loop 真实价值判断](#loop-真实价值判断每轮必写)（四档结论 + 证据）
+[ ] 0. 闸门：策略卡片（含 Serving S{n} + 真机验证）+ [行为性价比审查](#agent-行为性价比审查每步必做) + [Loop 真实价值判断](#loop-真实价值判断每轮必写)（**G1–G6 设计目标对齐** + 四档结论 + 证据）
 [ ] 1. 感知：RF 矩阵 gap、FusionPlan/Capsule 可复用面、Legacy 对照；（若触及 MACA）mx-smi / demo_maca_*
 [ ] 2. 策略：只选 1 个 Serving 阶段（默认 S1 Capsule+step → S2→S4…）；拒绝 Mirage/MPK 叙事与单 Attention 替换
 [ ] 3. 落地：最小 patch；优先 `serving/` RF 外壳 / Capsule / meta 桥；legacy 仅作委托；每步过行为性价比
@@ -723,9 +757,9 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S24（2026-07-29，multi-layer full TB+Ray + prescreen reject）**：闸门：图级/正确性。`YIRAGE_SERVING_ACCELFORGE_LATENCY_BUDGET_MS` prescreen reject-path；Qwen 2-layer full TB+Ray e2e（`quick=False`）；`test_runtime_fusion_s24_multilayer_prescreen.py`；RF version **s24**。验证：pytest S24。下一轮：**S25** — full-model all-layer RF + search tier archive JSON。
 - **Serving Loop S25（2026-07-29，all-layer RF + search tier archive）**：闸门：图级/工具层。`all_rf_layers` + `run_hf_qwen05b_search_tier_bench_archive()`；`ServingBenchArchive.search_tier` JSON；demo `--all-rf-layers --archive-json`；`test_runtime_fusion_s25_all_layer_archive.py`；RF version **s25**。验证：pytest S25（slow 24-layer archive）。下一轮：**S26** — archive CI artifact + multi-tier nightly compare。
 - **Serving Loop S26（2026-07-29，multi-tier archive CI + nightly compare）**：闸门：感知/工具层。`search_tier_archive.py`（tier presets、`compare_serving_search_tier_archives`、`ServingMultiTierBenchArchive`）；`scripts/serving_search_tier_archive.py` + `validate_serving_search_tier_archive.py`；Makefile `test-serving-search-tier-archive-profile`；`.github/workflows/serving-search-tier-archive.yml`；`test_runtime_fusion_s26_multi_tier_archive.py`；RF version **s26**。验证：pytest S26 + seed_verify archive CI gate。下一轮：**S27** — decode fused vs torch bench 或 full_tb_ray nightly tier。
-- **Serving Loop S27（2026-07-30，Qwen decode-step fused vs native bench）**：闸门：感知/性能层。`qwen_decode_bench.py` + `benchmark/serving_qwen_decode_bench.py`（native HF vs YiRage RF ``yirage_cpu`` decode step JSON）；`test_runtime_fusion_s27_qwen_decode_bench.py`；RF version **s27**。验证：pytest S27（quick decode bench + parity）。**价值：中价值** — decode-step 可复现 bench + parity 基线（speedup~0.87–1.0×，非 beat native）；证据：S27 pytest + `serving_qwen_decode_bench.py --quick`。拒绝项：MLP-only 微 bench 留 S30。下一轮：**S28** — multi-layer decode bench / full_tb_ray nightly tier archive。
-- **Serving Loop S28（2026-07-30，multi-layer decode bench）**：闸门：感知/性能层。`run_qwen_multilayer_decode_bench()` + ``--all-rf-layers`` CLI；report 增 ``num_layers``/``all_rf_layers``/``per_layer_superopt``；`test_runtime_fusion_s28_multilayer_decode_bench.py`（quick 2-layer + slow 24-layer）；RF version **s28**。验证：pytest S28（quick multilayer + parity）。**价值：中价值** — 多层 RF decode 契约 + per-layer superopt 可见（2-layer parity OK，~0.99×）；为全层成本感知铺路。拒绝项：full_tb_ray nightly 合并到 S29。下一轮：**S29** — full_tb_ray nightly tier archive。
-- **Serving Loop S29（2026-07-30，full_tb_ray nightly multi-tier archive）**：闸门：感知/工具层。`validate_serving_multi_tier_bench_archive` + nightly ``make test-serving-search-tier-nightly-profile``（seed_verify vs full_tb_ray compare JSON）；workflow schedule job；`test_runtime_fusion_s29_full_tb_ray_nightly.py`；RF version **s29**。验证：pytest S29（synthetic validate + slow multi-tier quick）。**价值：高价值（工具/治理）** — 量化 search tier 成本（full_tb_ray superopt ~500× seed_verify）；PR/CI 仍只 gate seed_verify 保速度。拒绝项：decode nightly artifact 对比留 S30。下一轮：**S30** — MLP-only micro-bench 或 decode bench nightly compare。
+- **Serving Loop S27（2026-07-30，Qwen decode-step fused vs native bench）**：闸门：感知/性能层。`qwen_decode_bench.py` + `benchmark/serving_qwen_decode_bench.py`；RF **s27**。验证：pytest S27。**价值：中价值｜G3+G5** — Plan→Capsule decode 路径 parity 基线（非 beat native）；矩阵：yirage_cpu MLP 执行 partial。拒绝项：MLP-only（不服务 G1/G4）→ S30。
+- **Serving Loop S28（2026-07-30，multi-layer decode bench）**：闸门：感知/性能层。`run_qwen_multilayer_decode_bench()` + `--all-rf-layers`；RF **s28**。验证：pytest S28。**价值：中价值｜G3+G5** — 多层 Capsule 成本/per-layer superopt 可见；为 G4 全层嵌入前感知。拒绝项：full_tb_ray nightly → S29。
+- **Serving Loop S29（2026-07-30，full_tb_ray nightly multi-tier archive）**：闸门：感知/工具层。multi-tier archive + nightly workflow；RF **s29**。验证：pytest S29。**价值：中价值｜G3** — FusionPlan 搜索 tier 选型证据（~500× cost）；不直接推进 G1 引擎嵌入。拒绝项：decode nightly → S30。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
