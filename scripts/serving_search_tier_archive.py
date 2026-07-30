@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         run_serving_multi_tier_bench_archive,
         run_serving_search_tier_bench_archive_for_preset,
         serving_search_tier_preset_names,
-        validate_serving_bench_archive,
+        validate_serving_search_tier_archive,
     )
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -94,16 +94,14 @@ def main(argv: list[str] | None = None) -> int:
             Path(args.output).write_text(json.dumps(report, indent=2), encoding="utf-8")
         return 0 if report.get("ok") else 1
 
-    run_kwargs = dict(quick=args.quick, archive_version="s26")
+    run_kwargs = dict(quick=args.quick, archive_version="s29")
     if args.multi_tier:
         multi = run_serving_multi_tier_bench_archive(
             tier_names=serving_search_tier_preset_names(),
             **run_kwargs,
         )
         payload = multi.to_dict()
-        errors = []
-        for tier_payload in multi.tiers.values():
-            errors.extend(validate_serving_bench_archive(tier_payload))
+        errors = validate_serving_search_tier_archive(payload)
         if errors:
             print(json.dumps({"ok": False, "errors": errors}, indent=2), file=sys.stderr)
             return 1
@@ -113,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
             **run_kwargs,
         )
         payload = archive.to_dict()
-        errors = validate_serving_bench_archive(payload)
+        errors = validate_serving_search_tier_archive(payload)
         if errors:
             print(json.dumps({"ok": False, "errors": errors}, indent=2), file=sys.stderr)
             return 1

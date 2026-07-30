@@ -189,9 +189,13 @@ from .search_tier_archive import (
     run_serving_multi_tier_bench_archive,
     run_serving_search_tier_bench_archive_for_preset,
     serving_bench_archive_metadata,
+    is_serving_multi_tier_bench_archive,
+    serving_multi_tier_bench_archive_metadata,
     serving_search_tier_preset,
     serving_search_tier_preset_names,
     validate_serving_bench_archive,
+    validate_serving_multi_tier_bench_archive,
+    validate_serving_search_tier_archive,
 )
 from .runtime_fusion import RuntimeFusion, StepMeta, StepResult
 from .maca_serving_e2e import (
@@ -346,6 +350,10 @@ __all__ = [
     "serving_search_tier_preset",
     "serving_search_tier_preset_names",
     "validate_serving_bench_archive",
+    "validate_serving_multi_tier_bench_archive",
+    "validate_serving_search_tier_archive",
+    "is_serving_multi_tier_bench_archive",
+    "serving_multi_tier_bench_archive_metadata",
     "is_sglang_available",
     "require_sglang",
     "rf_step_meta_from_forward_batch",
