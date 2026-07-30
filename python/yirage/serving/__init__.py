@@ -82,6 +82,12 @@ from .hf_qwen_cpu_e2e import (
     run_hf_qwen05b_cpu_e2e,
     run_hf_qwen05b_search_tier_bench_archive,
 )
+from .qwen_decode_bench import (
+    QwenDecodeBenchReport,
+    QwenDecodeBenchRow,
+    qwen_decode_bench_per_layer_superopt,
+    run_qwen_decode_bench,
+)
 from .vllm_paged_e2e import (
     VllmPagedFullLayerE2EReport,
     VllmPagedKvBatchSpec,
@@ -388,6 +394,10 @@ __all__ = [
     "run_hf_qwen05b_search_tier_bench_archive",
     "build_qwen_search_tier_bench_archive",
     "collect_per_layer_superopt_stats",
+    "QwenDecodeBenchReport",
+    "QwenDecodeBenchRow",
+    "run_qwen_decode_bench",
+    "qwen_decode_bench_per_layer_superopt",
     "run_vllm_mlp_rf_e2e_auto",
     "VllmPagedKvBatchSpec",
     "VllmPagedFullLayerE2EReport",

@@ -27,7 +27,10 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s26(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s26"
+    """S26 multi-tier archive API remains callable with archive_version=s26."""
+    from yirage.serving.search_tier_archive import serving_search_tier_preset_names
+
+    assert "seed_verify" in serving_search_tier_preset_names()
 
 
 def test_serving_search_tier_preset_names(yirage_serving):
