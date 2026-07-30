@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S27: Qwen decode-step bench — native HF vs YiRage fused RF MLP on CPU.
+"""S27/S28: Qwen decode-step bench — native HF vs YiRage fused RF MLP on CPU.
 
 Requires built ``yirage.core`` and ``transformers``::
 
@@ -29,6 +29,11 @@ def main() -> int:
     parser.add_argument("--model", default=None, help="HF model id (default Qwen/Qwen2-0.5B)")
     parser.add_argument("--prompt", default="The capital of France is")
     parser.add_argument("--max-rf-mlp-layers", type=int, default=1)
+    parser.add_argument(
+        "--all-rf-layers",
+        action="store_true",
+        help="RF all transformer layers (overrides --max-rf-mlp-layers)",
+    )
     parser.add_argument("--warmup", type=int, default=3)
     parser.add_argument("--iters", type=int, default=15)
     parser.add_argument("--quick", action="store_true")
@@ -45,14 +50,23 @@ def main() -> int:
             ld = os.environ["LD_LIBRARY_PATH"]
 
     from yirage.serving.hf_qwen_cpu_e2e import DEFAULT_QWEN05B_MODEL
-    from yirage.serving.qwen_decode_bench import run_qwen_decode_bench
+    from yirage.serving.qwen_decode_bench import (
+        run_qwen_decode_bench,
+        run_qwen_multilayer_decode_bench,
+    )
     from yirage.serving.yirage_exec import require_yirage_core
 
     require_yirage_core()
-    report = run_qwen_decode_bench(
+    bench_fn = (
+        run_qwen_multilayer_decode_bench
+        if args.all_rf_layers or args.max_rf_mlp_layers > 1
+        else run_qwen_decode_bench
+    )
+    report = bench_fn(
         model_id=args.model or DEFAULT_QWEN05B_MODEL,
         prompt=args.prompt,
         max_rf_mlp_layers=args.max_rf_mlp_layers,
+        all_rf_layers=args.all_rf_layers,
         warmup=args.warmup,
         iters=args.iters,
         quick=args.quick,
@@ -69,7 +83,10 @@ def main() -> int:
         print(json.dumps(payload, indent=2))
     else:
         print("Qwen decode-step bench (native HF vs YiRage RF yirage_cpu)")
-        print(f"  model={report.model_id} rf_layers={report.max_rf_mlp_layers}")
+        print(
+            f"  model={report.model_id} rf_layers={report.max_rf_mlp_layers}"
+            f" num_layers={report.num_layers} all_rf_layers={report.all_rf_layers}"
+        )
         for row in report.rows:
             print(f"  {row.name}: {row.mean_ms:.4f} ms ({row.iters} iters)")
         print(f"  speedup_yirage_vs_native={report.speedup_yirage_vs_native:.3f}x")

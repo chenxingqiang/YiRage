@@ -49,7 +49,10 @@ class QwenDecodeBenchReport:
     device: str
     max_rf_mlp_layers: int
     parity_ok: bool
+    num_layers: int = 0
+    all_rf_layers: bool = False
     rows: List[QwenDecodeBenchRow] = field(default_factory=list)
+    per_layer_superopt: List[Dict[str, Any]] = field(default_factory=list)
     speedup_yirage_vs_native: float = 0.0
     superopt_elapsed_s_total: float = 0.0
     serving_search_tier: str = "seed_verify"
@@ -62,12 +65,16 @@ class QwenDecodeBenchReport:
             "model_id": self.model_id,
             "device": self.device,
             "max_rf_mlp_layers": self.max_rf_mlp_layers,
+            "num_layers": self.num_layers,
+            "all_rf_layers": self.all_rf_layers,
             "parity_ok": self.parity_ok,
             "speedup_yirage_vs_native": round(self.speedup_yirage_vs_native, 4),
             "superopt_elapsed_s_total": round(self.superopt_elapsed_s_total, 6),
             "serving_search_tier": self.serving_search_tier,
             "rows": [r.to_dict() for r in self.rows],
         }
+        if self.per_layer_superopt:
+            payload["per_layer_superopt"] = self.per_layer_superopt
         if self.search_tier is not None:
             payload["search_tier"] = self.search_tier
         return payload
@@ -78,10 +85,11 @@ def run_qwen_decode_bench(
     model_id: str = DEFAULT_QWEN05B_MODEL,
     prompt: str = "The capital of France is",
     max_rf_mlp_layers: int = 1,
+    all_rf_layers: bool = False,
     warmup: int = 3,
     iters: int = 15,
     quick: bool = False,
-    version: str = "s27",
+    version: str = "s28",
 ) -> QwenDecodeBenchReport:
     """Benchmark one decode step: HF native forward vs YiRage RF ``yirage_cpu`` MLP."""
     require_transformers()
@@ -90,14 +98,17 @@ def run_qwen_decode_bench(
     import torch
 
     if quick:
-        max_rf_mlp_layers = min(max_rf_mlp_layers, 1)
         warmup = min(warmup, 2)
         iters = min(iters, 8)
 
     clear_hf_qwen_rf_hook_cache()
     model, tokenizer, device = _load_qwen05b_cpu(model_id=model_id)
+    num_layers = int(model.config.num_hidden_layers)
+    if all_rf_layers:
+        max_rf_mlp_layers = num_layers
+    max_rf_mlp_layers = min(int(max_rf_mlp_layers), num_layers)
+
     input_ids, attention_mask = _prepare_model_inputs(model, tokenizer, prompt, device=device)
-    max_rf_mlp_layers = min(int(max_rf_mlp_layers), int(model.config.num_hidden_layers))
 
     with torch.no_grad():
         prefill_out = model(input_ids=input_ids, attention_mask=attention_mask, use_cache=True)
@@ -152,6 +163,7 @@ def run_qwen_decode_bench(
         )
 
     superopt_total = _total_superopt_elapsed(max_rf_mlp_layers, BACKEND_YIRAGE_CPU)
+    per_layer = collect_per_layer_superopt_stats(max_rf_mlp_layers, BACKEND_YIRAGE_CPU)
     speedup = native_bench.mean_ms / max(yirage_bench.mean_ms, 1e-9)
     tier = inspect_serving_search_tier()
 
@@ -161,6 +173,8 @@ def run_qwen_decode_bench(
         device=device,
         max_rf_mlp_layers=max_rf_mlp_layers,
         parity_ok=parity_ok,
+        num_layers=num_layers,
+        all_rf_layers=all_rf_layers or max_rf_mlp_layers >= num_layers,
         rows=[
             QwenDecodeBenchRow(
                 name=native_bench.name,
@@ -179,6 +193,33 @@ def run_qwen_decode_bench(
         superopt_elapsed_s_total=superopt_total,
         serving_search_tier=resolve_serving_search_tier(),
         search_tier=tier,
+        per_layer_superopt=per_layer,
+    )
+
+
+def run_qwen_multilayer_decode_bench(
+    *,
+    model_id: str = DEFAULT_QWEN05B_MODEL,
+    prompt: str = "The capital of France is",
+    max_rf_mlp_layers: int = 2,
+    all_rf_layers: bool = False,
+    warmup: int = 2,
+    iters: int = 8,
+    quick: bool = False,
+    version: str = "s28",
+) -> QwenDecodeBenchReport:
+    """Multi-layer decode bench (``max_rf_mlp_layers`` or ``all_rf_layers``)."""
+    if quick and not all_rf_layers:
+        max_rf_mlp_layers = min(max_rf_mlp_layers, 2)
+    return run_qwen_decode_bench(
+        model_id=model_id,
+        prompt=prompt,
+        max_rf_mlp_layers=max_rf_mlp_layers,
+        all_rf_layers=all_rf_layers,
+        warmup=warmup,
+        iters=iters,
+        quick=quick,
+        version=version,
     )
 
 
