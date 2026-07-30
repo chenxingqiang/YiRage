@@ -122,7 +122,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 
 | 维度 | 问题 |
 |------|------|
-| **目标对齐** | 本步是否直接闭合当前 Serving 策略卡片（S{n}）的主瓶颈？ |
+| **目标对齐** | 本步是否直接闭合当前 Serving 策略卡片（S{n}）的主瓶颈，且服务 [设计目标 G1–G6](#设计目标价值评价锚点)？ |
 | **正式 vs 回退** | 是否在绕开根因（stub 插件、整层 torch 回退、用「烤死 MegaKernel」冒充 RF）？ |
 | **证据** | 是否有 vLLM/SGLang 或 RF **pytest（real torch）** / latency JSON / MetaX 日志？ |
 | **机会成本** | 是否更应打通 Capsule/`step`/meta/SM，而非 offline 抛光或 legacy 大改名？ |
@@ -723,7 +723,7 @@ pytest tests/python/test_maca_config.py -v
 
 ### 当前轮次笔记（Serving + MACA，由 Agent 持续追加）
 
-> **维护说明**：每合并一轮主轨（Serving）或支撑轨（MACA）PR，在此追加 3～5 行；**每行须含 `价值：` 字段**（见 [Loop 真实价值判断](#loop-真实价值判断每轮必写)）。CPU 历史见 [归档](#历史归档cpu-无限优化闭环)。
+> **维护说明**：每合并一轮主轨（Serving）或支撑轨（MACA）PR，在此追加 3～5 行；**每行须含 `价值：` 字段**（含 **G1–G6 设计目标编号**，见 [Loop 真实价值判断](#loop-真实价值判断每轮必写)）。CPU 历史见 [归档](#历史归档cpu-无限优化闭环)。
 
 - **Serving Loop S0（2026-07-27，RuntimeFusion 概念定稿）**：闸门：文档/协议层。北极星定为 **FusionPlan / FusionCapsule / RuntimeFusion（RF）**；写入 [Legacy 对照表](#概念对照legacy--yirage-标准)；明确反对 Mirage 式编译霸权与 MPK/µGraph 对外身份。MACA R0–R26 与旧 R27 为支撑。验证：文档审阅（PR #153）。下一轮：**S1** — 第一个可被 RF 选中的 **MLP FusionCapsule** + 最小 **`RF.step` 钩子**（PagedAttention 仍留引擎；不做符号大改名）。
 - **Serving Loop S1（2026-07-27，MLP FusionCapsule + RF.step）**：闸门：Serving/RF API 外壳。新增 `python/yirage/serving/`（`FusionPlan`、`MlpFusionCapsule`、`RuntimeFusion.step`）；S1 执行器为 eager NumPy（Cloud 可测，不依赖 `yirage.core`）；`demo/serving/mlp_capsule_smoke.py`；契约 `tests/python/test_runtime_fusion_s1.py`。验证：pytest S1 + smoke select/skip。下一轮：**S2** — vLLM 模型层 Override 挂 `RF.step`（Attention/Paged 仍留引擎）。
@@ -759,7 +759,7 @@ pytest tests/python/test_maca_config.py -v
 - **Serving Loop S26（2026-07-29，multi-tier archive CI + nightly compare）**：闸门：感知/工具层。`search_tier_archive.py`（tier presets、`compare_serving_search_tier_archives`、`ServingMultiTierBenchArchive`）；`scripts/serving_search_tier_archive.py` + `validate_serving_search_tier_archive.py`；Makefile `test-serving-search-tier-archive-profile`；`.github/workflows/serving-search-tier-archive.yml`；`test_runtime_fusion_s26_multi_tier_archive.py`；RF version **s26**。验证：pytest S26 + seed_verify archive CI gate。下一轮：**S27** — decode fused vs torch bench 或 full_tb_ray nightly tier。
 - **Serving Loop S27（2026-07-30，Qwen decode-step fused vs native bench）**：闸门：感知/性能层。`qwen_decode_bench.py` + `benchmark/serving_qwen_decode_bench.py`；RF **s27**。验证：pytest S27。**价值：中价值｜G3+G5** — Plan→Capsule decode 路径 parity 基线（非 beat native）；矩阵：yirage_cpu MLP 执行 partial。拒绝项：MLP-only（不服务 G1/G4）→ S30。
 - **Serving Loop S28（2026-07-30，multi-layer decode bench）**：闸门：感知/性能层。`run_qwen_multilayer_decode_bench()` + `--all-rf-layers`；RF **s28**。验证：pytest S28。**价值：中价值｜G3+G5** — 多层 Capsule 成本/per-layer superopt 可见；为 G4 全层嵌入前感知。拒绝项：full_tb_ray nightly → S29。
-- **Serving Loop S29（2026-07-30，full_tb_ray nightly multi-tier archive）**：闸门：感知/工具层。multi-tier archive + nightly workflow；RF **s29**。验证：pytest S29。**价值：中价值｜G3** — FusionPlan 搜索 tier 选型证据（~500× cost）；不直接推进 G1 引擎嵌入。拒绝项：decode nightly → S30。
+- **Serving Loop S29（2026-07-30，full_tb_ray nightly multi-tier archive）**：闸门：感知/工具层。multi-tier archive + nightly workflow；RF **s29**。验证：pytest S29。**价值：中价值｜G3** — FusionPlan 搜索 tier 选型证据（~500× cost）；不直接推进 G1 引擎嵌入。拒绝项：decode nightly → S30。下一轮：**S30** — MLP-only micro-bench（G5 纯 Capsule 计时）或 vLLM/SGLang 插件层 G1 回归。
 
 - **MACA 后端基线（2026-07-07）**：主优化目标从 CPU 切换为 MetaX MACA；开发机 MetaX C500（`mx-smi` 2.2.12，mcPytorch `2.8.0+metax3.5.3.9`）；构建 `YIRAGE_BACKEND=maca pip install -e .`；文档锚点 `docs/maca_quick_start.md`。
 - **Loop R0（2026-07-07，目标切换）**：闸门：文档/协议层。`AGENTS.md` 主闭环改为 MACA；Cloud Agent 须在 MetaX SSH VM 验证；CPU Loop R1–R137 迁入归档。验证：MetaX VM `mx-smi` + mcPytorch OK；下一轮：**R1 感知** — 跑 `demo_maca_optimization` + `maca_vs_pytorch`，建立 fusion vs mcPytorch 基线 JSON。
