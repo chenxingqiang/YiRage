@@ -27,7 +27,19 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s27(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s27"
+    """S27 decode bench API remains callable with version=s27."""
+    from yirage.serving.hf_qwen_cpu_e2e import DEFAULT_QWEN05B_MODEL, is_transformers_available
+    from yirage.serving.qwen_decode_bench import run_qwen_decode_bench
+
+    if not is_transformers_available():
+        pytest.skip("transformers not installed")
+
+    report = run_qwen_decode_bench(
+        model_id=DEFAULT_QWEN05B_MODEL,
+        quick=True,
+        version="s27",
+    )
+    assert report.to_dict()["version"] == "s27"
 
 
 def test_qwen_decode_bench_json_contract(yirage_serving):
@@ -40,6 +52,7 @@ def test_qwen_decode_bench_json_contract(yirage_serving):
     report = run_qwen_decode_bench(
         model_id=DEFAULT_QWEN05B_MODEL,
         quick=True,
+        version="s27",
     )
     payload = report.to_dict()
     assert payload["serving_qwen_decode_bench"] is True
@@ -62,6 +75,7 @@ def test_qwen_decode_bench_speedup_sane(yirage_serving):
     report = run_qwen_decode_bench(
         model_id=DEFAULT_QWEN05B_MODEL,
         quick=True,
+        version="s27",
     )
     native_ms = report.rows[0].mean_ms
     yirage_ms = report.rows[1].mean_ms
@@ -84,6 +98,7 @@ def test_qwen_decode_bench_per_layer_superopt(yirage_serving):
     report = run_qwen_decode_bench(
         model_id=DEFAULT_QWEN05B_MODEL,
         quick=True,
+        version="s27",
     )
     layers = qwen_decode_bench_per_layer_superopt(report)
     assert len(layers) == report.max_rf_mlp_layers

@@ -87,6 +87,7 @@ from .qwen_decode_bench import (
     QwenDecodeBenchRow,
     qwen_decode_bench_per_layer_superopt,
     run_qwen_decode_bench,
+    run_qwen_multilayer_decode_bench,
 )
 from .vllm_paged_e2e import (
     VllmPagedFullLayerE2EReport,
@@ -397,6 +398,7 @@ __all__ = [
     "QwenDecodeBenchReport",
     "QwenDecodeBenchRow",
     "run_qwen_decode_bench",
+    "run_qwen_multilayer_decode_bench",
     "qwen_decode_bench_per_layer_superopt",
     "run_vllm_mlp_rf_e2e_auto",
     "VllmPagedKvBatchSpec",
