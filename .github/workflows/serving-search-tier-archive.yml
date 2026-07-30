@@ -1,0 +1,106 @@
+name: Serving Search Tier Archive
+
+on:
+  pull_request:
+    paths:
+      - "python/yirage/serving/search_tier_archive.py"
+      - "python/yirage/serving/bench_archive.py"
+      - "python/yirage/serving/hf_qwen_cpu_e2e.py"
+      - "scripts/serving_search_tier_archive.py"
+      - "scripts/validate_serving_search_tier_archive.py"
+      - "tests/python/test_runtime_fusion_s25_all_layer_archive.py"
+      - "tests/python/test_runtime_fusion_s26_multi_tier_archive.py"
+      - "demo/serving/qwen05b_cpu_e2e.py"
+      - "Makefile"
+      - ".github/workflows/serving-search-tier-archive.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "python/yirage/serving/search_tier_archive.py"
+      - "python/yirage/serving/bench_archive.py"
+      - "python/yirage/serving/hf_qwen_cpu_e2e.py"
+      - "scripts/serving_search_tier_archive.py"
+      - "scripts/validate_serving_search_tier_archive.py"
+      - "tests/python/test_runtime_fusion_s25_all_layer_archive.py"
+      - "tests/python/test_runtime_fusion_s26_multi_tier_archive.py"
+      - "demo/serving/qwen05b_cpu_e2e.py"
+      - "Makefile"
+      - ".github/workflows/serving-search-tier-archive.yml"
+  schedule:
+    - cron: "0 6 * * *"
+
+concurrency:
+  group: serving-search-tier-archive-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  serving-tier-archive-quick:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-dev python3-pip \
+            libboost-all-dev libz3-dev libz3-4 \
+            libopenblas-dev \
+            build-essential curl
+
+      - name: Install Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build Rust search helpers
+        run: |
+          (cd src/search/abstract_expr/abstract_subexpr && \
+            cargo build --release --target-dir ../../../../build/abstract_subexpr)
+          (cd src/search/verification/formal_verifier_equiv && \
+            cargo build --release --target-dir ../../../../build/formal_verifier)
+
+      - name: Install Python dependencies (CPU)
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install z3-solver numpy graphviz tqdm accelforge "ray>=2.55" transformers
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Build YiRage (CPU)
+        env:
+          YIRAGE_BACKEND: cpu
+          USE_MLIR: "0"
+        run: |
+          python3 -m pip install -e ".[dev]" --no-build-isolation
+
+      - name: S26 contract pytest
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: python:tests/python
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/abstract_subexpr/release:${{ github.workspace }}/build/formal_verifier/release
+        run: |
+          python3 -m pytest tests/python/test_runtime_fusion_s26_multi_tier_archive.py -v --tb=short \
+            -k "not slow"
+
+      - name: Serving search-tier archive + validate (PR/nightly gate)
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: python:tests/python
+          LD_LIBRARY_PATH: ${{ github.workspace }}/build/abstract_subexpr/release:${{ github.workspace }}/build/formal_verifier/release
+        run: make test-serving-search-tier-archive-profile
+
+      - name: Upload serving search-tier archive artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: serving-search-tier-archive-${{ github.run_id }}
+          path: |
+            artifacts/serving-search-tier-seed_verify.json
+            artifacts/serving-search-tier-seed_verify.meta.json
+          retention-days: 14

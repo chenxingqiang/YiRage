@@ -570,7 +570,7 @@ def build_qwen_search_tier_bench_archive(
     *,
     per_layer: Sequence[Mapping[str, Any]],
     search_tier: Optional[Mapping[str, Any]] = None,
-    version: str = "s25",
+    version: str = "s26",
 ) -> "ServingBenchArchive":
     """Build search-tier bench archive JSON from a Qwen CPU e2e report."""
     from .bench_archive import ServingBenchArchive, ServingBenchArchiveRow
@@ -623,7 +623,7 @@ def run_hf_qwen05b_search_tier_bench_archive(
     mlp_backend: Optional[str] = None,
     quick: bool = False,
     all_rf_layers: bool = False,
-    archive_version: str = "s25",
+    archive_version: str = "s26",
 ) -> Tuple[HfQwen05bCpuE2EReport, "ServingBenchArchive"]:
     """Run Qwen e2e and emit search-tier ``ServingBenchArchive`` JSON payload."""
     report = run_hf_qwen05b_cpu_e2e(
