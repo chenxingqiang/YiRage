@@ -82,15 +82,35 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
             "chain_c_vllm_torch",
             "chain_d_sglang_torch",
             "chain_b_multistep_generation",
+            "chain_c_vllm_torch_multistep",
+            "chain_d_sglang_torch_multistep",
         ],
         "decode": _synthetic_decode_subsection(version=version),
         "engine_g1": _synthetic_g1_subsection(version=version),
         "multistep": _synthetic_multistep_subsection(version=version),
+        "engine_multistep": {
+            "serving_engine_native_multistep_bench": True,
+            "version": version,
+            "parity_ok": True,
+            "decode_steps": 3,
+            "chains": [
+                {
+                    "chain_id": "chain_c_vllm_torch_multistep",
+                    "parity_ok": True,
+                    "step_parity_ok": [True, True, True],
+                },
+                {
+                    "chain_id": "chain_d_sglang_torch_multistep",
+                    "parity_ok": True,
+                    "step_parity_ok": [True, True, True],
+                },
+            ],
+        },
     }
 
 
 def test_runtime_fusion_version_s34(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s34"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s35"
 
 
 def test_validate_combined_nightly_archive_synthetic(serving):

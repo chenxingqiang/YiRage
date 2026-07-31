@@ -1,9 +1,10 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S34: Combined Serving nightly archive — decode + G1 + multistep (G7 chains A/B/C/D).
+"""S34/S35: Combined Serving nightly archive — decode + G1 + multistep + engine multistep.
 
-Bundles S31 decode bench, S32 engine G1 regression, and S33 multistep generation into
-one validated JSON artifact for nightly CI. ``parity_ok`` requires all three sub-reports.
+Bundles S31 decode bench, S32 engine G1 regression, S33 HF multistep generation, and
+S35 engine-native multistep into one validated JSON artifact for nightly CI.
+``parity_ok`` requires all sub-reports (torch gates).
 """
 
 from __future__ import annotations
@@ -21,6 +22,10 @@ from .decode_bench_archive import (
 from .engine_g1_regression import (
     run_engine_g1_regression,
     validate_serving_engine_g1_regression,
+)
+from .engine_native_multistep_bench import (
+    run_serving_engine_native_multistep_archive,
+    validate_serving_engine_native_multistep_bench,
 )
 from .hf_qwen_cpu_e2e import DEFAULT_QWEN05B_MODEL
 from .qwen_multistep_generation_bench import (
@@ -40,6 +45,7 @@ class ServingCombinedNightlyArchiveReport:
     decode: Optional[Dict[str, Any]] = None
     engine_g1: Optional[Dict[str, Any]] = None
     multistep: Optional[Dict[str, Any]] = None
+    engine_multistep: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -51,6 +57,7 @@ class ServingCombinedNightlyArchiveReport:
             "decode": self.decode,
             "engine_g1": self.engine_g1,
             "multistep": self.multistep,
+            "engine_multistep": self.engine_multistep,
         }
 
 
@@ -66,8 +73,8 @@ def validate_serving_combined_nightly_archive(payload: Mapping[str, Any]) -> Lis
         errors.append("parity_ok must be true for combined nightly merge")
 
     chains = payload.get("functional_chains")
-    if not isinstance(chains, list) or len(chains) < 3:
-        errors.append("functional_chains must list decode + G1 + multistep chains")
+    if not isinstance(chains, list) or len(chains) < 4:
+        errors.append("functional_chains must list decode + G1 + HF multistep + engine multistep")
 
     decode = payload.get("decode")
     if not isinstance(decode, dict):
@@ -89,6 +96,15 @@ def validate_serving_combined_nightly_archive(payload: Mapping[str, Any]) -> Lis
             f"multistep.{e}" for e in validate_serving_qwen_multistep_generation_bench(multistep)
         )
 
+    engine_multistep = payload.get("engine_multistep")
+    if not isinstance(engine_multistep, dict):
+        errors.append("engine_multistep subsection must be a dict")
+    else:
+        errors.extend(
+            f"engine_multistep.{e}"
+            for e in validate_serving_engine_native_multistep_bench(engine_multistep)
+        )
+
     return errors
 
 
@@ -103,6 +119,9 @@ def serving_combined_nightly_archive_metadata(
     decode = payload.get("decode") if isinstance(payload.get("decode"), dict) else {}
     engine_g1 = payload.get("engine_g1") if isinstance(payload.get("engine_g1"), dict) else {}
     multistep = payload.get("multistep") if isinstance(payload.get("multistep"), dict) else {}
+    engine_multistep = (
+        payload.get("engine_multistep") if isinstance(payload.get("engine_multistep"), dict) else {}
+    )
     return {
         "serving_combined_nightly_archive_metadata": True,
         "archive_path": archive_path,
@@ -115,6 +134,8 @@ def serving_combined_nightly_archive_metadata(
         "engine_g1_parity_ok": engine_g1.get("parity_ok"),
         "multistep_parity_ok": multistep.get("parity_ok"),
         "multistep_token_match_ok": multistep.get("token_match_ok"),
+        "engine_multistep_parity_ok": engine_multistep.get("parity_ok"),
+        "engine_multistep_native_parity_ok": engine_multistep.get("native_parity_ok"),
         "vllm_native_available": engine_g1.get("vllm_native_available"),
         "sglang_native_available": engine_g1.get("sglang_native_available"),
         "archive_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
@@ -130,16 +151,19 @@ def run_serving_combined_nightly_archive(
     all_rf_layers: bool = False,
     max_new_tokens: int = 8,
     quick: bool = True,
-    version: str = "s34",
+    version: str = "s35",
     skip_decode: bool = False,
     skip_multistep: bool = False,
+    skip_engine_multistep: bool = False,
 ) -> Dict[str, Any]:
-    """Run decode + G1 + multistep archives and return validated combined payload."""
+    """Run decode + G1 + multistep + engine multistep archives."""
     functional_chains = [
         "chain_b_decode_step",
         "chain_c_vllm_torch",
         "chain_d_sglang_torch",
         "chain_b_multistep_generation",
+        "chain_c_vllm_torch_multistep",
+        "chain_d_sglang_torch_multistep",
     ]
 
     decode_payload: Optional[Dict[str, Any]] = None
@@ -173,6 +197,15 @@ def run_serving_combined_nightly_archive(
     if multistep_payload is not None:
         parity_ok = parity_ok and bool(multistep_payload.get("parity_ok"))
 
+    engine_multistep_payload: Optional[Dict[str, Any]] = None
+    if not skip_engine_multistep:
+        engine_multistep_payload = run_serving_engine_native_multistep_archive(
+            quick=quick,
+            try_native=True,
+            version=version,
+        )
+        parity_ok = parity_ok and bool(engine_multistep_payload.get("parity_ok"))
+
     report = ServingCombinedNightlyArchiveReport(
         version=version,
         parity_ok=parity_ok,
@@ -181,6 +214,7 @@ def run_serving_combined_nightly_archive(
         decode=decode_payload,
         engine_g1=engine_g1_payload,
         multistep=multistep_payload,
+        engine_multistep=engine_multistep_payload,
     )
     payload = report.to_dict()
     errors = validate_serving_combined_nightly_archive(payload)

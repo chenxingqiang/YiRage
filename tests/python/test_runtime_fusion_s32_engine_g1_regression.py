@@ -20,9 +20,10 @@ def test_engine_g1_regression_parity(serving):
     serving.require_torch()
     report = serving.run_engine_g1_regression(quick=True, version="s32")
     assert report.parity_ok
-    assert len(report.chains) == 2
-    assert all(c.parity_ok for c in report.chains)
-    ids = {c.chain_id for c in report.chains}
+    torch_chains = [c for c in report.chains if c.engine == "torch_surrogate"]
+    assert len(torch_chains) == 2
+    assert all(c.parity_ok for c in torch_chains)
+    ids = {c.chain_id for c in torch_chains}
     assert ids == {"chain_c_vllm_torch", "chain_d_sglang_torch"}
 
 

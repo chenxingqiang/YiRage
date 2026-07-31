@@ -113,6 +113,12 @@ from .combined_nightly_archive import (
     serving_combined_nightly_archive_metadata,
     validate_serving_combined_nightly_archive,
 )
+from .engine_native_multistep_bench import (
+    EngineNativeMultistepReport,
+    run_engine_native_multistep_bench,
+    run_serving_engine_native_multistep_archive,
+    validate_serving_engine_native_multistep_bench,
+)
 from .mlp_capsule_bench import (
     MlpCapsuleBenchReport,
     MlpCapsuleBenchRow,
@@ -448,6 +454,10 @@ __all__ = [
     "run_serving_combined_nightly_archive",
     "serving_combined_nightly_archive_metadata",
     "validate_serving_combined_nightly_archive",
+    "EngineNativeMultistepReport",
+    "run_engine_native_multistep_bench",
+    "run_serving_engine_native_multistep_archive",
+    "validate_serving_engine_native_multistep_bench",
     "load_serving_qwen_decode_bench_archive",
     "run_serving_qwen_decode_bench_archive",
     "serving_qwen_decode_bench_archive_metadata",

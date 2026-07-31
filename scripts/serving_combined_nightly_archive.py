@@ -61,7 +61,7 @@ def main() -> int:
         from yirage.serving.torch_exec import require_torch
 
         require_torch()
-        g1 = run_engine_g1_regression(quick=args.quick, version="s34").to_dict()
+        g1 = run_engine_g1_regression(quick=args.quick, version="s35").to_dict()
         payload = {
             "serving_combined_nightly_archive": True,
             "version": "s34",
@@ -83,7 +83,7 @@ def main() -> int:
             all_rf_layers=args.all_rf_layers,
             max_new_tokens=args.max_new_tokens,
             quick=args.quick,
-            version="s34",
+            version="s35",
         )
 
     if args.output:
