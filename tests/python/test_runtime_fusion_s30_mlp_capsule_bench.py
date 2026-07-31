@@ -12,7 +12,8 @@ from serving_test_utils import serving
 
 
 def test_runtime_fusion_version_s30(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s30"
+    report = serving.run_mlp_capsule_bench(quick=True, version="s30")
+    assert report.version == "s30"
 
 
 def test_mlp_capsule_bench_json_contract(serving):
