@@ -177,6 +177,11 @@ def serving_cpu_cert_manifest(
             "pytest",
             "tests/python/test_runtime_fusion_s31_decode_nightly.py",
         ),
+        CertStage(
+            "s32_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s32_engine_g1_regression.py",
+        ),
         CertStage("torch_e2e", "smoke", "demo/serving/torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
         CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),

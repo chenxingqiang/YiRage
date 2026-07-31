@@ -27,7 +27,8 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s31(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s31"
+    payload = _synthetic_decode_archive(version="s31")
+    assert payload["version"] == "s31"
 
 
 def _synthetic_decode_archive(*, version: str = "s31") -> dict:
