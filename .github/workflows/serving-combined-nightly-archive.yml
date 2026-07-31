@@ -6,11 +6,14 @@ on:
       - "python/yirage/serving/combined_nightly_archive.py"
       - "python/yirage/serving/decode_bench_archive.py"
       - "python/yirage/serving/engine_g1_regression.py"
+      - "python/yirage/serving/engine_native_multistep_bench.py"
       - "python/yirage/serving/qwen_multistep_generation_bench.py"
       - "scripts/serving_combined_nightly_archive.py"
       - "scripts/validate_serving_combined_nightly_archive.py"
       - "benchmark/serving_combined_nightly_archive.py"
+      - "benchmark/serving_engine_native_multistep_bench.py"
       - "tests/python/test_runtime_fusion_s34_combined_nightly.py"
+      - "tests/python/test_runtime_fusion_s35_engine_native_multistep.py"
       - "Makefile"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   push:
@@ -18,10 +21,13 @@ on:
       - main
     paths:
       - "python/yirage/serving/combined_nightly_archive.py"
+      - "python/yirage/serving/engine_native_multistep_bench.py"
       - "scripts/serving_combined_nightly_archive.py"
       - "scripts/validate_serving_combined_nightly_archive.py"
       - "benchmark/serving_combined_nightly_archive.py"
+      - "benchmark/serving_engine_native_multistep_bench.py"
       - "tests/python/test_runtime_fusion_s34_combined_nightly.py"
+      - "tests/python/test_runtime_fusion_s35_engine_native_multistep.py"
       - "Makefile"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   schedule:
