@@ -1,0 +1,47 @@
+name: Serving Qwen Multistep Generation
+
+on:
+  pull_request:
+    paths:
+      - "python/yirage/serving/qwen_multistep_generation_bench.py"
+      - "python/yirage/serving/hf_qwen_cpu_e2e.py"
+      - "benchmark/serving_qwen_multistep_generation_bench.py"
+      - "tests/python/test_runtime_fusion_s33_multistep_generation.py"
+      - "Makefile"
+      - ".github/workflows/serving-qwen-multistep-generation.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "python/yirage/serving/qwen_multistep_generation_bench.py"
+      - "python/yirage/serving/hf_qwen_cpu_e2e.py"
+      - "benchmark/serving_qwen_multistep_generation_bench.py"
+      - "tests/python/test_runtime_fusion_s33_multistep_generation.py"
+      - "Makefile"
+      - ".github/workflows/serving-qwen-multistep-generation.yml"
+
+concurrency:
+  group: serving-qwen-multistep-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  multistep-generation-contract:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest transformers
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: S33 contract pytest (no slow)
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: python:tests/python
+        run: |
+          python3 -m pytest tests/python/test_runtime_fusion_s33_multistep_generation.py -v -k "not slow" --tb=short

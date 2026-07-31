@@ -101,6 +101,12 @@ from .decode_bench_archive import (
     serving_qwen_decode_bench_archive_metadata,
     validate_serving_qwen_decode_bench_archive,
 )
+from .qwen_multistep_generation_bench import (
+    QwenMultistepGenerationReport,
+    run_qwen_multistep_generation_bench,
+    run_serving_qwen_multistep_generation_archive,
+    validate_serving_qwen_multistep_generation_bench,
+)
 from .mlp_capsule_bench import (
     MlpCapsuleBenchReport,
     MlpCapsuleBenchRow,
@@ -428,6 +434,10 @@ __all__ = [
     "MlpCapsuleBenchReport",
     "MlpCapsuleBenchRow",
     "run_mlp_capsule_bench",
+    "QwenMultistepGenerationReport",
+    "run_qwen_multistep_generation_bench",
+    "run_serving_qwen_multistep_generation_archive",
+    "validate_serving_qwen_multistep_generation_bench",
     "load_serving_qwen_decode_bench_archive",
     "run_serving_qwen_decode_bench_archive",
     "serving_qwen_decode_bench_archive_metadata",
