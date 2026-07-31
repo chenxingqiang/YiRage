@@ -4,7 +4,7 @@
 
 > **当前主目标（2026-07-27）**：以 **RuntimeFusion（RF）** 将搜索期 **FusionPlan** 裁成可调度的 **FusionCapsule**，嵌入 vLLM / SGLang：引擎保留连续批处理、PagedAttention、RadixAttention 与总调度权；YiRage 在 serving **每一步**按引擎 meta **弹性选择/编排**融合块。这是「引擎原生协同」的工业路径，**不是**把整网烤进独占 MegaKernel 的编译霸权。MACA 真卡与 CUDA 执行能力仍是**支撑轨**。
 
-> **当前主后端**：默认验证优先 `YIRAGE_BACKEND=cuda`（对接上游 vLLM/SGLang）与 `YIRAGE_BACKEND=maca`（MetaX / [vLLM-metax](https://github.com/MetaX-MACA/vLLM-metax)）。CPU 闭环历史见文末 [历史归档：CPU 无限优化闭环](#历史归档cpu-无限优化闭环)。MACA↔CUDA 能力矩阵见 [CUDA 对标（支撑轨）](#cuda-对标优化目标与能力矩阵)。
+> **当前主后端**：Loop **默认合并闸门**为 **CPU**（`YIRAGE_BACKEND=cpu` + real torch / `yirage.core`）验证 **逻辑与功能链路**（[G6](#设计目标价值评价锚点)）；CUDA / MetaX MACA / 其它真卡仅在 **目标环境** 做 parity 与 bench（见 [G6 验证阶梯](#g6-验证阶梯cpu-优先--目标环境真卡)）。CPU 闭环历史见文末 [历史归档](#历史归档cpu-无限优化闭环)。MACA↔CUDA 能力矩阵见 [CUDA 对标（支撑轨）](#cuda-对标优化目标与能力矩阵)。
 
 > **概念切断（强制）**：对外叙事与新 Loop **禁止**以 Mirage / MPK / µGraph 作为产品身份。遗留符号（`mugraph`、`MuGraphStore`、`PersistentKernel` 类名等）按 [Legacy 对照表](#概念对照legacy--yirage-标准) 视为实现别名，符号大改名另开 Chore，不阻塞 S1。
 
@@ -124,7 +124,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 |------|------|
 | **目标对齐** | 本步是否直接闭合当前 Serving 策略卡片（S{n}）的主瓶颈，且服务 [设计目标 G1–G6](#设计目标价值评价锚点)？ |
 | **正式 vs 回退** | 是否在绕开根因（stub 插件、整层 torch 回退、用「烤死 MegaKernel」冒充 RF）？ |
-| **证据** | 是否有 vLLM/SGLang 或 RF **pytest（real torch）** / latency JSON / MetaX 日志？ |
+| **证据** | 是否有 **G6 CPU** RF pytest（real torch / `yirage.core`）或 latency JSON？真卡/MetaX 仅作目标环境补充 |
 | **机会成本** | 是否更应打通 Capsule/`step`/meta/SM，而非 offline 抛光或 legacy 大改名？ |
 
 **结论为「性价比不足」或「属于回退」时**：停止落地，回到策略层重选 backlog；不得为凑 Loop 合并 PR。
@@ -145,8 +145,8 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 | **G2** | **弹性融合（非编译霸权）** | 是否增强「按 step meta 选择/跳过/收缩 Capsule」，而非整网/MegaKernel/MPK 独占？ |
 | **G3** | **FusionPlan → Capsule → RF.step 链路** | 是否闭合搜索期 Plan 裁成 Capsule、经 `RF.step` 在 serving 路径可验证地执行？ |
 | **G4** | **Capsule 边界与 meta 桥** | 是否推进 MLP/decoder 片段 Capsule、KV/`block_table`、Radix hit、SM 预算等 **meta 打针**？ |
-| **G5** | **正确性先于吞吐** | 是否有 Capsule/RF **numerical parity**（real torch / 真卡）证据，再谈 latency？ |
-| **G6** | **MACA/CUDA 支撑 Serving** | （支撑轨）是否解除 **Serving 在 MetaX/CUDA 上跑 Capsule** 的编译/ABI/parity 阻塞？ |
+| **G5** | **正确性先于吞吐** | 是否有 Capsule/RF **numerical parity** 证据，再谈 latency/speedup？ |
+| **G6** | **CPU 优先验证逻辑与功能链路** | 是否先在 **CPU**（`YIRAGE_BACKEND=cpu` + real torch / `yirage.core`）闭合逻辑、API、功能链路？CUDA/MACA/其它真卡留到 **目标环境**再验，不阻塞 CPU 轮合并 |
 
 **反模式（默认低价值-拒绝）**：单 Attention 替换、offline demo 抛光、Mirage/MPK/µGraph 对外叙事、孤立 beat cuBLAS/mcPytorch、registry/命名闭合、stub/torch 回退冒充 RF。
 
@@ -160,14 +160,14 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 
 #### 价值结论（四档，必选其一）
 
-四档结论 **必须** 能追溯到上表 **G1–G6**（主轨至少 **G1+G3 或 G4** 之一；支撑轨 **G6**）。
+四档结论 **必须** 能追溯到上表 **G1–G6**（主轨至少 **G1+G3 或 G4** 之一；**G6** 为默认验证阶梯——CPU 逻辑/功能链路先绿，再按环境补真卡）。
 
 | 结论 | 含义（相对设计目标） | 合并门槛 |
 |------|----------------------|----------|
-| **高价值** | 直接推进 **G1–G5** 之一并闭合 [RF 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 一行；或 **G6** 且解除 Serving 真机阻塞 | 矩阵对应验证入口全绿 |
-| **中价值** | 为 **G3/G4/G5** 建立可回归基线、解除下一档主瓶颈，**且不**宣称已完成引擎嵌入 | pytest / archive JSON + 写明服务的 **Gx** |
-| **低价值-拒绝** | 不服务 **G1–G6**；或强化反模式（编译霸权、offline 抛光、回退冒充 RF） | **不得合并** |
-| **支撑轨** | 仅 **G6**：Serving 被 MACA/CUDA 编译或 ABI 阻塞，或用户显式点名 | MetaX/NVIDIA 正式路径证据 |
+| **高价值** | 直接推进 **G1–G5** 之一并闭合 [RF 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 一行；或 **G6** 且在 CPU 上闭合本轮逻辑/功能链路 | 矩阵对应 **CPU** 验证入口全绿；触及 GPU/MACA 能力域时须在笔记标「待目标环境 R{n}」 |
+| **中价值** | 为 **G3/G4/G5/G6** 建立可回归基线、解除下一档主瓶颈，**且不**宣称已完成引擎嵌入或真卡 parity | `make test-serving-cpu-cert-pytest` 或 archive JSON + 写明服务的 **Gx** |
+| **低价值-拒绝** | 不服务 **G1–G6**；或强化反模式（编译霸权、offline 抛光、回退冒充 RF）；或 **跳过 CPU 逻辑验证** 直接用真卡/Cloud 绿冒充完成 | **不得合并** |
+| **支撑轨** | 用户点名或编译/ABI **阻塞** Serving 的 **CUDA/MACA** 专项（**不等同于 G6**） | CPU 契约 pytest 绿 + **目标环境**（MetaX/NVIDIA）真卡 smoke；纯 CPU 不得宣称 GPU parity |
 
 #### 策略卡片 + 轮次笔记模板（必填字段）
 
@@ -176,7 +176,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 设计目标：<G1–G6 编号 + 如何推进/不推进>
 矩阵：<RuntimeFusion 能力矩阵 或 MACA 矩阵 哪一行>
 理由：<为何服务设计目标；为何不是低价值>
-证据：<pytest / bench JSON / e2e demo / MetaX 命令>
+证据：<pytest / make test-serving-cpu-cert-pytest / bench JSON；真卡仅当本轮触及且已在目标环境跑过>
 拒绝项：<未做且违背或不服务设计目标的工作；无则写「无」>
 ```
 
@@ -202,6 +202,24 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 拒绝项：decode nightly artifact — 属 G5 延伸，留 S30。
 ```
 
+#### G6 验证阶梯（CPU 优先 → 目标环境真卡）
+
+```text
+1. CPU（默认合并闸门）：逻辑 + 功能链路 — real torch、`yirage.core`（若触及）、RF pytest / e2e demo
+2. 目标环境（后置、按需）：CUDA / MetaX MACA / 其它卡 — 同 seed 图 parity、融合 bench、mxcc 等
+3. 禁止：无 CPU 逻辑/链路证据 → 用 Cloud CPU 绿或单次真卡 smoke 宣称 MACA/CUDA parity 完成
+```
+
+**示例（MACA 支撑轮，G6 + 支撑轨分工）**：
+
+```text
+价值：支撑轨 — mxcc 编译闭合，Serving 在 MetaX 可跑 Capsule。
+设计目标：G6 已在 CPU 完成 API/搜索契约；本轮在目标环境补 MACA 执行证据（非替代 G6）。
+矩阵：MACA 能力矩阵「构建/transpiler」行。
+证据：pytest test_maca_config（CPU）+ MetaX VM demo_maca_superopt_test（目标环境）。
+拒绝项：仅改文档不跑 MetaX — 不得合并 parity 项。
+```
+
 #### 与行为性价比审查的关系
 
 - **行为性价比**：逐步行动是否绕开根因（每步 1 句话）。
@@ -222,7 +240,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 | **FusionPlan** | Execution plan | `superoptimize` 产物 + cache（legacy: mugraph） | 搜索/复用 |
 | **Device / Tile Graph** | 设备与 tile 抽象 | 代码暂留 KN/TB；文档用新名 | 实现层 |
 | **原语** | cuBLAS / mcPytorch | `.cu` / `.maca`；不重造孤立 GEMM | 仅阻塞时修 |
-| **验证** | generate 数值 + 吞吐 | Capsule vs eager；RF pytest | 正确性优先 |
+| **验证** | generate 数值 + 吞吐 | Capsule vs eager；RF pytest | **G6：CPU 逻辑/链路优先**；真卡后置 |
 
 **借鉴要点**：
 
@@ -238,7 +256,7 @@ Cloud Agent 在**每一步**行动前须自问并写入 PR / 本轮笔记（可 
 2. **RF 对标**：闭合 [RuntimeFusion 能力矩阵](#runtimefusion-能力矩阵对标-vllmsglang) 哪一行？是否仍在用 legacy MPK/µGraph 对外叙事？
 3. **路径**：Capsule 边界是否清晰？`RF.step` 是否消费本轮所需 meta？SM 是否预留？
 4. **收益**：Capsule 通路 / 层覆盖 / KV 桥 / SM / Radix / e2e？性能向须写基线（eager 引擎 vs RF）。
-5. **验证入口**：`make test-serving-cpu-cert-pytest` 或 e2e demo；**禁止**新增 stub/smoke 脚本冒充完成。
+5. **验证入口**：**G6** — `make test-serving-cpu-cert-pytest` / RF e2e demo（CPU 逻辑+功能链路）；GPU/MACA 仅当本轮触及且在 **目标环境** 补跑；**禁止** stub/smoke 冒充完成。
 6. **机会成本**：是否挤掉更高优先级的 Capsule/`step` backlog？
 7. **真实价值**：本轮服务 [设计目标 G1–G6](#设计目标价值评价锚点) 哪几条？四档结论？若为 **低价值-拒绝**（不服务 G1–G6 或命中反模式）→ 改选 backlog，不得开 PR。
 
@@ -702,7 +720,7 @@ pytest tests/python/test_maca_config.py -v
 [ ] 1. 感知：RF 矩阵 gap、FusionPlan/Capsule 可复用面、Legacy 对照；（若触及 MACA）mx-smi / demo_maca_*
 [ ] 2. 策略：只选 1 个 Serving 阶段（默认 S1 Capsule+step → S2→S4…）；拒绝 Mirage/MPK 叙事与单 Attention 替换
 [ ] 3. 落地：最小 patch；优先 `serving/` RF 外壳 / Capsule / meta 桥；legacy 仅作委托；每步过行为性价比
-[ ] 4. 验证：`make test-serving-cpu-cert-pytest`；**禁止**新增 `*smoke*` / contract-only / stub cert；触及 MACA 则 MetaX 入口
+[ ] 4. 验证：**G6 CPU 优先** — `make test-serving-cpu-cert-pytest` 或对应 S{n} pytest；触及 MACA/CUDA 时在笔记标「待目标环境」或已跑真卡命令；**禁止** stub cert
 [ ] 5. 开 PR：push 分支 cursor/...-c4c0（或仓库约定后缀），base=main；PR 含 S{n} 与验证摘要
 [ ] 6. 自动合并：验证闸门通过 → merge
 [ ] 7. 同步 main：git checkout main && git pull
