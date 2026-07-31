@@ -89,6 +89,12 @@ from .qwen_decode_bench import (
     run_qwen_decode_bench,
     run_qwen_multilayer_decode_bench,
 )
+from .engine_g1_regression import (
+    EngineG1ChainRow,
+    EngineG1RegressionReport,
+    run_engine_g1_regression,
+    validate_serving_engine_g1_regression,
+)
 from .decode_bench_archive import (
     load_serving_qwen_decode_bench_archive,
     run_serving_qwen_decode_bench_archive,
@@ -426,6 +432,10 @@ __all__ = [
     "run_serving_qwen_decode_bench_archive",
     "serving_qwen_decode_bench_archive_metadata",
     "validate_serving_qwen_decode_bench_archive",
+    "EngineG1ChainRow",
+    "EngineG1RegressionReport",
+    "run_engine_g1_regression",
+    "validate_serving_engine_g1_regression",
     "run_vllm_mlp_rf_e2e_auto",
     "VllmPagedKvBatchSpec",
     "VllmPagedFullLayerE2EReport",

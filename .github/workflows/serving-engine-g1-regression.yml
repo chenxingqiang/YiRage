@@ -1,0 +1,49 @@
+name: Serving Engine G1 Regression
+
+on:
+  pull_request:
+    paths:
+      - "python/yirage/serving/engine_g1_regression.py"
+      - "python/yirage/serving/vllm_e2e.py"
+      - "python/yirage/serving/sglang_e2e.py"
+      - "benchmark/serving_engine_g1_regression.py"
+      - "tests/python/test_runtime_fusion_s32_engine_g1_regression.py"
+      - "Makefile"
+      - ".github/workflows/serving-engine-g1-regression.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "python/yirage/serving/engine_g1_regression.py"
+      - "python/yirage/serving/vllm_e2e.py"
+      - "python/yirage/serving/sglang_e2e.py"
+      - "benchmark/serving_engine_g1_regression.py"
+      - "tests/python/test_runtime_fusion_s32_engine_g1_regression.py"
+      - "Makefile"
+      - ".github/workflows/serving-engine-g1-regression.yml"
+
+concurrency:
+  group: serving-engine-g1-regression-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  engine-g1-regression:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: S32 G1 regression pytest + bench CLI
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: python:tests/python
+        run: |
+          python3 -m pytest tests/python/test_runtime_fusion_s32_engine_g1_regression.py -v --tb=short
+          python3 benchmark/serving_engine_g1_regression.py --quick --json
