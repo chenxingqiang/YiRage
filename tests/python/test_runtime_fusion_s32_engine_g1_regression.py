@@ -12,7 +12,8 @@ from serving_test_utils import serving
 
 
 def test_runtime_fusion_version_s32(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s32"
+    report = serving.run_engine_g1_regression(quick=True, version="s32")
+    assert report.version == "s32"
 
 
 def test_engine_g1_regression_parity(serving):
