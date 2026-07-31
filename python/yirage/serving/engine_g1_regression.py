@@ -15,10 +15,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from .sglang_e2e import SglangForwardBatchSpec, run_torch_sglang_hybrid_full_e2e
+from .sglang_e2e import (
+    SglangForwardBatchSpec,
+    run_sglang_qwen2_mlp_rf_e2e,
+    run_torch_sglang_hybrid_full_e2e,
+)
 from .sglang_plugin import is_sglang_available
 from .torch_exec import require_torch
-from .vllm_e2e import run_torch_vllm_hybrid_full_e2e
+from .vllm_e2e import run_torch_vllm_hybrid_full_e2e, run_vllm_qwen2_mlp_rf_e2e
 from .vllm_plugin import is_vllm_available
 
 
@@ -50,8 +54,11 @@ class EngineG1RegressionReport:
     chains: List[EngineG1ChainRow] = field(default_factory=list)
     vllm_hybrid: Optional[Dict[str, Any]] = None
     sglang_hybrid: Optional[Dict[str, Any]] = None
+    vllm_native: Optional[Dict[str, Any]] = None
+    sglang_native: Optional[Dict[str, Any]] = None
     vllm_native_available: bool = False
     sglang_native_available: bool = False
+    native_parity_ok: Optional[bool] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -61,9 +68,12 @@ class EngineG1RegressionReport:
             "device": self.device,
             "vllm_native_available": self.vllm_native_available,
             "sglang_native_available": self.sglang_native_available,
+            "native_parity_ok": self.native_parity_ok,
             "chains": [c.to_dict() for c in self.chains],
             "vllm_hybrid": self.vllm_hybrid,
             "sglang_hybrid": self.sglang_hybrid,
+            "vllm_native": self.vllm_native,
+            "sglang_native": self.sglang_native,
         }
 
 
@@ -93,6 +103,7 @@ def run_engine_g1_regression(
     intermediate_size: int = 32,
     batch: int = 4,
     quick: bool = False,
+    try_native: bool = True,
     version: str = "s32",
 ) -> EngineG1RegressionReport:
     """Run G7 chain C + D torch regression (G1 engine-cooperative gate)."""
@@ -153,6 +164,59 @@ def run_engine_g1_regression(
     ]
     parity_ok = all(c.parity_ok for c in chains)
 
+    vllm_avail = is_vllm_available()
+    sglang_avail = is_sglang_available()
+    vllm_native_payload: Optional[Dict[str, Any]] = None
+    sglang_native_payload: Optional[Dict[str, Any]] = None
+    native_parity_ok: Optional[bool] = None
+
+    if try_native and vllm_avail:
+        try:
+            native_report = run_vllm_qwen2_mlp_rf_e2e(
+                hidden_size=max(hidden_size, 64),
+                intermediate_size=max(intermediate_size, 128),
+                batch=min(batch, 2),
+                bench=False,
+            )
+            vllm_native_payload = native_report.to_dict()
+            chains.append(
+                EngineG1ChainRow(
+                    chain_id="chain_c_vllm_native",
+                    functional_chain="chain_c_vllm_plugin",
+                    parity_ok=bool(native_report.parity_ok),
+                    plugin=native_report.plugin,
+                    engine="vllm_native",
+                )
+            )
+        except Exception:
+            vllm_native_payload = {"parity_ok": False, "error": "native_vllm_e2e_failed"}
+
+    if try_native and sglang_avail:
+        try:
+            native_report = run_sglang_qwen2_mlp_rf_e2e(
+                forward_batch=sglang_batch,
+                hidden_size=max(hidden_size, 64),
+                intermediate_size=max(intermediate_size, 128),
+                batch=min(batch, 2),
+                bench=False,
+            )
+            sglang_native_payload = native_report.to_dict()
+            chains.append(
+                EngineG1ChainRow(
+                    chain_id="chain_d_sglang_native",
+                    functional_chain="chain_d_sglang_forward_batch",
+                    parity_ok=bool(native_report.parity_ok),
+                    plugin=native_report.plugin,
+                    engine="sglang_native",
+                )
+            )
+        except Exception:
+            sglang_native_payload = {"parity_ok": False, "error": "native_sglang_e2e_failed"}
+
+    native_chain_rows = [c for c in chains if c.engine in ("vllm_native", "sglang_native")]
+    if native_chain_rows:
+        native_parity_ok = all(c.parity_ok for c in native_chain_rows)
+
     return EngineG1RegressionReport(
         version=version,
         parity_ok=parity_ok,
@@ -160,6 +224,9 @@ def run_engine_g1_regression(
         chains=chains,
         vllm_hybrid=vllm_report.to_dict(),
         sglang_hybrid=sglang_report.to_dict(),
-        vllm_native_available=is_vllm_available(),
-        sglang_native_available=is_sglang_available(),
+        vllm_native=vllm_native_payload,
+        sglang_native=sglang_native_payload,
+        vllm_native_available=vllm_avail,
+        sglang_native_available=sglang_avail,
+        native_parity_ok=native_parity_ok,
     )

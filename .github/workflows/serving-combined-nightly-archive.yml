@@ -51,8 +51,9 @@ jobs:
           YIRAGE_BACKEND: cpu
           PYTHONPATH: python:tests/python
         run: |
-          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py -v -k "not slow" --tb=short
+          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py tests/python/test_runtime_fusion_s35_engine_native_multistep.py -v -k "not slow" --tb=short
           python3 benchmark/serving_combined_nightly_archive.py --quick --g1-only --json
+          python3 benchmark/serving_engine_native_multistep_bench.py --quick --no-native --json
 
   serving-combined-archive-nightly:
     runs-on: ubuntu-22.04

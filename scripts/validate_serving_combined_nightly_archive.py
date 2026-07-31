@@ -44,6 +44,8 @@ def main() -> int:
             errors = [e for e in errors if not e.startswith("decode.")]
         if payload.get("multistep") is None:
             errors = [e for e in errors if not e.startswith("multistep.")]
+        if payload.get("engine_multistep") is None:
+            errors = [e for e in errors if not e.startswith("engine_multistep.")]
     if errors:
         print(json.dumps({"ok": False, "errors": errors}, indent=2))
         return 1

@@ -44,10 +44,10 @@ def main() -> int:
         from yirage.serving.torch_exec import require_torch
 
         require_torch()
-        g1 = run_engine_g1_regression(quick=args.quick, version="s34").to_dict()
+        g1 = run_engine_g1_regression(quick=args.quick, version="s35").to_dict()
         payload = {
             "serving_combined_nightly_archive": True,
-            "version": "s34",
+            "version": "s35",
             "parity_ok": g1.get("parity_ok"),
             "quick": args.quick,
             "functional_chains": ["chain_c_vllm_torch", "chain_d_sglang_torch"],
@@ -60,7 +60,7 @@ def main() -> int:
         from yirage.serving.yirage_exec import require_yirage_core
 
         require_yirage_core()
-        payload = run_serving_combined_nightly_archive(quick=args.quick, version="s34")
+        payload = run_serving_combined_nightly_archive(quick=args.quick, version="s35")
 
     if args.output:
         Path(args.output).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
