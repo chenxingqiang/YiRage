@@ -1,0 +1,108 @@
+name: Serving Decode Bench Archive
+
+on:
+  pull_request:
+    paths:
+      - "python/yirage/serving/decode_bench_archive.py"
+      - "python/yirage/serving/qwen_decode_bench.py"
+      - "scripts/serving_decode_bench_archive.py"
+      - "scripts/validate_serving_qwen_decode_bench_archive.py"
+      - "tests/python/test_runtime_fusion_s31_decode_nightly.py"
+      - "benchmark/serving_qwen_decode_bench.py"
+      - "Makefile"
+      - ".github/workflows/serving-decode-bench-archive.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "python/yirage/serving/decode_bench_archive.py"
+      - "python/yirage/serving/qwen_decode_bench.py"
+      - "scripts/serving_decode_bench_archive.py"
+      - "scripts/validate_serving_qwen_decode_bench_archive.py"
+      - "tests/python/test_runtime_fusion_s31_decode_nightly.py"
+      - "benchmark/serving_qwen_decode_bench.py"
+      - "Makefile"
+      - ".github/workflows/serving-decode-bench-archive.yml"
+  schedule:
+    - cron: "30 6 * * *"
+
+concurrency:
+  group: serving-decode-bench-archive-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  serving-decode-archive-contract:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    if: github.event_name != 'schedule'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: S31 decode archive contract pytest
+        env:
+          YIRAGE_BACKEND: cpu
+          PYTHONPATH: python:tests/python
+        run: |
+          python3 -m pytest tests/python/test_runtime_fusion_s31_decode_nightly.py -v -k "not slow" --tb=short
+
+  serving-decode-archive-nightly:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    if: github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-dev python3-pip libboost-all-dev libz3-dev libopenblas-dev build-essential curl
+
+      - name: Install Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain stable
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+
+      - name: Build Rust search helpers
+        run: |
+          (cd src/search/abstract_expr/abstract_subexpr && cargo build --release --target-dir ../../../../build/abstract_subexpr)
+          (cd src/search/verification/formal_verifier_equiv && cargo build --release --target-dir ../../../../build/formal_verifier)
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install z3-solver numpy graphviz tqdm transformers pytest
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Build YiRage CPU
+        env:
+          YIRAGE_BACKEND: cpu
+        run: |
+          python3 -m pip install -e . --no-build-isolation
+
+      - name: Generate and validate decode bench archive
+        env:
+          YIRAGE_BACKEND: cpu
+          LD_LIBRARY_PATH: build/abstract_subexpr/release:build/formal_verifier/release
+          PYTHONPATH: python:tests/python
+        run: |
+          mkdir -p artifacts
+          make test-serving-decode-bench-nightly-profile
+
+      - name: Upload decode bench archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: serving-decode-bench-archive
+          path: |
+            artifacts/serving-decode-bench.json
+            artifacts/serving-decode-bench.meta.json

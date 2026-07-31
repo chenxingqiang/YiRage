@@ -89,6 +89,12 @@ from .qwen_decode_bench import (
     run_qwen_decode_bench,
     run_qwen_multilayer_decode_bench,
 )
+from .decode_bench_archive import (
+    load_serving_qwen_decode_bench_archive,
+    run_serving_qwen_decode_bench_archive,
+    serving_qwen_decode_bench_archive_metadata,
+    validate_serving_qwen_decode_bench_archive,
+)
 from .mlp_capsule_bench import (
     MlpCapsuleBenchReport,
     MlpCapsuleBenchRow,
@@ -416,6 +422,10 @@ __all__ = [
     "MlpCapsuleBenchReport",
     "MlpCapsuleBenchRow",
     "run_mlp_capsule_bench",
+    "load_serving_qwen_decode_bench_archive",
+    "run_serving_qwen_decode_bench_archive",
+    "serving_qwen_decode_bench_archive_metadata",
+    "validate_serving_qwen_decode_bench_archive",
     "run_vllm_mlp_rf_e2e_auto",
     "VllmPagedKvBatchSpec",
     "VllmPagedFullLayerE2EReport",
