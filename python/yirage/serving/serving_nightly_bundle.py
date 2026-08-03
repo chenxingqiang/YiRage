@@ -25,6 +25,45 @@ def _archive_sha256(payload: Mapping[str, Any]) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def serving_nightly_bundle_ci_contract() -> Dict[str, Any]:
+    """CI/nightly artifact manifest for combined archive + dashboard bundle (S44)."""
+    return {
+        "serving_nightly_bundle_ci_contract": True,
+        "make_profile_target": "test-serving-combined-nightly-profile",
+        "validate_cli": "scripts/validate_serving_combined_nightly_bundle.py",
+        "workflow_path": ".github/workflows/serving-combined-nightly-archive.yml",
+        "artifact_files": [
+            "artifacts/serving-combined-nightly.json",
+            "artifacts/serving-combined-nightly.meta.json",
+            "artifacts/serving-dashboard.json",
+            "artifacts/serving-dashboard.meta.json",
+            "artifacts/serving-dashboard.html",
+            "artifacts/serving-dashboard.md",
+            "artifacts/serving-nightly-bundle.meta.json",
+        ],
+        "contract_pytests": [
+            "tests/python/test_runtime_fusion_s42_nightly_bundle_validate.py",
+            "tests/python/test_runtime_fusion_s44_nightly_bundle_ci_contract.py",
+        ],
+        "bench_smokes": [
+            "benchmark/serving_combined_nightly_bundle_validate.py",
+            "benchmark/serving_dashboard_validate.py",
+        ],
+    }
+
+
+def validate_serving_nightly_bundle_ci_contract(payload: Mapping[str, Any]) -> List[str]:
+    errors: List[str] = []
+    if not payload.get("serving_nightly_bundle_ci_contract"):
+        errors.append("missing serving_nightly_bundle_ci_contract marker")
+    files = payload.get("artifact_files")
+    if not isinstance(files, list) or len(files) < 7:
+        errors.append("artifact_files must list all nightly bundle outputs")
+    if not isinstance(payload.get("make_profile_target"), str):
+        errors.append("make_profile_target must be a string")
+    return errors
+
+
 def validate_serving_combined_nightly_bundle(
     *,
     archive_payload: Mapping[str, Any],
@@ -58,6 +97,16 @@ def validate_serving_combined_nightly_bundle(
             errors.append("archive_metadata version mismatch with combined archive")
         if archive_metadata.get("parity_ok") != archive_parity:
             errors.append("archive_metadata parity_ok mismatch with combined archive")
+        paged_native_full = (
+            archive_payload.get("paged_multistep")
+            if isinstance(archive_payload.get("paged_multistep"), dict)
+            else {}
+        ).get("native_full_layer_parity_ok")
+        meta_native_full = archive_metadata.get("paged_multistep_native_full_layer_parity_ok")
+        if meta_native_full != paged_native_full:
+            errors.append(
+                "archive_metadata paged_multistep_native_full_layer_parity_ok mismatch"
+            )
         meta_sha = archive_metadata.get("archive_sha256")
         if isinstance(meta_sha, str) and meta_sha != expected_sha:
             errors.append("archive_metadata archive_sha256 mismatch with combined archive payload")
@@ -135,6 +184,10 @@ def serving_combined_nightly_bundle_metadata(
         "dashboard_json_sha256": dashboard_metadata.get("json_sha256"),
         "merge_gate_ok": dashboard_metadata.get("merge_gate_ok"),
         "row_count": dashboard_metadata.get("row_count"),
+        "paged_multistep_native_parity_ok": archive_metadata.get("paged_multistep_native_parity_ok"),
+        "paged_multistep_native_full_layer_parity_ok": archive_metadata.get(
+            "paged_multistep_native_full_layer_parity_ok"
+        ),
         "created_unix": time.time(),
     }
 
@@ -149,4 +202,6 @@ def validate_serving_combined_nightly_bundle_metadata(payload: Mapping[str, Any]
         errors.append("archive_sha256 must be present")
     if not isinstance(payload.get("dashboard_json_sha256"), str):
         errors.append("dashboard_json_sha256 must be present")
+    if "paged_multistep_native_full_layer_parity_ok" not in payload:
+        errors.append("paged_multistep_native_full_layer_parity_ok must be present")
     return errors

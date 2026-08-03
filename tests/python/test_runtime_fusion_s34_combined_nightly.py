@@ -120,12 +120,14 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
             "vllm_native_available": False,
             "native_parity_ok": None,
             "native_step_parity_ok": [],
+            "native_full_layer_parity_ok": None,
+            "native_full_layer_step_parity_ok": [],
         },
     }
 
 
 def test_runtime_fusion_version_s34(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s43"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s44"
 
 
 def test_validate_combined_nightly_archive_synthetic(serving):
