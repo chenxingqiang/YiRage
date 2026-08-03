@@ -37,7 +37,7 @@ def _synthetic_paged_multistep_full_layer(*, version: str = "s43") -> dict:
 
 
 def test_runtime_fusion_version_s43(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s44"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
 
 
 def test_paged_multistep_full_layer_fields_contract(serving):

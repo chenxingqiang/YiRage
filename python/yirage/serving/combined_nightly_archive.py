@@ -163,6 +163,12 @@ def serving_combined_nightly_archive_metadata(
         "paged_multistep_native_full_layer_parity_ok": paged_multistep.get(
             "native_full_layer_parity_ok"
         ),
+        "paged_multistep_native_decoder_parity_ok": paged_multistep.get(
+            "native_decoder_parity_ok"
+        ),
+        "paged_multistep_native_decoder_token_match_ok": paged_multistep.get(
+            "native_decoder_token_match_ok"
+        ),
         "vllm_native_available": engine_g1.get("vllm_native_available"),
         "sglang_native_available": engine_g1.get("sglang_native_available"),
         "archive_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),

@@ -15,7 +15,12 @@ from typing import Any, Dict, List, Optional, Sequence
 from .hybrid_model import HybridModelOverride
 from .torch_engine import TorchEngineModel
 from .torch_exec import require_torch
-from .vllm_e2e import _vllm_native_mlp_forward, build_minimal_vllm_qwen2_decoder_layer
+from .vllm_e2e import (
+    _vllm_chain_native_decoder_layers,
+    _vllm_chain_native_decoder_layers_rf_mlp,
+    _vllm_native_mlp_forward,
+    build_minimal_vllm_qwen2_decoder_layer,
+)
 from .vllm_paged_e2e import VllmPagedKvBatchSpec, _layer_step_meta_has_paged_kv, _paged_kv_present
 from .vllm_plugin import build_vllm_qwen2_mlp_rf_hook, is_vllm_available
 from .vllm_runtime import vllm_test_config_context
@@ -45,6 +50,12 @@ class VllmPagedMultistepReport:
     native_step_parity_ok: List[bool] = field(default_factory=list)
     native_full_layer_parity_ok: Optional[bool] = None
     native_full_layer_step_parity_ok: List[bool] = field(default_factory=list)
+    native_decoder_parity_ok: Optional[bool] = None
+    native_decoder_token_match_ok: Optional[bool] = None
+    native_decoder_step_parity_ok: List[bool] = field(default_factory=list)
+    native_decoder_step_token_match_ok: List[bool] = field(default_factory=list)
+    native_decoder_ref_token_ids: List[List[int]] = field(default_factory=list)
+    native_decoder_rf_token_ids: List[List[int]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -69,6 +80,12 @@ class VllmPagedMultistepReport:
             "native_step_parity_ok": list(self.native_step_parity_ok),
             "native_full_layer_parity_ok": self.native_full_layer_parity_ok,
             "native_full_layer_step_parity_ok": list(self.native_full_layer_step_parity_ok),
+            "native_decoder_parity_ok": self.native_decoder_parity_ok,
+            "native_decoder_token_match_ok": self.native_decoder_token_match_ok,
+            "native_decoder_step_parity_ok": list(self.native_decoder_step_parity_ok),
+            "native_decoder_step_token_match_ok": list(self.native_decoder_step_token_match_ok),
+            "native_decoder_ref_token_ids": [list(row) for row in self.native_decoder_ref_token_ids],
+            "native_decoder_rf_token_ids": [list(row) for row in self.native_decoder_rf_token_ids],
         }
 
 
@@ -222,6 +239,103 @@ def _run_vllm_native_paged_multistep_full_layer(
     return step_ok
 
 
+def _run_vllm_native_decoder_paged_multistep(
+    *,
+    decode_steps: int,
+    num_layers: int,
+    hidden_size: int,
+    intermediate_size: int,
+    batch: int,
+    base_seq: Sequence[int],
+    block_tables: Sequence[Sequence[int]],
+    page_size: int,
+    vocab_size: int,
+    seed: int,
+) -> Optional[
+    tuple[
+        List[bool],
+        List[bool],
+        List[List[int]],
+        List[List[int]],
+    ]
+]:
+    """Native vLLM full decoder stack vs RF-on-MLP hybrid with paged KV (S45)."""
+    if not is_vllm_available() or num_layers < 1:
+        return None
+    require_torch()
+    import torch
+
+    layers = [
+        build_minimal_vllm_qwen2_decoder_layer(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            layer_id=layer_id,
+        )
+        for layer_id in range(num_layers)
+    ]
+    hooks = [
+        build_vllm_qwen2_mlp_rf_hook(layer, layer_id=layer_id)
+        for layer_id, layer in enumerate(layers)
+    ]
+    device = str(next(layers[0].parameters()).device)
+
+    gen = torch.Generator(device="cpu")
+    gen.manual_seed(seed + 99)
+    lm_weight = (
+        torch.randn(vocab_size, hidden_size, generator=gen, device="cpu", dtype=torch.float32)
+        * 0.02
+    ).to(device)
+
+    h = torch.randn(batch, hidden_size, dtype=torch.float32, device=device)
+    step_parity: List[bool] = []
+    step_token: List[bool] = []
+    ref_tokens: List[List[int]] = []
+    rf_tokens: List[List[int]] = []
+
+    for step in range(decode_steps):
+        paged_batch = _paged_batch_for_step(
+            step=step,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+        meta_base = dict(paged_batch.as_rf_meta())
+        positions = torch.tensor(
+            [int(s) - 1 for s in paged_batch.seq_lens],
+            dtype=torch.long,
+            device=device,
+        )
+        with vllm_test_config_context():
+            with torch.no_grad():
+                ref_hidden = _vllm_chain_native_decoder_layers(
+                    layers,
+                    positions=positions,
+                    hidden_states=h,
+                )
+                rf_hidden = _vllm_chain_native_decoder_layers_rf_mlp(
+                    layers,
+                    hooks,
+                    positions=positions,
+                    hidden_states=h,
+                    rf_meta_base=meta_base,
+                )
+        ok = bool(torch.allclose(ref_hidden, rf_hidden, rtol=1e-4, atol=1e-4))
+        ok = ok and _paged_kv_present(meta_base)
+        step_parity.append(ok)
+
+        ref_logits = ref_hidden @ lm_weight.T
+        rf_logits = rf_hidden @ lm_weight.T
+        ref_tok = ref_logits.argmax(dim=-1)
+        rf_tok = rf_logits.argmax(dim=-1)
+        step_token.append(bool(torch.equal(ref_tok, rf_tok)))
+        ref_tokens.append(ref_tok.tolist())
+        rf_tokens.append(rf_tok.tolist())
+        h = ref_hidden.detach()
+
+    return step_parity, step_token, ref_tokens, rf_tokens
+
+
 def run_vllm_paged_multistep_bench(
     *,
     decode_steps: int = 4,
@@ -235,7 +349,8 @@ def run_vllm_paged_multistep_bench(
     quick: bool = False,
     try_native: bool = True,
     try_native_full_layer: bool = True,
-    version: str = "s43",
+    try_native_decoder: bool = True,
+    version: str = "s45",
 ) -> VllmPagedMultistepReport:
     """Run multistep paged-KV hybrid vs engine with per-step token parity."""
     require_torch()
@@ -338,6 +453,32 @@ def run_vllm_paged_multistep_bench(
         )
     native_full_layer_parity_ok = all(native_full_steps) if native_full_steps else None
 
+    native_decoder_steps: Optional[List[bool]] = None
+    native_decoder_token_steps: Optional[List[bool]] = None
+    native_decoder_ref_tokens: List[List[int]] = []
+    native_decoder_rf_tokens: List[List[int]] = []
+    if try_native_decoder and vllm_avail and num_layers > 0:
+        decoder_out = _run_vllm_native_decoder_paged_multistep(
+            decode_steps=decode_steps,
+            num_layers=num_layers,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+            vocab_size=vocab_size,
+            seed=seed,
+        )
+        if decoder_out is not None:
+            native_decoder_steps, native_decoder_token_steps, native_decoder_ref_tokens, native_decoder_rf_tokens = (
+                decoder_out
+            )
+    native_decoder_parity_ok = all(native_decoder_steps) if native_decoder_steps else None
+    native_decoder_token_match_ok = (
+        all(native_decoder_token_steps) if native_decoder_token_steps else None
+    )
+
     return VllmPagedMultistepReport(
         version=version,
         parity_ok=parity_ok,
@@ -358,6 +499,12 @@ def run_vllm_paged_multistep_bench(
         native_step_parity_ok=list(native_steps or []),
         native_full_layer_parity_ok=native_full_layer_parity_ok,
         native_full_layer_step_parity_ok=list(native_full_steps or []),
+        native_decoder_parity_ok=native_decoder_parity_ok,
+        native_decoder_token_match_ok=native_decoder_token_match_ok,
+        native_decoder_step_parity_ok=list(native_decoder_steps or []),
+        native_decoder_step_token_match_ok=list(native_decoder_token_steps or []),
+        native_decoder_ref_token_ids=native_decoder_ref_tokens,
+        native_decoder_rf_token_ids=native_decoder_rf_tokens,
     )
 
 
@@ -367,13 +514,15 @@ def run_serving_vllm_paged_multistep_archive(
     quick: bool = True,
     try_native: bool = True,
     try_native_full_layer: bool = True,
-    version: str = "s43",
+    try_native_decoder: bool = True,
+    version: str = "s45",
 ) -> Dict[str, Any]:
     payload = run_vllm_paged_multistep_bench(
         decode_steps=decode_steps,
         quick=quick,
         try_native=try_native,
         try_native_full_layer=try_native_full_layer,
+        try_native_decoder=try_native_decoder,
         version=version,
     ).to_dict()
     errors = validate_serving_vllm_paged_multistep_bench(payload)

@@ -44,6 +44,7 @@ def serving_nightly_bundle_ci_contract() -> Dict[str, Any]:
         "contract_pytests": [
             "tests/python/test_runtime_fusion_s42_nightly_bundle_validate.py",
             "tests/python/test_runtime_fusion_s44_nightly_bundle_ci_contract.py",
+            "tests/python/test_runtime_fusion_s45_native_decoder_paged.py",
         ],
         "bench_smokes": [
             "benchmark/serving_combined_nightly_bundle_validate.py",
@@ -106,6 +107,28 @@ def validate_serving_combined_nightly_bundle(
         if meta_native_full != paged_native_full:
             errors.append(
                 "archive_metadata paged_multistep_native_full_layer_parity_ok mismatch"
+            )
+        paged_native_decoder = (
+            archive_payload.get("paged_multistep")
+            if isinstance(archive_payload.get("paged_multistep"), dict)
+            else {}
+        ).get("native_decoder_parity_ok")
+        meta_native_decoder = archive_metadata.get("paged_multistep_native_decoder_parity_ok")
+        if meta_native_decoder != paged_native_decoder:
+            errors.append(
+                "archive_metadata paged_multistep_native_decoder_parity_ok mismatch"
+            )
+        paged_native_decoder_tok = (
+            archive_payload.get("paged_multistep")
+            if isinstance(archive_payload.get("paged_multistep"), dict)
+            else {}
+        ).get("native_decoder_token_match_ok")
+        meta_native_decoder_tok = archive_metadata.get(
+            "paged_multistep_native_decoder_token_match_ok"
+        )
+        if meta_native_decoder_tok != paged_native_decoder_tok:
+            errors.append(
+                "archive_metadata paged_multistep_native_decoder_token_match_ok mismatch"
             )
         meta_sha = archive_metadata.get("archive_sha256")
         if isinstance(meta_sha, str) and meta_sha != expected_sha:
@@ -188,6 +211,12 @@ def serving_combined_nightly_bundle_metadata(
         "paged_multistep_native_full_layer_parity_ok": archive_metadata.get(
             "paged_multistep_native_full_layer_parity_ok"
         ),
+        "paged_multistep_native_decoder_parity_ok": archive_metadata.get(
+            "paged_multistep_native_decoder_parity_ok"
+        ),
+        "paged_multistep_native_decoder_token_match_ok": archive_metadata.get(
+            "paged_multistep_native_decoder_token_match_ok"
+        ),
         "created_unix": time.time(),
     }
 
@@ -204,4 +233,8 @@ def validate_serving_combined_nightly_bundle_metadata(payload: Mapping[str, Any]
         errors.append("dashboard_json_sha256 must be present")
     if "paged_multistep_native_full_layer_parity_ok" not in payload:
         errors.append("paged_multistep_native_full_layer_parity_ok must be present")
+    if "paged_multistep_native_decoder_parity_ok" not in payload:
+        errors.append("paged_multistep_native_decoder_parity_ok must be present")
+    if "paged_multistep_native_decoder_token_match_ok" not in payload:
+        errors.append("paged_multistep_native_decoder_token_match_ok must be present")
     return errors

@@ -34,7 +34,7 @@ def _synthetic_paged_multistep_native(*, version: str = "s40") -> dict:
 
 
 def test_runtime_fusion_version_s40(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s44"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
 
 
 def test_paged_multistep_native_fields_contract(serving):
