@@ -85,12 +85,15 @@ def _synthetic_combined_for_dashboard(*, version: str = "s38") -> dict:
             "functional_chain": "chain_c_vllm_paged_multistep",
             "engine_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             "hybrid_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+            "vllm_native_available": False,
+            "native_parity_ok": None,
+            "native_step_parity_ok": [],
         },
     }
 
 
 def test_runtime_fusion_version_s36(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s39"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s40"
 
 
 def test_build_dashboard_from_synthetic_archive(serving):
@@ -151,7 +154,7 @@ def test_dashboard_json_contract(serving):
         _synthetic_combined_for_dashboard()
     ).to_dict()
     assert payload["serving_dashboard"] is True
-    assert payload["version"] == "s39"
+    assert payload["version"] == "s40"
     json.dumps(payload)
 
 

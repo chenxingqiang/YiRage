@@ -31,7 +31,7 @@ def _synthetic_paged_multistep(*, version: str = "s37") -> dict:
 
 
 def test_runtime_fusion_version_s37(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s39"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s40"
 
 
 def test_validate_vllm_paged_multistep_synthetic(serving):
@@ -48,6 +48,7 @@ def test_vllm_paged_multistep_torch_parity(serving):
     report = serving.run_vllm_paged_multistep_bench(
         decode_steps=3,
         quick=True,
+        try_native=False,
         version="s37",
     )
     assert report.parity_ok
@@ -61,7 +62,7 @@ def test_vllm_paged_multistep_torch_parity(serving):
 
 def test_vllm_paged_multistep_json_contract(serving):
     serving.require_torch()
-    payload = serving.run_vllm_paged_multistep_bench(quick=True, version="s37").to_dict()
+    payload = serving.run_vllm_paged_multistep_bench(quick=True, try_native=False, version="s37").to_dict()
     errors = serving.validate_serving_vllm_paged_multistep_bench(payload)
     assert errors == []
     assert payload["serving_vllm_paged_multistep_bench"] is True

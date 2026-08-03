@@ -37,6 +37,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decode-steps", type=int, default=4)
     parser.add_argument("--quick", action="store_true")
+    parser.add_argument("--no-native", action="store_true", help="Skip native vLLM tier")
     parser.add_argument("--output", default="", help="Write JSON report to path")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
@@ -51,7 +52,8 @@ def main() -> int:
     report = bench.run_vllm_paged_multistep_bench(
         decode_steps=args.decode_steps,
         quick=args.quick,
-        version="s37",
+        try_native=not args.no_native,
+        version="s40",
     )
     payload = report.to_dict()
     if args.output:

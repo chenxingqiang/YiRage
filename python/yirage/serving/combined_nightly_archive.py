@@ -159,6 +159,7 @@ def serving_combined_nightly_archive_metadata(
         "engine_multistep_native_parity_ok": engine_multistep.get("native_parity_ok"),
         "paged_multistep_parity_ok": paged_multistep.get("parity_ok"),
         "paged_multistep_token_match_ok": paged_multistep.get("token_match_ok"),
+        "paged_multistep_native_parity_ok": paged_multistep.get("native_parity_ok"),
         "vllm_native_available": engine_g1.get("vllm_native_available"),
         "sglang_native_available": engine_g1.get("sglang_native_available"),
         "archive_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
@@ -235,6 +236,7 @@ def run_serving_combined_nightly_archive(
     if not skip_paged_multistep:
         paged_multistep_payload = run_serving_vllm_paged_multistep_archive(
             quick=quick,
+            try_native=True,
             version=version,
         )
         parity_ok = parity_ok and bool(paged_multistep_payload.get("parity_ok"))

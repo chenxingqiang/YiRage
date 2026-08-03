@@ -16,7 +16,7 @@ from test_runtime_fusion_s36_serving_dashboard import _synthetic_combined_for_da
 
 
 def test_runtime_fusion_version_s39(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s39"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s40"
 
 
 def test_dashboard_html_renders(serving):
