@@ -1,10 +1,10 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S37: vLLM PagedAttention multistep decode bench (G7 chain C paged extension).
+"""S37/S40: vLLM PagedAttention multistep decode bench (G7 chain C paged extension).
 
 N decode steps with evolving ``VllmPagedKvBatchSpec`` (seq_lens grow per step).
-Each step runs full-layer hybrid vs engine with bridged paged KV meta; greedy
-token ids from a shared toy lm_head must match when ``parity_ok`` holds.
+Torch path: full-layer hybrid vs engine with greedy token match (cert gate).
+Optional native ``vllm`` single-layer MLP + paged meta loop when installed.
 """
 
 from __future__ import annotations
@@ -15,7 +15,10 @@ from typing import Any, Dict, List, Optional, Sequence
 from .hybrid_model import HybridModelOverride
 from .torch_engine import TorchEngineModel
 from .torch_exec import require_torch
+from .vllm_e2e import _vllm_native_mlp_forward, build_minimal_vllm_qwen2_decoder_layer
 from .vllm_paged_e2e import VllmPagedKvBatchSpec, _layer_step_meta_has_paged_kv, _paged_kv_present
+from .vllm_plugin import build_vllm_qwen2_mlp_rf_hook, is_vllm_available
+from .vllm_runtime import vllm_test_config_context
 
 
 @dataclass
@@ -37,6 +40,9 @@ class VllmPagedMultistepReport:
     step_token_match_ok: List[bool] = field(default_factory=list)
     engine_token_ids: List[List[int]] = field(default_factory=list)
     hybrid_token_ids: List[List[int]] = field(default_factory=list)
+    vllm_native_available: bool = False
+    native_parity_ok: Optional[bool] = None
+    native_step_parity_ok: List[bool] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -56,6 +62,9 @@ class VllmPagedMultistepReport:
             "step_token_match_ok": list(self.step_token_match_ok),
             "engine_token_ids": [list(row) for row in self.engine_token_ids],
             "hybrid_token_ids": [list(row) for row in self.hybrid_token_ids],
+            "vllm_native_available": self.vllm_native_available,
+            "native_parity_ok": self.native_parity_ok,
+            "native_step_parity_ok": list(self.native_step_parity_ok),
         }
 
 
@@ -98,6 +107,56 @@ def _paged_batch_for_step(
     )
 
 
+def _run_vllm_native_paged_multistep(
+    *,
+    decode_steps: int,
+    hidden_size: int,
+    intermediate_size: int,
+    batch: int,
+    base_seq: Sequence[int],
+    block_tables: Sequence[Sequence[int]],
+    page_size: int,
+    layer_id: int = 0,
+) -> Optional[List[bool]]:
+    """Native vLLM MLP hook loop with evolving paged KV meta (optional tier)."""
+    if not is_vllm_available():
+        return None
+    require_torch()
+    import torch
+
+    layer = build_minimal_vllm_qwen2_decoder_layer(
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        layer_id=layer_id,
+    )
+    hook = build_vllm_qwen2_mlp_rf_hook(layer, layer_id=layer_id)
+    device = str(next(layer.parameters()).device)
+    h = torch.randn(batch, hidden_size, dtype=torch.float32, device=device)
+    cap_name = hook.override.capsule_name
+    step_ok: List[bool] = []
+
+    for step in range(decode_steps):
+        paged_batch = _paged_batch_for_step(
+            step=step,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+        meta = dict(paged_batch.as_rf_meta())
+        meta["enabled"] = {cap_name}
+        with vllm_test_config_context():
+            with torch.no_grad():
+                ref = _vllm_native_mlp_forward(layer, h)
+                got = hook.forward_mlp(h, rf_meta=meta)
+        ok = bool(torch.allclose(got.hidden, ref, rtol=1e-4, atol=1e-4))
+        ok = ok and _paged_kv_present(meta)
+        step_ok.append(ok)
+        h = ref.detach()
+
+    return step_ok
+
+
 def run_vllm_paged_multistep_bench(
     *,
     decode_steps: int = 4,
@@ -109,7 +168,8 @@ def run_vllm_paged_multistep_bench(
     page_size: int = 16,
     seed: int = 0,
     quick: bool = False,
-    version: str = "s37",
+    try_native: bool = True,
+    version: str = "s40",
 ) -> VllmPagedMultistepReport:
     """Run multistep paged-KV hybrid vs engine with per-step token parity."""
     require_torch()
@@ -184,6 +244,20 @@ def run_vllm_paged_multistep_bench(
     parity_ok = all(step_parity)
     token_match_ok = all(step_token)
 
+    vllm_avail = is_vllm_available()
+    native_steps: Optional[List[bool]] = None
+    if try_native and vllm_avail:
+        native_steps = _run_vllm_native_paged_multistep(
+            decode_steps=decode_steps,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+    native_parity_ok = all(native_steps) if native_steps else None
+
     return VllmPagedMultistepReport(
         version=version,
         parity_ok=parity_ok,
@@ -199,6 +273,9 @@ def run_vllm_paged_multistep_bench(
         step_token_match_ok=step_token,
         engine_token_ids=engine_tokens,
         hybrid_token_ids=hybrid_tokens,
+        vllm_native_available=vllm_avail,
+        native_parity_ok=native_parity_ok,
+        native_step_parity_ok=list(native_steps or []),
     )
 
 
@@ -206,11 +283,13 @@ def run_serving_vllm_paged_multistep_archive(
     *,
     decode_steps: int = 4,
     quick: bool = True,
-    version: str = "s37",
+    try_native: bool = True,
+    version: str = "s40",
 ) -> Dict[str, Any]:
     payload = run_vllm_paged_multistep_bench(
         decode_steps=decode_steps,
         quick=quick,
+        try_native=try_native,
         version=version,
     ).to_dict()
     errors = validate_serving_vllm_paged_multistep_bench(payload)
