@@ -127,6 +127,12 @@ from .engine_native_multistep_bench import (
     run_serving_engine_native_multistep_archive,
     validate_serving_engine_native_multistep_bench,
 )
+from .vllm_paged_multistep_bench import (
+    VllmPagedMultistepReport,
+    run_serving_vllm_paged_multistep_archive,
+    run_vllm_paged_multistep_bench,
+    validate_serving_vllm_paged_multistep_bench,
+)
 from .mlp_capsule_bench import (
     MlpCapsuleBenchReport,
     MlpCapsuleBenchRow,
@@ -466,6 +472,10 @@ __all__ = [
     "run_engine_native_multistep_bench",
     "run_serving_engine_native_multistep_archive",
     "validate_serving_engine_native_multistep_bench",
+    "VllmPagedMultistepReport",
+    "run_vllm_paged_multistep_bench",
+    "run_serving_vllm_paged_multistep_archive",
+    "validate_serving_vllm_paged_multistep_bench",
     "ServingDashboardReport",
     "ServingDashboardRow",
     "build_serving_dashboard_from_combined_archive",

@@ -78,7 +78,7 @@ def _synthetic_combined_for_dashboard(*, version: str = "s36") -> dict:
 
 
 def test_runtime_fusion_version_s36(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s36"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s37"
 
 
 def test_build_dashboard_from_synthetic_archive(serving):
