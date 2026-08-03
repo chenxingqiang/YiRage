@@ -22,10 +22,10 @@ def _g1_only_archive() -> dict:
     from yirage.serving.torch_exec import require_torch
 
     require_torch()
-    g1 = run_engine_g1_regression(quick=True, try_native=False, version="s36").to_dict()
+    g1 = run_engine_g1_regression(quick=True, try_native=False, version="s38").to_dict()
     return {
         "serving_combined_nightly_archive": True,
-        "version": "s36",
+        "version": "s38",
         "parity_ok": g1.get("parity_ok"),
         "quick": True,
         "functional_chains": ["chain_c_vllm_torch", "chain_d_sglang_torch"],

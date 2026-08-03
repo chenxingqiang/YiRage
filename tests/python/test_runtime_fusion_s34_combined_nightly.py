@@ -84,6 +84,7 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
             "chain_b_multistep_generation",
             "chain_c_vllm_torch_multistep",
             "chain_d_sglang_torch_multistep",
+            "chain_c_vllm_paged_multistep",
         ],
         "decode": _synthetic_decode_subsection(version=version),
         "engine_g1": _synthetic_g1_subsection(version=version),
@@ -106,11 +107,22 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
                 },
             ],
         },
+        "paged_multistep": {
+            "serving_vllm_paged_multistep_bench": True,
+            "version": version,
+            "parity_ok": True,
+            "token_match_ok": True,
+            "decode_steps": 3,
+            "paged_kv_bridged": True,
+            "functional_chain": "chain_c_vllm_paged_multistep",
+            "engine_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+            "hybrid_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+        },
     }
 
 
 def test_runtime_fusion_version_s34(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s37"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s38"
 
 
 def test_validate_combined_nightly_archive_synthetic(serving):
@@ -146,6 +158,7 @@ def test_combined_nightly_archive_metadata(serving):
     assert meta["decode_parity_ok"] is True
     assert meta["engine_g1_parity_ok"] is True
     assert meta["multistep_token_match_ok"] is True
+    assert meta["paged_multistep_token_match_ok"] is True
     json.dumps(meta)
 
 
@@ -208,3 +221,4 @@ def test_run_combined_nightly_archive_quick(serving):
     assert payload["decode"]["parity_ok"] is True
     assert payload["engine_g1"]["parity_ok"] is True
     assert payload["multistep"]["token_match_ok"] is True
+    assert payload["paged_multistep"]["token_match_ok"] is True
