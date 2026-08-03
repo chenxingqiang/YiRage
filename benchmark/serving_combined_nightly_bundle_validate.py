@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S41: Validate serving dashboard artifact bundle CLI smoke."""
+"""S42: Validate combined nightly archive + dashboard bundle CLI smoke."""
 
 from __future__ import annotations
 
@@ -36,32 +36,44 @@ def main() -> int:
     os.environ.setdefault("YIRAGE_BACKEND", "cpu")
     _install_yirage_stub()
 
-    from test_runtime_fusion_s36_serving_dashboard import _synthetic_combined_for_dashboard
-    from yirage.serving.serving_dashboard import (
-        build_serving_dashboard_from_combined_archive,
-        render_serving_dashboard_html,
-        render_serving_dashboard_markdown,
-    )
+    from test_runtime_fusion_s42_nightly_bundle_validate import _synthetic_bundle_artifacts
 
-    report = build_serving_dashboard_from_combined_archive(_synthetic_combined_for_dashboard())
-    tmp = Path("/tmp/serving-dashboard-s41-smoke")
+    bundle = _synthetic_bundle_artifacts()
+    tmp = Path("/tmp/serving-nightly-bundle-s42-smoke")
     tmp.mkdir(parents=True, exist_ok=True)
-    json_path = tmp / "dashboard.json"
-    html_path = tmp / "dashboard.html"
-    md_path = tmp / "dashboard.md"
-    json_path.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
-    html_path.write_text(render_serving_dashboard_html(report), encoding="utf-8")
-    md_path.write_text(render_serving_dashboard_markdown(report), encoding="utf-8")
+    paths = {
+        "archive": tmp / "archive.json",
+        "archive_meta": tmp / "archive.meta.json",
+        "dashboard": tmp / "dashboard.json",
+        "dashboard_meta": tmp / "dashboard.meta.json",
+        "html": tmp / "dashboard.html",
+        "markdown": tmp / "dashboard.md",
+        "bundle_meta": tmp / "bundle.meta.json",
+    }
+    paths["archive"].write_text(json.dumps(bundle["archive"], indent=2) + "\n", encoding="utf-8")
+    paths["archive_meta"].write_text(json.dumps(bundle["archive_meta"], indent=2) + "\n", encoding="utf-8")
+    paths["dashboard"].write_text(json.dumps(bundle["dashboard"], indent=2) + "\n", encoding="utf-8")
+    paths["dashboard_meta"].write_text(json.dumps(bundle["dashboard_meta"], indent=2) + "\n", encoding="utf-8")
+    paths["html"].write_text(bundle["html"], encoding="utf-8")
+    paths["markdown"].write_text(bundle["markdown"], encoding="utf-8")
 
     proc = subprocess.run(
         [
             sys.executable,
-            str(_REPO_ROOT / "scripts" / "validate_serving_dashboard.py"),
-            str(json_path),
+            str(_REPO_ROOT / "scripts" / "validate_serving_combined_nightly_bundle.py"),
+            str(paths["archive"]),
+            "--archive-meta",
+            str(paths["archive_meta"]),
+            "--dashboard",
+            str(paths["dashboard"]),
+            "--dashboard-meta",
+            str(paths["dashboard_meta"]),
             "--html",
-            str(html_path),
+            str(paths["html"]),
             "--markdown",
-            str(md_path),
+            str(paths["markdown"]),
+            "--metadata-output",
+            str(paths["bundle_meta"]),
         ],
         cwd=str(_REPO_ROOT),
         env={"PYTHONPATH": "python", "YIRAGE_BACKEND": "cpu"},
