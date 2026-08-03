@@ -109,6 +109,66 @@ def _vllm_native_mlp_forward(vllm_decoder_layer, hidden_after_attn):
             return adapter.mlp_forward(hidden_after_attn)
 
 
+def _vllm_decoder_stack_logits_hidden(
+    hidden_states,
+    residual,
+):
+    """Combine decoder layer stack outputs for greedy token projection."""
+    if residual is None:
+        return hidden_states
+    return hidden_states + residual
+
+
+def _vllm_chain_native_decoder_layers(
+    layers,
+    *,
+    positions,
+    hidden_states,
+) -> Any:
+    """Run full vLLM decoder layers (native attn + native MLP)."""
+    require_torch()
+    import torch
+
+    residual = None
+    hidden = hidden_states
+    with vllm_test_config_context():
+        with torch.no_grad():
+            for layer in layers:
+                hidden, residual = layer(positions, hidden, residual)
+    return _vllm_decoder_stack_logits_hidden(hidden, residual)
+
+
+def _vllm_chain_native_decoder_layers_rf_mlp(
+    layers,
+    hooks,
+    *,
+    positions,
+    hidden_states,
+    rf_meta_base,
+) -> Any:
+    """Run vLLM self-attn + RF MLP hook per layer (S45 full decoder hybrid)."""
+    require_torch()
+    import torch
+
+    residual = None
+    hidden = hidden_states
+    with vllm_test_config_context():
+        with torch.no_grad():
+            for layer, hook in zip(layers, hooks):
+                cap_name = hook.override.capsule_name
+                meta = dict(rf_meta_base)
+                meta["enabled"] = {cap_name}
+                if residual is None:
+                    residual = hidden
+                    normed = layer.input_layernorm(hidden)
+                else:
+                    normed, residual = layer.input_layernorm(hidden, residual)
+                attn_out = layer.self_attn(positions=positions, hidden_states=normed)
+                mlp_in, residual = layer.post_attention_layernorm(attn_out, residual)
+                hidden = hook.forward_mlp(mlp_in, rf_meta=meta).hidden
+    return _vllm_decoder_stack_logits_hidden(hidden, residual)
+
+
 def _init_vllm_qwen2_layer_weights(layer) -> None:
     """Deterministic small init so CPU e2e parity is numerically stable."""
     require_torch()

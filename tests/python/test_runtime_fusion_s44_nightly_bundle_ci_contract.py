@@ -15,7 +15,7 @@ from test_runtime_fusion_s42_nightly_bundle_validate import _synthetic_bundle_ar
 
 
 def test_runtime_fusion_version_s44(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s44"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
 
 
 def test_nightly_bundle_ci_contract_manifest(serving):
@@ -49,6 +49,8 @@ def test_bundle_metadata_includes_paged_native_fields(serving):
         dashboard_meta_path="artifacts/serving-dashboard.meta.json",
     )
     assert "paged_multistep_native_full_layer_parity_ok" in meta
+    assert "paged_multistep_native_decoder_parity_ok" in meta
+    assert "paged_multistep_native_decoder_token_match_ok" in meta
     assert validate_serving_combined_nightly_bundle_metadata(meta) == []
 
 

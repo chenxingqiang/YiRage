@@ -13,7 +13,7 @@ from test_runtime_fusion_s34_combined_nightly import _synthetic_combined_archive
 
 
 def test_runtime_fusion_version_s38(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s44"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
 
 
 def test_combined_archive_includes_paged_multistep_subsection(serving):

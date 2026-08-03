@@ -122,12 +122,16 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
             "native_step_parity_ok": [],
             "native_full_layer_parity_ok": None,
             "native_full_layer_step_parity_ok": [],
+            "native_decoder_parity_ok": None,
+            "native_decoder_token_match_ok": None,
+            "native_decoder_step_parity_ok": [],
+            "native_decoder_step_token_match_ok": [],
         },
     }
 
 
 def test_runtime_fusion_version_s34(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s44"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
 
 
 def test_validate_combined_nightly_archive_synthetic(serving):
