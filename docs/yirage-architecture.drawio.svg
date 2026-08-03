@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-label="YiRage Architecture">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <polygon points="0 0, 10 4, 0 8" fill="#444"/>
+    </marker>
+    <style>
+      .title { font: bold 22px Helvetica, Arial, sans-serif; fill: #1a1a1a; }
+      .layer-title { font: bold 14px Helvetica, Arial, sans-serif; fill: #1a1a1a; }
+      .box-title { font: bold 11px Helvetica, Arial, sans-serif; fill: #1a1a1a; }
+      .box-text { font: 11px Helvetica, Arial, sans-serif; fill: #333; }
+      .note { font: italic 11px Helvetica, Arial, sans-serif; fill: #666; }
+      .edge-label { font: 10px Helvetica, Arial, sans-serif; fill: #555; }
+    </style>
+  </defs>
+  <rect width="1200" height="720" fill="#ffffff"/>
+  <text x="600" y="38" text-anchor="middle" class="title">YiRage Architecture  RuntimeFusion × Multi-Backend</text>
+
+  <!-- Engine layer -->
+  <rect x="60" y="64" width="1080" height="72" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+  <text x="80" y="86" class="layer-title">Inference Engine (scheduling owner)</text>
+  <rect x="90" y="96" width="220" height="32" fill="#fff" stroke="#6c8ebf"/>
+  <text x="200" y="110" text-anchor="middle" class="box-title">vLLM</text>
+  <text x="200" y="122" text-anchor="middle" class="box-text">continuous batch · PagedAttention</text>
+  <rect x="330" y="96" width="220" height="32" fill="#fff" stroke="#6c8ebf"/>
+  <text x="440" y="110" text-anchor="middle" class="box-title">SGLang</text>
+  <text x="440" y="122" text-anchor="middle" class="box-text">RadixAttention · extend meta</text>
+  <rect x="580" y="96" width="540" height="32" fill="#e1d5e7" stroke="#9673a6"/>
+  <text x="850" y="116" text-anchor="middle" class="box-text">meta: block_table · seq_lens · radix hit · SM budget · batch</text>
+
+  <!-- RuntimeFusion layer -->
+  <rect x="60" y="160" width="1080" height="88" rx="8" fill="#d5e8d4" stroke="#82b366" stroke-width="1.5"/>
+  <text x="80" y="182" class="layer-title">RuntimeFusion (RF)  dynamic fusion runtime</text>
+  <rect x="90" y="194" width="260" height="44" fill="#fff" stroke="#82b366"/>
+  <text x="220" y="210" text-anchor="middle" class="box-title">RF.step(inputs, meta)</text>
+  <text x="220" y="226" text-anchor="middle" class="box-text">select 0..N capsules per decode step</text>
+  <rect x="380" y="194" width="200" height="44" fill="#fff" stroke="#82b366"/>
+  <text x="480" y="210" text-anchor="middle" class="box-title">FusionCapsule: MLP</text>
+  <text x="480" y="226" text-anchor="middle" class="box-text">gate_up + down (yirage.core)</text>
+  <rect x="610" y="194" width="200" height="44" fill="#fff" stroke="#82b366"/>
+  <text x="710" y="210" text-anchor="middle" class="box-title">FusionCapsule: segment</text>
+  <text x="710" y="226" text-anchor="middle" class="box-text">gate_up ’ down pipeline</text>
+  <rect x="840" y="194" width="280" height="44" fill="#fff2cc" stroke="#d6b656"/>
+  <text x="980" y="220" text-anchor="middle" class="box-text">skip / fallback ’ engine native ops</text>
+
+  <!-- Search layer -->
+  <rect x="60" y="272" width="1080" height="88" rx="8" fill="#fff2cc" stroke="#d6b656" stroke-width="1.5"/>
+  <text x="80" y="294" class="layer-title">Search &amp; Plan (offline / warm-up)</text>
+  <rect x="90" y="306" width="180" height="44" fill="#fff" stroke="#d6b656"/>
+  <text x="180" y="322" text-anchor="middle" class="box-title">superoptimize</text>
+  <text x="180" y="338" text-anchor="middle" class="box-text">KN/TB graph search</text>
+  <rect x="300" y="306" width="200" height="44" fill="#fff" stroke="#d6b656"/>
+  <text x="400" y="322" text-anchor="middle" class="box-title">FusionPlan / µGraph</text>
+  <text x="400" y="338" text-anchor="middle" class="box-text">profile + fingerprint verify</text>
+  <rect x="530" y="306" width="200" height="44" fill="#fff" stroke="#d6b656"/>
+  <text x="630" y="322" text-anchor="middle" class="box-title">MuGraph cache</text>
+  <text x="630" y="338" text-anchor="middle" class="box-text">shape bucket restore</text>
+  <rect x="760" y="306" width="200" height="44" fill="#fff" stroke="#d6b656"/>
+  <text x="860" y="322" text-anchor="middle" class="box-title">Ray / Coordinator</text>
+  <text x="860" y="338" text-anchor="middle" class="box-text">distributed search (optional)</text>
+  <rect x="990" y="306" width="130" height="44" fill="#e1d5e7" stroke="#9673a6"/>
+  <text x="1055" y="324" text-anchor="middle" class="box-text">seed_verify ·</text>
+  <text x="1055" y="338" text-anchor="middle" class="box-text">full_tb_ray</text>
+
+  <!-- API layer -->
+  <rect x="60" y="384" width="1080" height="72" rx="8" fill="#dae8fc" stroke="#6c8ebf" stroke-width="1.5"/>
+  <text x="80" y="406" class="layer-title">Python API &amp; Backend Manager (C++)</text>
+  <rect x="90" y="416" width="160" height="32" fill="#fff" stroke="#6c8ebf"/>
+  <text x="170" y="436" text-anchor="middle" class="box-text">KNGraph / TBGraph · transpiler</text>
+  <rect x="280" y="416" width="180" height="32" fill="#fff" stroke="#6c8ebf"/>
+  <text x="370" y="436" text-anchor="middle" class="box-text">BackendRegistry · same-backend eval</text>
+  <rect x="490" y="416" width="140" height="32" fill="#fff" stroke="#6c8ebf"/>
+  <text x="560" y="436" text-anchor="middle" class="box-text">yirage.core runtime</text>
+  <rect x="660" y="416" width="160" height="32" fill="#fff" stroke="#6c8ebf"/>
+  <text x="740" y="436" text-anchor="middle" class="box-text">yirage.serving · RF · cert</text>
+  <rect x="850" y="416" width="130" height="32" fill="#ffe6cc" stroke="#d79b00"/>
+  <text x="915" y="436" text-anchor="middle" class="box-text">MACA warp=64 · mxcc</text>
+  <rect x="1010" y="416" width="110" height="32" fill="#d5e8d4" stroke="#82b366"/>
+  <text x="1065" y="436" text-anchor="middle" class="box-text">CPU MLIR JIT</text>
+
+  <!-- Backends -->
+  <rect x="60" y="476" width="1080" height="36" rx="8" fill="#ffe6cc" stroke="#d79b00" stroke-width="1.5"/>
+  <text x="600" y="499" text-anchor="middle" class="layer-title">Backend Implementations</text>
+  <rect x="80" y="528" width="100" height="56" rx="6" fill="#f8cecc" stroke="#b85450"/>
+  <text x="130" y="552" text-anchor="middle" class="box-title">CUDA</text>
+  <text x="130" y="568" text-anchor="middle" class="box-text">nvcc · warp 32</text>
+  <rect x="200" y="528" width="100" height="56" rx="6" fill="#ffe6cc" stroke="#d79b00"/>
+  <text x="250" y="552" text-anchor="middle" class="box-title">MACA</text>
+  <text x="250" y="568" text-anchor="middle" class="box-text">mxcc · warp 64</text>
+  <rect x="320" y="528" width="100" height="56" rx="6" fill="#d5e8d4" stroke="#82b366"/>
+  <text x="370" y="552" text-anchor="middle" class="box-title">CPU</text>
+  <text x="370" y="568" text-anchor="middle" class="box-text">OpenMP · MKL</text>
+  <rect x="440" y="528" width="100" height="56" rx="6" fill="#dae8fc" stroke="#6c8ebf"/>
+  <text x="490" y="552" text-anchor="middle" class="box-title">MPS</text>
+  <text x="490" y="568" text-anchor="middle" class="box-text">Apple GPU</text>
+  <rect x="560" y="528" width="100" height="56" rx="6" fill="#ffcccc" stroke="#cc0000"/>
+  <text x="610" y="552" text-anchor="middle" class="box-title">Ascend</text>
+  <text x="610" y="568" text-anchor="middle" class="box-text">CANN</text>
+  <rect x="680" y="528" width="100" height="56" rx="6" fill="#f8cecc" stroke="#b85450"/>
+  <text x="730" y="552" text-anchor="middle" class="box-title">ROCm</text>
+  <text x="730" y="568" text-anchor="middle" class="box-text">AMD GPU</text>
+  <rect x="800" y="528" width="100" height="56" rx="6" fill="#e1d5e7" stroke="#9673a6"/>
+  <text x="850" y="552" text-anchor="middle" class="box-title">Triton</text>
+  <text x="850" y="568" text-anchor="middle" class="box-text">DSL kernels</text>
+  <rect x="920" y="528" width="200" height="56" rx="6" fill="#f5f5f5" stroke="#666"/>
+  <text x="1020" y="560" text-anchor="middle" class="box-text">+ TPU · XPU · FPGA · MLIR</text>
+
+  <!-- Hardware -->
+  <rect x="60" y="608" width="1080" height="64" rx="8" fill="#f5f5f5" stroke="#666" stroke-width="1.5"/>
+  <text x="80" y="630" class="layer-title">Hardware Targets</text>
+  <rect x="90" y="636" width="120" height="28" fill="#f8cecc" stroke="#b85450"/>
+  <text x="150" y="654" text-anchor="middle" class="box-text">NVIDIA GPU</text>
+  <rect x="230" y="636" width="120" height="28" fill="#ffe6cc" stroke="#d79b00"/>
+  <text x="290" y="654" text-anchor="middle" class="box-text">MetaX C500/C550</text>
+  <rect x="370" y="636" width="120" height="28" fill="#d5e8d4" stroke="#82b366"/>
+  <text x="430" y="654" text-anchor="middle" class="box-text">x86 / ARM CPU</text>
+  <rect x="510" y="636" width="120" height="28" fill="#dae8fc" stroke="#6c8ebf"/>
+  <text x="570" y="654" text-anchor="middle" class="box-text">Apple Silicon</text>
+  <rect x="650" y="636" width="120" height="28" fill="#ffcccc" stroke="#cc0000"/>
+  <text x="710" y="654" text-anchor="middle" class="box-text">Huawei Ascend</text>
+  <rect x="790" y="636" width="160" height="28" fill="#fff2cc" stroke="#d6b656"/>
+  <text x="870" y="654" text-anchor="middle" class="box-text">AWS Neuron · Intel XPU</text>
+
+  <!-- Arrows -->
+  <line x1="600" y1="136" x2="600" y2="158" stroke="#444" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="600" y1="248" x2="600" y2="270" stroke="#444" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="600" y1="360" x2="600" y2="382" stroke="#444" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="600" y1="456" x2="600" y2="474" stroke="#444" stroke-width="2" marker-end="url(#arrow)"/>
+  <line x1="600" y1="512" x2="600" y2="606" stroke="#444" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arrow)"/>
+  <path d="M 400 350 L 400 270 L 480 270 L 480 238" fill="none" stroke="#888" stroke-width="1.5" stroke-dasharray="5 3" marker-end="url(#arrow)"/>
+  <text x="420" y="262" class="edge-label">feeds capsules</text>
+
+  <text x="600" y="698" text-anchor="middle" class="note">Engine owns scheduling &amp; KV; RF owns fusion identity per step</text>
+</svg>
