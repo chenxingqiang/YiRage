@@ -104,7 +104,7 @@ def _row_from_subsection(
 def build_serving_dashboard_from_combined_archive(
     archive: Mapping[str, Any],
     *,
-    version: str = "s40",
+    version: str = "s41",
     allow_partial: bool = False,
 ) -> ServingDashboardReport:
     """Build dashboard from combined nightly archive payload."""
@@ -320,6 +320,80 @@ def render_serving_dashboard_html(report: ServingDashboardReport) -> str:
 </body>
 </html>
 """
+
+
+def validate_serving_dashboard_markdown(document: str) -> List[str]:
+    """Lightweight contract checks for rendered markdown artifacts."""
+    errors: List[str] = []
+    if not document.strip():
+        errors.append("markdown document is empty")
+        return errors
+    required = ("# Serving Loop Dashboard", "## Subsections", "| Section |")
+    for marker in required:
+        if marker not in document:
+            errors.append(f"markdown missing marker: {marker!r}")
+    return errors
+
+
+def validate_serving_dashboard_artifact_bundle(
+    *,
+    json_payload: Mapping[str, Any],
+    html_document: Optional[str] = None,
+    markdown_document: Optional[str] = None,
+) -> List[str]:
+    """Validate dashboard JSON plus optional HTML/markdown sibling artifacts."""
+    errors: List[str] = list(validate_serving_dashboard(json_payload))
+    version = json_payload.get("version")
+    archive_version = json_payload.get("archive_version")
+    if html_document is not None:
+        errors.extend(f"html.{e}" for e in validate_serving_dashboard_html(html_document))
+        if isinstance(version, str) and version and html.escape(version) not in html_document:
+            errors.append("html version mismatch with dashboard json")
+        if (
+            isinstance(archive_version, str)
+            and archive_version
+            and html.escape(archive_version) not in html_document
+        ):
+            errors.append("html archive_version mismatch with dashboard json")
+    if markdown_document is not None:
+        errors.extend(f"markdown.{e}" for e in validate_serving_dashboard_markdown(markdown_document))
+        if isinstance(version, str) and version and f"`{version}`" not in markdown_document:
+            errors.append("markdown version mismatch with dashboard json")
+    return errors
+
+
+def serving_dashboard_artifact_metadata(
+    payload: Mapping[str, Any],
+    *,
+    json_path: str,
+    validation_ok: bool,
+    html_path: str = "",
+    markdown_path: str = "",
+    html_ok: Optional[bool] = None,
+    markdown_ok: Optional[bool] = None,
+) -> Dict[str, Any]:
+    import hashlib
+    import json
+    import time
+
+    raw = json.dumps(payload, sort_keys=True, default=str)
+    return {
+        "serving_dashboard_artifact_metadata": True,
+        "json_path": json_path,
+        "html_path": html_path or None,
+        "markdown_path": markdown_path or None,
+        "validation_ok": validation_ok,
+        "html_ok": html_ok,
+        "markdown_ok": markdown_ok,
+        "version": payload.get("version"),
+        "archive_version": payload.get("archive_version"),
+        "parity_ok": payload.get("parity_ok"),
+        "merge_gate_ok": payload.get("merge_gate_ok"),
+        "quick": payload.get("quick"),
+        "row_count": len(payload.get("rows") or []),
+        "json_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+        "created_unix": time.time(),
+    }
 
 
 def validate_serving_dashboard_html(document: str) -> List[str]:
