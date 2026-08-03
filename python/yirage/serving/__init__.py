@@ -107,6 +107,14 @@ from .qwen_multistep_generation_bench import (
     run_serving_qwen_multistep_generation_archive,
     validate_serving_qwen_multistep_generation_bench,
 )
+from .serving_dashboard import (
+    ServingDashboardReport,
+    ServingDashboardRow,
+    build_serving_dashboard_from_combined_archive,
+    load_combined_archive,
+    render_serving_dashboard_markdown,
+    validate_serving_dashboard,
+)
 from .combined_nightly_archive import (
     ServingCombinedNightlyArchiveReport,
     run_serving_combined_nightly_archive,
@@ -458,6 +466,12 @@ __all__ = [
     "run_engine_native_multistep_bench",
     "run_serving_engine_native_multistep_archive",
     "validate_serving_engine_native_multistep_bench",
+    "ServingDashboardReport",
+    "ServingDashboardRow",
+    "build_serving_dashboard_from_combined_archive",
+    "load_combined_archive",
+    "render_serving_dashboard_markdown",
+    "validate_serving_dashboard",
     "load_serving_qwen_decode_bench_archive",
     "run_serving_qwen_decode_bench_archive",
     "serving_qwen_decode_bench_archive_metadata",
