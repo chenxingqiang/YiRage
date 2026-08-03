@@ -63,7 +63,7 @@ def _synthetic_bundle_artifacts(*, version: str = "s42") -> dict:
 
 
 def test_runtime_fusion_version_s42(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s42"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s43"
 
 
 def test_validate_nightly_bundle_synthetic(serving):
@@ -71,7 +71,7 @@ def test_validate_nightly_bundle_synthetic(serving):
         validate_serving_combined_nightly_bundle,
     )
 
-    bundle = _synthetic_bundle_artifacts()
+    bundle = _synthetic_bundle_artifacts(version="s43")
     errors = validate_serving_combined_nightly_bundle(
         archive_payload=bundle["archive"],
         archive_metadata=bundle["archive_meta"],
@@ -89,7 +89,7 @@ def test_nightly_bundle_metadata(serving):
         validate_serving_combined_nightly_bundle_metadata,
     )
 
-    bundle = _synthetic_bundle_artifacts()
+    bundle = _synthetic_bundle_artifacts(version="s43")
     meta = serving_combined_nightly_bundle_metadata(
         archive_payload=bundle["archive"],
         archive_metadata=bundle["archive_meta"],
@@ -104,7 +104,7 @@ def test_nightly_bundle_metadata(serving):
     )
     assert meta["serving_combined_nightly_bundle_metadata"] is True
     assert meta["validation_ok"] is True
-    assert meta["version"] == "s42"
+    assert meta["version"] == "s43"
     assert validate_serving_combined_nightly_bundle_metadata(meta) == []
     json.dumps(meta)
 
@@ -114,7 +114,7 @@ def test_validate_nightly_bundle_rejects_mismatch(serving):
         validate_serving_combined_nightly_bundle,
     )
 
-    bundle = _synthetic_bundle_artifacts()
+    bundle = _synthetic_bundle_artifacts(version="s43")
     bad_meta = dict(bundle["archive_meta"])
     bad_meta["version"] = "s99"
     errors = validate_serving_combined_nightly_bundle(
@@ -134,7 +134,7 @@ def test_validate_nightly_bundle_script_cli(tmp_path: Path):
         validate_serving_combined_nightly_bundle_metadata,
     )
 
-    bundle = _synthetic_bundle_artifacts()
+    bundle = _synthetic_bundle_artifacts(version="s43")
     archive_path = tmp_path / "archive.json"
     archive_meta_path = tmp_path / "archive.meta.json"
     dashboard_path = tmp_path / "dashboard.json"

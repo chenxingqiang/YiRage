@@ -232,6 +232,11 @@ def serving_cpu_cert_manifest(
             "pytest",
             "tests/python/test_runtime_fusion_s42_nightly_bundle_validate.py",
         ),
+        CertStage(
+            "s43_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s43_native_full_layer_paged.py",
+        ),
         CertStage("torch_e2e", "smoke", "demo/serving/torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
         CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),

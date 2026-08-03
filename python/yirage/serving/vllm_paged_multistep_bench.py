@@ -43,6 +43,8 @@ class VllmPagedMultistepReport:
     vllm_native_available: bool = False
     native_parity_ok: Optional[bool] = None
     native_step_parity_ok: List[bool] = field(default_factory=list)
+    native_full_layer_parity_ok: Optional[bool] = None
+    native_full_layer_step_parity_ok: List[bool] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -65,6 +67,8 @@ class VllmPagedMultistepReport:
             "vllm_native_available": self.vllm_native_available,
             "native_parity_ok": self.native_parity_ok,
             "native_step_parity_ok": list(self.native_step_parity_ok),
+            "native_full_layer_parity_ok": self.native_full_layer_parity_ok,
+            "native_full_layer_step_parity_ok": list(self.native_full_layer_step_parity_ok),
         }
 
 
@@ -157,6 +161,67 @@ def _run_vllm_native_paged_multistep(
     return step_ok
 
 
+def _run_vllm_native_paged_multistep_full_layer(
+    *,
+    decode_steps: int,
+    num_layers: int,
+    hidden_size: int,
+    intermediate_size: int,
+    batch: int,
+    base_seq: Sequence[int],
+    block_tables: Sequence[Sequence[int]],
+    page_size: int,
+) -> Optional[List[bool]]:
+    """Native vLLM MLP hooks on every layer with evolving paged KV meta (S43)."""
+    if not is_vllm_available() or num_layers < 1:
+        return None
+    require_torch()
+    import torch
+
+    layers = [
+        build_minimal_vllm_qwen2_decoder_layer(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            layer_id=layer_id,
+        )
+        for layer_id in range(num_layers)
+    ]
+    hooks = [
+        build_vllm_qwen2_mlp_rf_hook(layer, layer_id=layer_id)
+        for layer_id, layer in enumerate(layers)
+    ]
+    device = str(next(layers[0].parameters()).device)
+    step_ok: List[bool] = []
+
+    for step in range(decode_steps):
+        paged_batch = _paged_batch_for_step(
+            step=step,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+        meta_base = dict(paged_batch.as_rf_meta())
+        h = torch.randn(batch, hidden_size, dtype=torch.float32, device=device)
+        layers_ok = True
+        with vllm_test_config_context():
+            with torch.no_grad():
+                for layer, hook in zip(layers, hooks):
+                    cap_name = hook.override.capsule_name
+                    meta = dict(meta_base)
+                    meta["enabled"] = {cap_name}
+                    ref = _vllm_native_mlp_forward(layer, h)
+                    got = hook.forward_mlp(h, rf_meta=meta)
+                    ok = bool(torch.allclose(got.hidden, ref, rtol=1e-4, atol=1e-4))
+                    ok = ok and _paged_kv_present(meta)
+                    if not ok:
+                        layers_ok = False
+                        break
+                    h = ref.detach()
+        step_ok.append(layers_ok)
+    return step_ok
+
+
 def run_vllm_paged_multistep_bench(
     *,
     decode_steps: int = 4,
@@ -169,7 +234,8 @@ def run_vllm_paged_multistep_bench(
     seed: int = 0,
     quick: bool = False,
     try_native: bool = True,
-    version: str = "s40",
+    try_native_full_layer: bool = True,
+    version: str = "s43",
 ) -> VllmPagedMultistepReport:
     """Run multistep paged-KV hybrid vs engine with per-step token parity."""
     require_torch()
@@ -258,6 +324,20 @@ def run_vllm_paged_multistep_bench(
         )
     native_parity_ok = all(native_steps) if native_steps else None
 
+    native_full_steps: Optional[List[bool]] = None
+    if try_native_full_layer and vllm_avail and num_layers > 0:
+        native_full_steps = _run_vllm_native_paged_multistep_full_layer(
+            decode_steps=decode_steps,
+            num_layers=num_layers,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+    native_full_layer_parity_ok = all(native_full_steps) if native_full_steps else None
+
     return VllmPagedMultistepReport(
         version=version,
         parity_ok=parity_ok,
@@ -276,6 +356,8 @@ def run_vllm_paged_multistep_bench(
         vllm_native_available=vllm_avail,
         native_parity_ok=native_parity_ok,
         native_step_parity_ok=list(native_steps or []),
+        native_full_layer_parity_ok=native_full_layer_parity_ok,
+        native_full_layer_step_parity_ok=list(native_full_steps or []),
     )
 
 
@@ -284,12 +366,14 @@ def run_serving_vllm_paged_multistep_archive(
     decode_steps: int = 4,
     quick: bool = True,
     try_native: bool = True,
-    version: str = "s40",
+    try_native_full_layer: bool = True,
+    version: str = "s43",
 ) -> Dict[str, Any]:
     payload = run_vllm_paged_multistep_bench(
         decode_steps=decode_steps,
         quick=quick,
         try_native=try_native,
+        try_native_full_layer=try_native_full_layer,
         version=version,
     ).to_dict()
     errors = validate_serving_vllm_paged_multistep_bench(payload)
