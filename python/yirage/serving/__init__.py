@@ -130,6 +130,8 @@ from .serving_nightly_bundle import (
     serving_combined_nightly_bundle_metadata,
     validate_serving_combined_nightly_bundle,
     validate_serving_combined_nightly_bundle_metadata,
+    serving_nightly_bundle_ci_contract,
+    validate_serving_nightly_bundle_ci_contract,
 )
 from .engine_native_multistep_bench import (
     EngineNativeMultistepReport,
@@ -481,6 +483,8 @@ __all__ = [
     "serving_combined_nightly_bundle_metadata",
     "validate_serving_combined_nightly_bundle",
     "validate_serving_combined_nightly_bundle_metadata",
+    "serving_nightly_bundle_ci_contract",
+    "validate_serving_nightly_bundle_ci_contract",
     "EngineNativeMultistepReport",
     "run_engine_native_multistep_bench",
     "run_serving_engine_native_multistep_archive",

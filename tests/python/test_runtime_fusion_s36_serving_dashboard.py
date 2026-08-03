@@ -88,12 +88,14 @@ def _synthetic_combined_for_dashboard(*, version: str = "s38") -> dict:
             "vllm_native_available": False,
             "native_parity_ok": None,
             "native_step_parity_ok": [],
+            "native_full_layer_parity_ok": None,
+            "native_full_layer_step_parity_ok": [],
         },
     }
 
 
 def test_runtime_fusion_version_s36(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s43"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s44"
 
 
 def test_build_dashboard_from_synthetic_archive(serving):
@@ -154,7 +156,7 @@ def test_dashboard_json_contract(serving):
         _synthetic_combined_for_dashboard()
     ).to_dict()
     assert payload["serving_dashboard"] is True
-    assert payload["version"] == "s43"
+    assert payload["version"] == "s44"
     json.dumps(payload)
 
 
