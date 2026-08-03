@@ -103,7 +103,7 @@ def _row_from_subsection(
 def build_serving_dashboard_from_combined_archive(
     archive: Mapping[str, Any],
     *,
-    version: str = "s36",
+    version: str = "s38",
     allow_partial: bool = False,
 ) -> ServingDashboardReport:
     """Build dashboard from combined nightly archive payload."""
@@ -122,6 +122,9 @@ def build_serving_dashboard_from_combined_archive(
     multistep = archive.get("multistep") if isinstance(archive.get("multistep"), dict) else None
     engine_multistep = (
         archive.get("engine_multistep") if isinstance(archive.get("engine_multistep"), dict) else None
+    )
+    paged_multistep = (
+        archive.get("paged_multistep") if isinstance(archive.get("paged_multistep"), dict) else None
     )
 
     rows: List[ServingDashboardRow] = []
@@ -160,6 +163,16 @@ def build_serving_dashboard_from_combined_archive(
                 "chain_c_d_engine_multistep",
                 engine_multistep,
                 metric_keys=("decode_steps", "native_parity_ok"),
+            )
+        )
+    if paged_multistep is not None:
+        rows.append(
+            _row_from_subsection(
+                "paged_multistep",
+                "chain_c_vllm_paged_multistep",
+                paged_multistep,
+                parity_keys=("parity_ok", "token_match_ok"),
+                metric_keys=("decode_steps", "paged_kv_bridged"),
             )
         )
 

@@ -11,7 +11,7 @@ import pytest
 from serving_test_utils import serving
 
 
-def _synthetic_combined_for_dashboard(*, version: str = "s36") -> dict:
+def _synthetic_combined_for_dashboard(*, version: str = "s38") -> dict:
     ids = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     return {
         "serving_combined_nightly_archive": True,
@@ -25,6 +25,7 @@ def _synthetic_combined_for_dashboard(*, version: str = "s36") -> dict:
             "chain_b_multistep_generation",
             "chain_c_vllm_torch_multistep",
             "chain_d_sglang_torch_multistep",
+            "chain_c_vllm_paged_multistep",
         ],
         "decode": {
             "serving_qwen_decode_bench": True,
@@ -74,11 +75,22 @@ def _synthetic_combined_for_dashboard(*, version: str = "s36") -> dict:
                 {"chain_id": "chain_d_sglang_torch_multistep", "parity_ok": True},
             ],
         },
+        "paged_multistep": {
+            "serving_vllm_paged_multistep_bench": True,
+            "version": version,
+            "parity_ok": True,
+            "token_match_ok": True,
+            "decode_steps": 3,
+            "paged_kv_bridged": True,
+            "functional_chain": "chain_c_vllm_paged_multistep",
+            "engine_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+            "hybrid_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+        },
     }
 
 
 def test_runtime_fusion_version_s36(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s37"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s38"
 
 
 def test_build_dashboard_from_synthetic_archive(serving):
@@ -91,7 +103,7 @@ def test_build_dashboard_from_synthetic_archive(serving):
     report = build_serving_dashboard_from_combined_archive(archive)
     assert report.merge_gate_ok
     assert report.parity_ok
-    assert len(report.rows) == 4
+    assert len(report.rows) == 5
     payload = report.to_dict()
     assert validate_serving_dashboard(payload) == []
 
@@ -139,7 +151,7 @@ def test_dashboard_json_contract(serving):
         _synthetic_combined_for_dashboard()
     ).to_dict()
     assert payload["serving_dashboard"] is True
-    assert payload["version"] == "s36"
+    assert payload["version"] == "s38"
     json.dumps(payload)
 
 
