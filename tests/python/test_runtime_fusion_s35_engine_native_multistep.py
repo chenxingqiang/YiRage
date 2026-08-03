@@ -45,7 +45,7 @@ def _synthetic_engine_multistep(*, version: str = "s35") -> dict:
 
 
 def test_runtime_fusion_version_s35(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s36"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s37"
 
 
 def test_validate_engine_native_multistep_synthetic(serving):

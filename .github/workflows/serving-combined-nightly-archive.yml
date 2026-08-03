@@ -16,8 +16,9 @@ on:
       - "python/yirage/serving/serving_dashboard.py"
       - "scripts/render_serving_dashboard.py"
       - "benchmark/serving_dashboard.py"
-      - "tests/python/test_runtime_fusion_s36_serving_dashboard.py"
-      - "Makefile"
+      - "python/yirage/serving/vllm_paged_multistep_bench.py"
+      - "benchmark/serving_vllm_paged_multistep_bench.py"
+      - "tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   push:
     branches:
@@ -33,8 +34,9 @@ on:
       - "python/yirage/serving/serving_dashboard.py"
       - "scripts/render_serving_dashboard.py"
       - "benchmark/serving_dashboard.py"
-      - "tests/python/test_runtime_fusion_s36_serving_dashboard.py"
-      - "Makefile"
+      - "python/yirage/serving/vllm_paged_multistep_bench.py"
+      - "benchmark/serving_vllm_paged_multistep_bench.py"
+      - "tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   schedule:
     - cron: "0 7 * * *"
@@ -58,15 +60,16 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: S34–S36 combined archive + dashboard contract
+      - name: S34–S37 combined archive + dashboard + paged multistep contract
         env:
           YIRAGE_BACKEND: cpu
           PYTHONPATH: python:tests/python
         run: |
-          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py tests/python/test_runtime_fusion_s35_engine_native_multistep.py tests/python/test_runtime_fusion_s36_serving_dashboard.py -v -k "not slow" --tb=short
+          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py tests/python/test_runtime_fusion_s35_engine_native_multistep.py tests/python/test_runtime_fusion_s36_serving_dashboard.py tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py -v -k "not slow" --tb=short
           python3 benchmark/serving_combined_nightly_archive.py --quick --g1-only --json
           python3 benchmark/serving_engine_native_multistep_bench.py --quick --no-native --json
           python3 benchmark/serving_dashboard.py --g1-only --json
+          python3 benchmark/serving_vllm_paged_multistep_bench.py --quick --json
 
   serving-combined-archive-nightly:
     runs-on: ubuntu-22.04
