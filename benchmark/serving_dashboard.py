@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S36: Unified Serving dashboard CLI (from combined archive or G1-only smoke)."""
+"""S36/S39: Unified Serving dashboard CLI (from combined archive or G1-only smoke)."""
 
 from __future__ import annotations
 
@@ -42,6 +42,7 @@ def main() -> int:
     parser.add_argument("--g1-only", action="store_true", help="Build smoke archive from G1 regression")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--markdown", action="store_true")
+    parser.add_argument("--html", action="store_true")
     args = parser.parse_args()
 
     os.environ.setdefault("YIRAGE_BACKEND", "cpu")
@@ -49,6 +50,7 @@ def main() -> int:
     from yirage.serving.serving_dashboard import (
         build_serving_dashboard_from_combined_archive,
         load_combined_archive,
+        render_serving_dashboard_html,
         render_serving_dashboard_markdown,
     )
 
@@ -64,7 +66,9 @@ def main() -> int:
     payload = report.to_dict()
     if args.markdown:
         print(render_serving_dashboard_markdown(report))
-    if args.json or not args.markdown:
+    if args.html:
+        print(render_serving_dashboard_html(report))
+    if args.json or (not args.markdown and not args.html):
         print(json.dumps(payload, indent=2))
     return 0
 

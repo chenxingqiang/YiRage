@@ -21,6 +21,7 @@ on:
       - "benchmark/serving_vllm_paged_multistep_bench.py"
       - "tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py"
       - "tests/python/test_runtime_fusion_s38_paged_multistep_archive.py"
+      - "tests/python/test_runtime_fusion_s39_serving_dashboard_html.py"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   push:
     branches:
@@ -41,6 +42,7 @@ on:
       - "benchmark/serving_vllm_paged_multistep_bench.py"
       - "tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py"
       - "tests/python/test_runtime_fusion_s38_paged_multistep_archive.py"
+      - "tests/python/test_runtime_fusion_s39_serving_dashboard_html.py"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   schedule:
     - cron: "0 7 * * *"
@@ -64,12 +66,12 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
 
-      - name: S34–S38 combined archive + dashboard + paged multistep contract
+      - name: S34–S39 combined archive + dashboard contract
         env:
           YIRAGE_BACKEND: cpu
           PYTHONPATH: python:tests/python
         run: |
-          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py tests/python/test_runtime_fusion_s35_engine_native_multistep.py tests/python/test_runtime_fusion_s36_serving_dashboard.py tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py tests/python/test_runtime_fusion_s38_paged_multistep_archive.py -v -k "not slow" --tb=short
+          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py tests/python/test_runtime_fusion_s35_engine_native_multistep.py tests/python/test_runtime_fusion_s36_serving_dashboard.py tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py tests/python/test_runtime_fusion_s38_paged_multistep_archive.py tests/python/test_runtime_fusion_s39_serving_dashboard_html.py -v -k "not slow" --tb=short
           python3 benchmark/serving_combined_nightly_archive.py --quick --g1-only --json
           python3 benchmark/serving_engine_native_multistep_bench.py --quick --no-native --json
           python3 benchmark/serving_dashboard.py --g1-only --json
@@ -131,3 +133,4 @@ jobs:
             artifacts/serving-combined-nightly.meta.json
             artifacts/serving-dashboard.json
             artifacts/serving-dashboard.md
+            artifacts/serving-dashboard.html
