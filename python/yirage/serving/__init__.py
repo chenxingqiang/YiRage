@@ -126,6 +126,11 @@ from .combined_nightly_archive import (
     serving_combined_nightly_archive_metadata,
     validate_serving_combined_nightly_archive,
 )
+from .serving_nightly_bundle import (
+    serving_combined_nightly_bundle_metadata,
+    validate_serving_combined_nightly_bundle,
+    validate_serving_combined_nightly_bundle_metadata,
+)
 from .engine_native_multistep_bench import (
     EngineNativeMultistepReport,
     run_engine_native_multistep_bench,
@@ -473,6 +478,9 @@ __all__ = [
     "run_serving_combined_nightly_archive",
     "serving_combined_nightly_archive_metadata",
     "validate_serving_combined_nightly_archive",
+    "serving_combined_nightly_bundle_metadata",
+    "validate_serving_combined_nightly_bundle",
+    "validate_serving_combined_nightly_bundle_metadata",
     "EngineNativeMultistepReport",
     "run_engine_native_multistep_bench",
     "run_serving_engine_native_multistep_archive",

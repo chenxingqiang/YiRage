@@ -182,7 +182,7 @@ class RuntimeFusion:
     def inspect(self) -> Dict[str, Any]:
         return {
             "runtime": "RuntimeFusion",
-            "version": "s41",
+            "version": "s42",
             "capsules": [c.inspect() for c in self._capsules],
         }
 
