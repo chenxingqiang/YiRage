@@ -1,14 +1,15 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S36: Unified Serving dashboard — render combined nightly archive (G7 closure).
+"""S36/S39: Unified Serving dashboard — render combined nightly archive (G7 closure).
 
 Consumes ``serving_combined_nightly_archive`` JSON and produces a compact dashboard
-JSON + markdown summary for CI artifacts and human triage. Does not replace archive
-validation; surfaces merge-gate status and per-chain metrics in one view.
+JSON + markdown + HTML summary for CI artifacts and human triage. Does not replace
+archive validation; surfaces merge-gate status and per-chain metrics in one view.
 """
 
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional
 
@@ -103,7 +104,7 @@ def _row_from_subsection(
 def build_serving_dashboard_from_combined_archive(
     archive: Mapping[str, Any],
     *,
-    version: str = "s38",
+    version: str = "s39",
     allow_partial: bool = False,
 ) -> ServingDashboardReport:
     """Build dashboard from combined nightly archive payload."""
@@ -233,6 +234,111 @@ def render_serving_dashboard_markdown(report: ServingDashboardReport) -> str:
             lines.append(f"- `{chain}`")
     lines.append("")
     return "\n".join(lines)
+
+
+def _dashboard_status_badge(ok: bool) -> str:
+    label = "PASS" if ok else "FAIL"
+    css = "pass" if ok else "fail"
+    return f'<span class="badge {css}">{label}</span>'
+
+
+def _dashboard_avail_badge(available: bool) -> str:
+    label = "yes" if available else "no"
+    css = "pass" if available else "neutral"
+    return f'<span class="badge {css}">{label}</span>'
+
+
+def render_serving_dashboard_html(report: ServingDashboardReport) -> str:
+    """Render dashboard as self-contained HTML for CI artifact browsing."""
+    merge_badge = _dashboard_status_badge(report.merge_gate_ok)
+    parity_badge = _dashboard_status_badge(report.parity_ok)
+    vllm_avail = report.native_availability.get("vllm", False)
+    sglang_avail = report.native_availability.get("sglang", False)
+
+    row_html: List[str] = []
+    for row in report.rows:
+        metrics_str = ", ".join(
+            f"{html.escape(str(k))}={html.escape(str(v))}"
+            for k, v in row.metrics.items()
+            if k != "present"
+        )
+        row_html.append(
+            "<tr>"
+            f"<td><code>{html.escape(row.section)}</code></td>"
+            f"<td><code>{html.escape(row.functional_chain)}</code></td>"
+            f"<td>{_dashboard_status_badge(row.parity_ok)}</td>"
+            f"<td>{metrics_str if metrics_str else '—'}</td>"
+            "</tr>"
+        )
+
+    chains_html = "".join(
+        f"<li><code>{html.escape(str(chain))}</code></li>"
+        for chain in report.functional_chains
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serving Loop Dashboard</title>
+  <style>
+    body {{ font-family: system-ui, sans-serif; margin: 2rem; color: #1a1a1a; }}
+    h1 {{ margin-bottom: 0.25rem; }}
+    .meta {{ color: #555; margin-bottom: 1.5rem; }}
+    .cards {{ display: flex; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }}
+    .card {{ border: 1px solid #ddd; border-radius: 8px; padding: 1rem 1.25rem; min-width: 10rem; }}
+    .card h2 {{ font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; margin: 0 0 0.5rem; color: #666; }}
+    table {{ border-collapse: collapse; width: 100%; margin-bottom: 1.5rem; }}
+    th, td {{ border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; }}
+    th {{ background: #f5f5f5; }}
+    .badge {{ display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }}
+    .badge.pass {{ background: #d4edda; color: #155724; }}
+    .badge.fail {{ background: #f8d7da; color: #721c24; }}
+    .badge.neutral {{ background: #e9ecef; color: #495057; }}
+    code {{ font-size: 0.9em; }}
+  </style>
+</head>
+<body>
+  <h1>Serving Loop Dashboard</h1>
+  <p class="meta">Dashboard <code>{html.escape(report.version)}</code> · Archive <code>{html.escape(report.archive_version)}</code> · Quick mode <code>{html.escape(str(report.quick))}</code></p>
+  <div class="cards">
+    <div class="card"><h2>Merge gate</h2>{merge_badge}</div>
+    <div class="card"><h2>Overall parity</h2>{parity_badge}</div>
+    <div class="card"><h2>vLLM native</h2>{_dashboard_avail_badge(vllm_avail)}</div>
+    <div class="card"><h2>SGLang native</h2>{_dashboard_avail_badge(sglang_avail)}</div>
+  </div>
+  <h2>Subsections</h2>
+  <table>
+    <thead><tr><th>Section</th><th>Chain</th><th>Parity</th><th>Key metrics</th></tr></thead>
+    <tbody>
+      {''.join(row_html)}
+    </tbody>
+  </table>
+  <h2>Functional chains</h2>
+  <ul>{chains_html}</ul>
+</body>
+</html>
+"""
+
+
+def validate_serving_dashboard_html(document: str) -> List[str]:
+    """Lightweight contract checks for rendered HTML artifacts."""
+    errors: List[str] = []
+    if not document.strip():
+        errors.append("html document is empty")
+        return errors
+    required = (
+        "<!DOCTYPE html>",
+        "Serving Loop Dashboard",
+        "<table>",
+        'class="badge pass"',
+        "Functional chains",
+    )
+    for marker in required:
+        if marker not in document:
+            errors.append(f"html missing marker: {marker!r}")
+    return errors
 
 
 def load_combined_archive(path: str) -> Dict[str, Any]:

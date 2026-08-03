@@ -122,7 +122,7 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
 
 
 def test_runtime_fusion_version_s34(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s38"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s39"
 
 
 def test_validate_combined_nightly_archive_synthetic(serving):

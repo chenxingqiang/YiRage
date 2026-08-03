@@ -113,6 +113,8 @@ from .serving_dashboard import (
     build_serving_dashboard_from_combined_archive,
     load_combined_archive,
     render_serving_dashboard_markdown,
+    render_serving_dashboard_html,
+    validate_serving_dashboard_html,
     validate_serving_dashboard,
 )
 from .combined_nightly_archive import (
@@ -481,6 +483,8 @@ __all__ = [
     "build_serving_dashboard_from_combined_archive",
     "load_combined_archive",
     "render_serving_dashboard_markdown",
+    "render_serving_dashboard_html",
+    "validate_serving_dashboard_html",
     "validate_serving_dashboard",
     "load_serving_qwen_decode_bench_archive",
     "run_serving_qwen_decode_bench_archive",
