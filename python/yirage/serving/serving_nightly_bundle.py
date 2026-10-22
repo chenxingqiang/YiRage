@@ -49,6 +49,7 @@ def serving_nightly_bundle_ci_contract() -> Dict[str, Any]:
             "tests/python/test_runtime_fusion_s47_sglang_generation.py",
             "tests/python/test_runtime_fusion_s48_sglang_native_generation.py",
             "tests/python/test_runtime_fusion_s49_sglang_sm_budget.py",
+            "tests/python/test_runtime_fusion_s50_vllm_sm_budget.py",
         ],
         "bench_smokes": [
             "benchmark/serving_combined_nightly_bundle_validate.py",
@@ -234,6 +235,25 @@ def validate_serving_combined_nightly_bundle(
             errors.append("archive_metadata sglang_sm_budget_skip_observed mismatch")
         if archive_metadata.get("sglang_sm_budget_run_observed") != sm_budget_run:
             errors.append("archive_metadata sglang_sm_budget_run_observed mismatch")
+        paged_sm = archive_payload.get("vllm_paged_sm_budget")
+        if isinstance(paged_sm, dict):
+            paged_sm_parity = paged_sm.get("parity_ok")
+            paged_sm_token = paged_sm.get("token_match_ok")
+            paged_sm_skip = paged_sm.get("sm_skip_observed")
+            paged_sm_run = paged_sm.get("sm_run_observed")
+        else:
+            paged_sm_parity = None
+            paged_sm_token = None
+            paged_sm_skip = None
+            paged_sm_run = None
+        if archive_metadata.get("vllm_paged_sm_budget_parity_ok") != paged_sm_parity:
+            errors.append("archive_metadata vllm_paged_sm_budget_parity_ok mismatch")
+        if archive_metadata.get("vllm_paged_sm_budget_token_match_ok") != paged_sm_token:
+            errors.append("archive_metadata vllm_paged_sm_budget_token_match_ok mismatch")
+        if archive_metadata.get("vllm_paged_sm_budget_skip_observed") != paged_sm_skip:
+            errors.append("archive_metadata vllm_paged_sm_budget_skip_observed mismatch")
+        if archive_metadata.get("vllm_paged_sm_budget_run_observed") != paged_sm_run:
+            errors.append("archive_metadata vllm_paged_sm_budget_run_observed mismatch")
         meta_sha = archive_metadata.get("archive_sha256")
         if isinstance(meta_sha, str) and meta_sha != expected_sha:
             errors.append("archive_metadata archive_sha256 mismatch with combined archive payload")
@@ -353,6 +373,18 @@ def serving_combined_nightly_bundle_metadata(
         "sglang_sm_budget_run_observed": archive_metadata.get(
             "sglang_sm_budget_run_observed"
         ),
+        "vllm_paged_sm_budget_parity_ok": archive_metadata.get(
+            "vllm_paged_sm_budget_parity_ok"
+        ),
+        "vllm_paged_sm_budget_token_match_ok": archive_metadata.get(
+            "vllm_paged_sm_budget_token_match_ok"
+        ),
+        "vllm_paged_sm_budget_skip_observed": archive_metadata.get(
+            "vllm_paged_sm_budget_skip_observed"
+        ),
+        "vllm_paged_sm_budget_run_observed": archive_metadata.get(
+            "vllm_paged_sm_budget_run_observed"
+        ),
         "created_unix": time.time(),
     }
 
@@ -399,4 +431,12 @@ def validate_serving_combined_nightly_bundle_metadata(payload: Mapping[str, Any]
         errors.append("sglang_sm_budget_skip_observed must be present")
     if "sglang_sm_budget_run_observed" not in payload:
         errors.append("sglang_sm_budget_run_observed must be present")
+    if "vllm_paged_sm_budget_parity_ok" not in payload:
+        errors.append("vllm_paged_sm_budget_parity_ok must be present")
+    if "vllm_paged_sm_budget_token_match_ok" not in payload:
+        errors.append("vllm_paged_sm_budget_token_match_ok must be present")
+    if "vllm_paged_sm_budget_skip_observed" not in payload:
+        errors.append("vllm_paged_sm_budget_skip_observed must be present")
+    if "vllm_paged_sm_budget_run_observed" not in payload:
+        errors.append("vllm_paged_sm_budget_run_observed must be present")
     return errors

@@ -9,7 +9,7 @@ from test_runtime_fusion_s36_serving_dashboard import _synthetic_combined_for_da
 
 
 def test_runtime_fusion_version_s49(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_sglang_generation_sm_budget_skip_and_run(serving):

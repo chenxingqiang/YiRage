@@ -15,7 +15,7 @@ from test_runtime_fusion_s42_nightly_bundle_validate import _synthetic_bundle_ar
 
 
 def test_runtime_fusion_version_s44(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_nightly_bundle_ci_contract_manifest(serving):

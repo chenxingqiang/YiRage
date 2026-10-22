@@ -53,7 +53,7 @@ def _synthetic_paged_multistep_generation(*, version: str = "s46") -> dict:
 
 
 def test_runtime_fusion_version_s46(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_multilayer_torch_generation_parity(serving):
