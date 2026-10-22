@@ -5,12 +5,14 @@
 Full path = engine Attention → RF MLP hook driven by ForwardBatch meta
 (``extend_seq_lens``, ``block_tables``, ``seq_lens``) → parity vs engine MLP.
 
+S47 adds token-embed multi-layer generation over the same ForwardBatch meta.
+
 When ``sglang`` is not installed, the torch surrogate path is the cert gate.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Union
 
 import numpy as np
@@ -493,4 +495,241 @@ def run_sglang_mlp_rf_e2e_auto(
         intermediate_size=intermediate_size,
         batch=batch,
         bench=bench,
+    )
+
+
+
+@dataclass(frozen=True)
+class SglangMultilayerGenerationReport:
+    """S47 token-embed multi-layer generation under SGLang ForwardBatch meta."""
+
+    version: str
+    parity_ok: bool
+    token_match_ok: bool
+    decode_steps: int
+    num_layers: int
+    max_rf_mlp_layers: int
+    batch: int
+    hidden_size: int
+    vocab_size: int
+    functional_chain: str = "chain_d_sglang_forward_batch_generation"
+    radix_step_kinds: List[str] = field(default_factory=list)
+    step_parity_ok: List[bool] = field(default_factory=list)
+    step_token_match_ok: List[bool] = field(default_factory=list)
+    engine_token_ids: List[List[int]] = field(default_factory=list)
+    hybrid_token_ids: List[List[int]] = field(default_factory=list)
+    sglang_native_available: bool = False
+    native_generation_parity_ok: Optional[bool] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "serving_sglang_multilayer_generation": True,
+            "version": self.version,
+            "parity_ok": self.parity_ok,
+            "token_match_ok": self.token_match_ok,
+            "decode_steps": self.decode_steps,
+            "num_layers": self.num_layers,
+            "max_rf_mlp_layers": self.max_rf_mlp_layers,
+            "batch": self.batch,
+            "hidden_size": self.hidden_size,
+            "vocab_size": self.vocab_size,
+            "functional_chain": self.functional_chain,
+            "radix_step_kinds": list(self.radix_step_kinds),
+            "step_parity_ok": list(self.step_parity_ok),
+            "step_token_match_ok": list(self.step_token_match_ok),
+            "engine_token_ids": [list(row) for row in self.engine_token_ids],
+            "hybrid_token_ids": [list(row) for row in self.hybrid_token_ids],
+            "sglang_native_available": self.sglang_native_available,
+            "native_generation_parity_ok": self.native_generation_parity_ok,
+        }
+
+
+def validate_sglang_multilayer_generation(payload: Dict[str, Any]) -> List[str]:
+    """Check an S47 generation payload for the chain-D merge gate."""
+    errors: List[str] = []
+    if payload.get("serving_sglang_multilayer_generation") is not True:
+        errors.append("missing serving_sglang_multilayer_generation=true marker")
+    if payload.get("parity_ok") is not True:
+        errors.append("parity_ok must be true")
+    if payload.get("token_match_ok") is not True:
+        errors.append("token_match_ok must be true")
+    if payload.get("functional_chain") != "chain_d_sglang_forward_batch_generation":
+        errors.append(
+            "functional_chain must be chain_d_sglang_forward_batch_generation"
+        )
+    num_layers = payload.get("num_layers")
+    if not isinstance(num_layers, int) or isinstance(num_layers, bool) or num_layers < 2:
+        errors.append("num_layers must be >= 2")
+    engine_ids = payload.get("engine_token_ids")
+    hybrid_ids = payload.get("hybrid_token_ids")
+    if (
+        not isinstance(engine_ids, list)
+        or not isinstance(hybrid_ids, list)
+        or len(engine_ids) != len(hybrid_ids)
+    ):
+        errors.append("engine_token_ids and hybrid_token_ids must be same-length lists")
+    decode_steps = payload.get("decode_steps")
+    if isinstance(decode_steps, int) and not isinstance(decode_steps, bool) and decode_steps >= 3:
+        kinds = payload.get("radix_step_kinds")
+        if (
+            not isinstance(kinds, list)
+            or "partial" not in kinds
+            or "miss" not in kinds
+            or "all_hit" not in kinds
+        ):
+            errors.append(
+                "radix_step_kinds must contain partial, miss, and all_hit "
+                "when decode_steps >= 3"
+            )
+    return errors
+
+
+def run_sglang_multilayer_generation(
+    *,
+    decode_steps: int = 3,
+    num_layers: int = 2,
+    max_rf_mlp_layers: Optional[int] = None,
+    hidden_size: int = 16,
+    intermediate_size: int = 32,
+    batch: int = 3,
+    vocab_size: int = 64,
+    seed: int = 0,
+    quick: bool = False,
+    version: str = "s47",
+) -> SglangMultilayerGenerationReport:
+    """Greedy token-embed generation: reference hybrid vs RF under rotating Radix meta.
+
+    Each step embeds the reference-trajectory token ids, runs ForwardBatch meta
+    (partial, miss, or all-hit), and compares hidden states plus argmax tokens.
+    ``native_generation_parity_ok`` stays unset; this tier does not launch SGLang.
+    """
+    require_torch()
+    import torch
+
+    decode_steps = int(decode_steps)
+    num_layers = int(num_layers)
+    batch = int(batch)
+    hidden_size = int(hidden_size)
+    intermediate_size = int(intermediate_size)
+    vocab_size = int(vocab_size)
+    seed = int(seed)
+    if quick:
+        decode_steps = min(decode_steps, 3)
+        num_layers = min(num_layers, 2)
+        batch = min(batch, 3)
+        # Partial Radix needs a hit row and a miss row, so batch stays at least 2.
+        if batch < 2:
+            batch = 2
+        hidden_size = min(hidden_size, 16)
+        intermediate_size = min(intermediate_size, 32)
+        vocab_size = min(vocab_size, 64)
+
+    if max_rf_mlp_layers is None:
+        max_rf = num_layers
+    else:
+        max_rf = min(max(int(max_rf_mlp_layers), 1), num_layers)
+
+    model = TorchEngineModel(
+        num_layers,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        seed=seed,
+    )
+    hybrid = HybridModelOverride(model, max_rf_mlp_layers=max_rf)
+    expected_rf = list(range(max_rf))
+    device = model.device
+
+    weight_gen = torch.Generator(device="cpu")
+    weight_gen.manual_seed(seed + 99)
+    lm_weight = (
+        torch.randn(
+            vocab_size, hidden_size, generator=weight_gen, device="cpu", dtype=torch.float32
+        )
+        * 0.02
+    ).to(device)
+    embed_gen = torch.Generator(device="cpu")
+    embed_gen.manual_seed(seed + 11)
+    embed = (
+        torch.randn(
+            vocab_size, hidden_size, generator=embed_gen, device="cpu", dtype=torch.float32
+        )
+        * 0.02
+    ).to(device)
+    token_gen = torch.Generator(device="cpu")
+    token_gen.manual_seed(seed + 13)
+    token_ids = torch.randint(0, vocab_size, (batch,), generator=token_gen).to(device)
+
+    block_table_rows = [[1, 2, 3, 4], [3, 4, 5, 6], [5, 6, 7, 8], [7, 8, 9, 10]]
+    radix_step_kinds: List[str] = []
+    step_parity_ok: List[bool] = []
+    step_token_match_ok: List[bool] = []
+    engine_token_ids: List[List[int]] = []
+    hybrid_token_ids: List[List[int]] = []
+
+    for step in range(decode_steps):
+        if step % 3 == 0:
+            extend = [0] + [1] * (batch - 1)
+        elif step % 3 == 1:
+            extend = [1] * batch
+        else:
+            extend = [0] * batch
+        forward_batch = SglangForwardBatchSpec(
+            extend_seq_lens=extend,
+            seq_lens=[16 + step, 18 + step, 20 + step, 22 + step][:batch],
+            block_tables=block_table_rows[:batch],
+            page_size=16,
+        )
+        meta = forward_batch.as_meta()
+        meta.setdefault("extras", {})
+        extras = dict(meta["extras"])
+        extras.setdefault("total_sms", 108)
+        extras.setdefault("reserved_aux_sms", 8)
+        meta["extras"] = extras
+
+        h = embed[token_ids]
+        with torch.no_grad():
+            ref = _reference_hybrid_sglang_forward(model, expected_rf, h, extend)
+            got = hybrid.forward(h, rf_meta=meta)
+            ref_tok = (ref @ lm_weight.T).argmax(dim=-1)
+            hyb_tok = (got.hidden @ lm_weight.T).argmax(dim=-1)
+
+        all_hit, partial = _radix_flags(extend)
+        if all_hit:
+            kind = "all_hit"
+        elif partial:
+            kind = "partial"
+        else:
+            kind = "miss"
+        ok = bool(torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-6))
+        if all_hit:
+            ok = ok and got.rf_layer_ids == []
+        else:
+            ok = ok and list(got.rf_layer_ids) == expected_rf
+        tok_ok = bool(torch.equal(ref_tok, hyb_tok))
+
+        radix_step_kinds.append(kind)
+        step_parity_ok.append(ok)
+        step_token_match_ok.append(tok_ok)
+        engine_token_ids.append([int(v) for v in ref_tok.tolist()])
+        hybrid_token_ids.append([int(v) for v in hyb_tok.tolist()])
+        # Follow the reference argmax so later steps share one token trajectory.
+        token_ids = ref_tok
+
+    return SglangMultilayerGenerationReport(
+        version=version,
+        parity_ok=all(step_parity_ok),
+        token_match_ok=all(step_token_match_ok),
+        decode_steps=decode_steps,
+        num_layers=num_layers,
+        max_rf_mlp_layers=max_rf,
+        batch=batch,
+        hidden_size=hidden_size,
+        vocab_size=vocab_size,
+        radix_step_kinds=radix_step_kinds,
+        step_parity_ok=step_parity_ok,
+        step_token_match_ok=step_token_match_ok,
+        engine_token_ids=engine_token_ids,
+        hybrid_token_ids=hybrid_token_ids,
+        sglang_native_available=is_sglang_available(),
+        native_generation_parity_ok=None,
     )

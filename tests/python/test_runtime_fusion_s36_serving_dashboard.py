@@ -103,7 +103,7 @@ def _synthetic_combined_for_dashboard(*, version: str = "s38") -> dict:
 
 
 def test_runtime_fusion_version_s36(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s46"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s47"
 
 
 def test_build_dashboard_from_synthetic_archive(serving):
@@ -164,7 +164,7 @@ def test_dashboard_json_contract(serving):
         _synthetic_combined_for_dashboard()
     ).to_dict()
     assert payload["serving_dashboard"] is True
-    assert payload["version"] == "s46"
+    assert payload["version"] == "s47"
     json.dumps(payload)
 
 

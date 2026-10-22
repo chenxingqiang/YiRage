@@ -143,6 +143,9 @@ def serving_combined_nightly_archive_metadata(
     paged_multistep = (
         payload.get("paged_multistep") if isinstance(payload.get("paged_multistep"), dict) else {}
     )
+    sglang_generation = payload.get("sglang_generation")
+    if not isinstance(sglang_generation, dict):
+        sglang_generation = None
     return {
         "serving_combined_nightly_archive_metadata": True,
         "archive_path": archive_path,
@@ -183,6 +186,12 @@ def serving_combined_nightly_archive_metadata(
         ),
         "vllm_native_available": engine_g1.get("vllm_native_available"),
         "sglang_native_available": engine_g1.get("sglang_native_available"),
+        "sglang_generation_parity_ok": (
+            sglang_generation.get("parity_ok") if sglang_generation is not None else None
+        ),
+        "sglang_generation_token_match_ok": (
+            sglang_generation.get("token_match_ok") if sglang_generation is not None else None
+        ),
         "archive_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         "created_unix": time.time(),
     }

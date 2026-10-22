@@ -104,7 +104,7 @@ def _row_from_subsection(
 def build_serving_dashboard_from_combined_archive(
     archive: Mapping[str, Any],
     *,
-    version: str = "s46",
+    version: str = "s47",
     allow_partial: bool = False,
 ) -> ServingDashboardReport:
     """Build dashboard from combined nightly archive payload."""
@@ -126,6 +126,11 @@ def build_serving_dashboard_from_combined_archive(
     )
     paged_multistep = (
         archive.get("paged_multistep") if isinstance(archive.get("paged_multistep"), dict) else None
+    )
+    sglang_generation = (
+        archive.get("sglang_generation")
+        if isinstance(archive.get("sglang_generation"), dict)
+        else None
     )
 
     rows: List[ServingDashboardRow] = []
@@ -185,6 +190,27 @@ def build_serving_dashboard_from_combined_archive(
                     "generation_token_match_ok",
                     "native_decoder_generation_parity_ok",
                     "native_decoder_generation_token_match_ok",
+                ),
+            )
+        )
+    if sglang_generation is not None:
+        raw_chain = sglang_generation.get("functional_chain")
+        functional_chain = (
+            raw_chain
+            if isinstance(raw_chain, str) and raw_chain
+            else "chain_d_sglang_forward_batch_generation"
+        )
+        rows.append(
+            _row_from_subsection(
+                "sglang_generation",
+                functional_chain,
+                sglang_generation,
+                parity_keys=("parity_ok", "token_match_ok"),
+                metric_keys=(
+                    "decode_steps",
+                    "num_layers",
+                    "max_rf_mlp_layers",
+                    "token_match_ok",
                 ),
             )
         )
