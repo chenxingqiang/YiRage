@@ -65,3 +65,22 @@ def test_archive_metadata_sm_budget_fields(serving):
     dash = build_serving_dashboard_from_combined_archive(archive, allow_partial=True)
     sections = [row.section for row in dash.rows]
     assert "sglang_sm_budget" in sections
+
+
+def test_sglang_sm_budget_same_seed_is_deterministic(serving):
+    serving.require_torch()
+    validate = serving.validate_sglang_sm_budget_generation
+    first = serving.run_sglang_generation_sm_budget(quick=True, seed=11).to_dict()
+    second = serving.run_sglang_generation_sm_budget(quick=True, seed=11).to_dict()
+    validate(first)
+    validate(second)
+    assert first["sm_skip_observed"] is True
+    assert first["sm_run_observed"] is True
+    assert second["sm_skip_observed"] is True
+    assert second["sm_run_observed"] is True
+    assert first["engine_token_ids"] == second["engine_token_ids"]
+    vocab = int(first["vocab_size"])
+    for row in first["engine_token_ids"]:
+        for token_id in row:
+            assert type(token_id) is int
+            assert 0 <= token_id < vocab

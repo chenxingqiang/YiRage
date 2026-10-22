@@ -71,3 +71,14 @@ def test_cpu_cert_manifest_s32_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s32_contract" in names
+
+
+def test_engine_g1_quick_both_chains_parity(serving):
+    serving.require_torch()
+    report = serving.run_engine_g1_regression(quick=True)
+    assert report.parity_ok is True
+    torch_chains = {c.chain_id: c for c in report.chains if c.engine == "torch_surrogate"}
+    assert torch_chains["chain_c_vllm_torch"].parity_ok is True
+    assert torch_chains["chain_d_sglang_torch"].parity_ok is True
+    assert (report.vllm_hybrid or {}).get("parity_ok") is True
+    assert (report.sglang_hybrid or {}).get("parity_ok") is True

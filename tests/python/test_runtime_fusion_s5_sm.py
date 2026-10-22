@@ -124,3 +124,44 @@ def test_serving_cpu_cert_manifest_includes_s5(serving):
     assert "s5_contract" in names
     assert "torch_e2e" in names
     assert "s8_contract" in names
+
+
+def test_capsule_sm_cost_skips_then_runs(serving, torch):
+    plan = serving.FusionPlan(
+        name="mlp_costly",
+        kind="mlp",
+        hidden_size=8,
+        intermediate_size=16,
+        backend=serving.BACKEND_TORCH,
+        extras={"sm_cost": 4},
+    )
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=8,
+        intermediate_size=16,
+        seed=0,
+        name="mlp_costly",
+        plan=plan,
+        backend=serving.BACKEND_TORCH,
+    )
+    rf = serving.RuntimeFusion([cap])
+    x = torch.randn(2, 8, dtype=torch.float32)
+    extras = {"total_sms": 16, "reserved_aux_sms": 4}
+    skipped = rf.step(
+        {"hidden": x},
+        meta={"sm_budget": 2, "extras": extras},
+    )
+    assert cap.name in skipped.skipped
+    assert cap.name not in skipped.ran
+    ran = rf.step(
+        {"hidden": x},
+        meta={"sm_budget": 4, "extras": extras},
+    )
+    assert cap.name in ran.ran
+    assert torch.isfinite(skipped.outputs["hidden"]).all()
+    assert torch.isfinite(ran.outputs["hidden"]).all()
+    with torch.no_grad():
+        rms_w, w_g, w_u, w_d = cap.weights()
+        ref = serving.mlp_torch(
+            x, rms_weight=rms_w, w_gate=w_g, w_up=w_u, w_down=w_d
+        )
+    assert torch.allclose(ran.outputs["hidden"], ref, rtol=1e-5, atol=1e-5)

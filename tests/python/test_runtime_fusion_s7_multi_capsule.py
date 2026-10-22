@@ -90,3 +90,35 @@ def test_segment_hybrid_mixed_paths(serving, torch):
 
 def test_rf_inspect_version_s7(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+
+
+def test_pipeline_sm_budget_zero_skips_both(serving, torch):
+    layer = serving.TorchDecoderLayer(0, hidden_size=16, intermediate_size=32, seed=4)
+    rf = serving.build_split_mlp_runtime_fusion(layer, backend=serving.BACKEND_TORCH)
+    torch.manual_seed(11)
+    x = torch.randn(2, 16, dtype=torch.float32, device=layer.device)
+    assert torch.count_nonzero(x) > 0
+    names = [
+        serving.split_mlp_gate_up_name(0),
+        serving.split_mlp_down_name(0),
+    ]
+    extras = {"total_sms": 16, "reserved_aux_sms": 4}
+    with torch.no_grad():
+        skipped = rf.step(
+            {"hidden": x},
+            meta=serving.pipeline_meta_for_layer(0, {"sm_budget": 0, "extras": extras}),
+        )
+    assert skipped.skipped == names
+    assert skipped.ran == []
+    # Skipped capsules are not applied: hidden stays the step input.
+    assert torch.equal(skipped.outputs["hidden"], x)
+
+    with torch.no_grad():
+        ran = rf.step(
+            {"hidden": x},
+            meta=serving.pipeline_meta_for_layer(0, {"sm_budget": 8, "extras": extras}),
+        )
+    assert ran.ran == names
+    hidden = ran.outputs["hidden"]
+    assert bool(torch.isfinite(hidden).all())
+    assert not torch.equal(hidden, x)

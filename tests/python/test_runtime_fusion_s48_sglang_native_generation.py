@@ -78,3 +78,24 @@ def test_sglang_native_mlp_generation_when_installed(serving):
     assert report.native_generation_token_match_ok is True
     assert report.native_generation_ref_token_ids == report.native_generation_rf_token_ids
     assert len(report.native_generation_step_parity_ok) == 3
+
+
+def test_native_mlp_generation_step_count_matches_decode(serving):
+    if not sglang_available():
+        pytest.skip("sglang not installed")
+    report = serving.run_sglang_multilayer_generation(
+        decode_steps=3,
+        quick=True,
+        try_native=True,
+        version="s48",
+    )
+    assert report.native_generation_parity_ok is True
+    assert report.native_generation_token_match_ok is True
+    assert len(report.native_generation_step_parity_ok) == 3
+    for native_rows in (
+        report.native_generation_ref_token_ids,
+        report.native_generation_rf_token_ids,
+    ):
+        assert len(native_rows) == len(report.hybrid_token_ids)
+        for native_row, hybrid_row in zip(native_rows, report.hybrid_token_ids):
+            assert len(native_row) == len(hybrid_row)

@@ -49,3 +49,21 @@ def test_vllm_paged_auto_entry(serving):
 
 def test_rf_inspect_version_s13(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+
+
+def test_torch_paged_full_layer_tiny_parity(serving):
+    report = serving.run_torch_vllm_paged_full_layer_e2e(
+        num_layers=2,
+        hidden_size=8,
+        intermediate_size=16,
+        batch=2,
+        paged_batch=serving.VllmPagedKvBatchSpec(
+            block_tables=[[1, 2, -1], [3, 4, -1]],
+            seq_lens=[32, 18],
+            page_size=16,
+        ),
+        bench=False,
+    )
+    assert report.parity_ok is True
+    if hasattr(report, "paged_kv_bridged"):
+        assert report.paged_kv_bridged is True

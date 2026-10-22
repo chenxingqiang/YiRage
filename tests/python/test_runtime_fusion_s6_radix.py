@@ -94,3 +94,24 @@ def test_hybrid_partial_radix_shrink_matches_manual(serving, torch):
 
 def test_rf_inspect_version_s6(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+
+
+def test_partial_radix_batch4_preserves_shape(serving, torch):
+    model = serving.TorchEngineModel(2, hidden_size=8, intermediate_size=16, seed=6)
+    hybrid = serving.HybridModelOverride(model, max_rf_mlp_layers=2)
+    x = torch.randn(4, 8, dtype=torch.float32, device=model.device)
+    mask = [True, False, True, False]
+
+    with torch.no_grad():
+        expected = x
+        for layer in model.layers:
+            h = layer.attention_forward(expected)
+            expected = h.clone()
+            for idx, hit in enumerate(mask):
+                if not hit:
+                    expected[idx] = layer.mlp_forward(h[idx : idx + 1])[0]
+        out = hybrid.forward(x, rf_meta={"radix_hit_mask": mask})
+    assert out.rf_layer_ids == [0, 1]
+    assert tuple(out.hidden.shape) == tuple(x.shape) == (4, 8)
+    assert bool(torch.isfinite(out.hidden).all())
+    assert torch.allclose(out.hidden, expected, rtol=1e-5, atol=1e-6)

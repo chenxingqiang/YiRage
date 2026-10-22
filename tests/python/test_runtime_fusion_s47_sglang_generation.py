@@ -73,3 +73,18 @@ def test_dashboard_sglang_generation_row(serving):
     assert len(rows) == 1
     assert rows[0].parity_ok is True
     assert rows[0].metrics.get("token_match_ok") is True
+
+
+def test_sglang_generation_try_native_false_leaves_native_unset(serving):
+    serving.require_torch()
+    report = serving.run_sglang_multilayer_generation(
+        quick=True,
+        try_native=False,
+        version="s47",
+    )
+    assert report.parity_ok is True
+    assert report.token_match_ok is True
+    assert report.engine_token_ids == report.hybrid_token_ids
+    assert report.native_generation_parity_ok is None
+    assert report.native_generation_token_match_ok is None
+    assert set(report.radix_step_kinds) >= {"partial", "miss", "all_hit"}

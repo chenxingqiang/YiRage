@@ -102,3 +102,43 @@ def test_vllm_hook_raises_without_package(serving):
 
 def test_rf_inspect_version_s8(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+
+
+def test_segment_torch_bench_tiny_parity(serving):
+    serving.require_torch()
+    try:
+        archive = serving.run_segment_torch_bench_archive(
+            num_layers=1,
+            segment_layer_ids=(0,),
+            rf_mlp_layer_ids=(),
+            hidden_size=8,
+            intermediate_size=16,
+            batch=1,
+            warmup=1,
+            iters=1,
+        )
+    except Exception as exc:
+        if "vllm" in str(exc).lower():
+            pytest.skip(f"segment torch bench requires vllm: {exc}")
+        raise
+    report = archive.to_dict() if hasattr(archive, "to_dict") else archive
+    rows = report.get("rows", []) if isinstance(report, dict) else []
+    parity_flags = []
+    latencies = []
+    if isinstance(report, dict) and "parity_ok" in report:
+        parity_flags.append(report["parity_ok"])
+    for key in ("mean_ms", "latency_ms", "latency"):
+        if isinstance(report, dict) and report.get(key) is not None:
+            latencies.append(report[key])
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if "parity_ok" in row:
+            parity_flags.append(row["parity_ok"])
+        for key in ("mean_ms", "latency_ms", "latency"):
+            if row.get(key) is not None:
+                latencies.append(row[key])
+    assert parity_flags
+    assert all(flag is True for flag in parity_flags)
+    assert latencies
+    assert any(value > 0 for value in latencies)

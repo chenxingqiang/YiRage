@@ -186,3 +186,48 @@ def test_cpu_cert_manifest_s42_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s42_contract" in names
+
+
+def test_bundle_metadata_sm_budget_absent_is_none(serving):
+    from yirage.serving.combined_nightly_archive import (
+        serving_combined_nightly_archive_metadata,
+    )
+    from yirage.serving.serving_nightly_bundle import (
+        serving_combined_nightly_bundle_metadata,
+        validate_serving_combined_nightly_bundle_metadata,
+    )
+
+    bundle = _synthetic_bundle_artifacts(version="s45")
+    archive = bundle["archive"]
+    archive.pop("sglang_sm_budget", None)
+    archive.pop("vllm_paged_sm_budget", None)
+    archive_meta = serving_combined_nightly_archive_metadata(
+        archive,
+        archive_path="artifacts/serving-combined-nightly.json",
+        validation_ok=True,
+        quick=True,
+    )
+    meta = serving_combined_nightly_bundle_metadata(
+        archive_payload=archive,
+        archive_metadata=archive_meta,
+        dashboard_metadata=bundle["dashboard_meta"],
+        validation_ok=True,
+        archive_path="artifacts/serving-combined-nightly.json",
+        archive_meta_path="artifacts/serving-combined-nightly.meta.json",
+        dashboard_json_path="artifacts/serving-dashboard.json",
+        dashboard_meta_path="artifacts/serving-dashboard.meta.json",
+        dashboard_html_path="artifacts/serving-dashboard.html",
+        dashboard_markdown_path="artifacts/serving-dashboard.md",
+    )
+    absent_keys = (
+        "sglang_sm_budget_parity_ok",
+        "sglang_sm_budget_skip_observed",
+        "vllm_paged_sm_budget_parity_ok",
+        "vllm_paged_sm_budget_run_observed",
+    )
+    for key in absent_keys:
+        assert key in meta
+        assert meta[key] is None
+    errors = validate_serving_combined_nightly_bundle_metadata(meta)
+    for key in absent_keys:
+        assert f"{key} must be present" not in errors

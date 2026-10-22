@@ -79,3 +79,35 @@ def test_vllm_qwen2_mlp_rf_e2e(serving):
 
 def test_rf_inspect_version_s11(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+
+
+def test_torch_vllm_hybrid_tiny_parity(serving):
+    """Tiny torch hybrid e2e: RF MLP vs engine hidden parity (no vllm)."""
+    import math
+
+    report = serving.run_torch_vllm_hybrid_full_e2e(
+        num_layers=2,
+        hidden_size=8,
+        intermediate_size=16,
+        batch=2,
+        bench=False,
+    )
+    assert report.parity_ok is True
+    payload = report.to_dict() if hasattr(report, "to_dict") else {}
+    for key, value in payload.items():
+        lowered = str(key).lower()
+        if "hidden" not in lowered and "token" not in lowered:
+            continue
+        if not any(
+            token in lowered
+            for token in ("diff", "abs", "err", "delta", "max", "match", "cmp", "compare")
+        ):
+            continue
+        if value is None or isinstance(value, bool):
+            continue
+        if isinstance(value, (int, float)):
+            assert math.isfinite(float(value))
+            continue
+        isfinite = getattr(value, "isfinite", None)
+        if callable(isfinite):
+            assert bool(isfinite().all())

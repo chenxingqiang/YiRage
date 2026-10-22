@@ -90,3 +90,20 @@ def test_sglang_qwen2_mlp_rf_e2e(serving):
 
 def test_rf_inspect_version_s12(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
+
+
+def test_torch_sglang_partial_radix_tiny_parity(serving):
+    batch = serving.SglangForwardBatchSpec(
+        extend_seq_lens=[0, 1],
+        seq_lens=[4, 4],
+    )
+    report = serving.run_torch_sglang_hybrid_full_e2e(
+        forward_batch=batch,
+        num_layers=2,
+        max_rf_mlp_layers=2,
+        hidden_size=8,
+        intermediate_size=16,
+        batch=2,
+        bench=False,
+    )
+    assert report.parity_ok is True

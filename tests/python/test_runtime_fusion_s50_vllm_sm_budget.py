@@ -66,3 +66,24 @@ def test_archive_metadata_vllm_paged_sm_budget_fields(serving):
     dash = build_serving_dashboard_from_combined_archive(archive, allow_partial=True)
     sections = [row.section for row in dash.rows]
     assert "vllm_paged_sm_budget" in sections
+
+
+def test_vllm_paged_sm_budget_three_layers(serving):
+    serving.require_torch()
+    report = serving.run_vllm_paged_generation_sm_budget(
+        decode_steps=2,
+        num_layers=3,
+        batch=3,
+        hidden_size=8,
+        intermediate_size=16,
+        quick=False,
+        seed=5,
+    )
+    payload = report.to_dict()
+    serving.validate_vllm_paged_sm_budget_generation(payload)
+    assert payload["num_layers"] == 3
+    assert payload["batch"] == 3
+    assert payload["step_sm_budget"] == [0, 64]
+    assert payload["step_used_rf"] == [False, True]
+    assert payload["paged_kv_bridged"] is True
+    assert payload["engine_token_ids"] == payload["hybrid_token_ids"]

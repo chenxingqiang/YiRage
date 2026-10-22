@@ -82,3 +82,15 @@ def test_last_page_len_helper(serving):
     assert serving.last_page_len_from_seq(0, 16) == 0
     assert serving.last_page_len_from_seq(16, 16) == 16
     assert serving.last_page_len_from_seq(17, 16) == 1
+
+
+def test_last_page_len_depends_on_page_size(serving):
+    seq_len = 20
+    len_16 = serving.last_page_len_from_seq(seq_len, 16)
+    len_6 = serving.last_page_len_from_seq(seq_len, 6)
+    assert len_16 == 4
+    assert len_6 == 2
+    assert len_16 != len_6
+    for page_size, last_len in ((16, len_16), (6, len_6)):
+        assert isinstance(last_len, int) and not isinstance(last_len, bool)
+        assert 0 < last_len <= page_size

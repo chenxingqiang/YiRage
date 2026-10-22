@@ -93,3 +93,24 @@ def test_cpu_cert_manifest_s39_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s39_contract" in names
+
+
+def test_dashboard_html_mentions_paged_sm_budget_chain(serving):
+    from yirage.serving.serving_dashboard import (
+        build_serving_dashboard_from_combined_archive,
+        render_serving_dashboard_html,
+    )
+
+    archive = _synthetic_combined_for_dashboard()
+    archive["vllm_paged_sm_budget"] = {
+        "parity_ok": True,
+        "token_match_ok": True,
+        "sm_skip_observed": True,
+        "sm_run_observed": True,
+        "paged_kv_bridged": True,
+        "functional_chain": "chain_c_vllm_paged_generation_sm_budget",
+    }
+    report = build_serving_dashboard_from_combined_archive(archive, allow_partial=True)
+    doc = render_serving_dashboard_html(report)
+    assert "chain_c_vllm_paged_generation_sm_budget" in doc
+    assert "vllm_paged_sm_budget" in doc
