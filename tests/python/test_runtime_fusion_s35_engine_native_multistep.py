@@ -45,7 +45,7 @@ def _synthetic_engine_multistep(*, version: str = "s35") -> dict:
 
 
 def test_runtime_fusion_version_s35(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_validate_engine_native_multistep_synthetic(serving):
@@ -98,3 +98,17 @@ def test_cpu_cert_manifest_s35_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s35_contract" in names
+
+
+def test_engine_multistep_quick_step_count(serving):
+    serving.require_torch()
+    report = serving.run_engine_native_multistep_bench(
+        quick=True,
+        try_native=False,
+        version="s35",
+    )
+    assert report.parity_ok is True
+    assert report.decode_steps >= 1
+    for chain in report.chains:
+        assert len(chain.step_parity_ok) == report.decode_steps
+        assert len(chain.step_parity_ok) == chain.decode_steps

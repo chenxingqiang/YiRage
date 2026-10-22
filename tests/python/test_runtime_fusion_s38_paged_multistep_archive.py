@@ -13,7 +13,7 @@ from test_runtime_fusion_s34_combined_nightly import _synthetic_combined_archive
 
 
 def test_runtime_fusion_version_s38(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_combined_archive_includes_paged_multistep_subsection(serving):
@@ -62,3 +62,16 @@ def test_cpu_cert_manifest_s38_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s38_contract" in names
+
+
+def test_paged_archive_metadata_includes_generation(serving):
+    from yirage.serving.combined_nightly_archive import serving_combined_nightly_archive_metadata
+
+    payload = _synthetic_combined_archive(version="s38")
+    payload["paged_multistep"]["generation_parity_ok"] = True
+    payload["paged_multistep"]["generation_token_match_ok"] = True
+    meta = serving_combined_nightly_archive_metadata(
+        payload, archive_path="artifacts/combined.json", validation_ok=True, quick=True
+    )
+    assert meta["paged_multistep_generation_parity_ok"] is True
+    assert meta["paged_multistep_generation_token_match_ok"] is True

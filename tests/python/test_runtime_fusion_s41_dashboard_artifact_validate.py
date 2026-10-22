@@ -16,7 +16,7 @@ from test_runtime_fusion_s36_serving_dashboard import _synthetic_combined_for_da
 
 
 def test_runtime_fusion_version_s41(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_validate_dashboard_artifact_bundle(serving):
@@ -121,3 +121,26 @@ def test_cpu_cert_manifest_s41_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s41_contract" in names
+
+
+def test_dashboard_validate_accepts_archive_without_sm_budget_row(serving):
+    from yirage.serving.serving_dashboard import (
+        build_serving_dashboard_from_combined_archive,
+        render_serving_dashboard_html,
+        render_serving_dashboard_markdown,
+        validate_serving_dashboard_artifact_bundle,
+    )
+
+    archive = _synthetic_combined_for_dashboard()
+    assert "vllm_paged_sm_budget" not in archive
+    report = build_serving_dashboard_from_combined_archive(archive)
+    payload = report.to_dict()
+    assert all(row.get("section") != "vllm_paged_sm_budget" for row in payload["rows"])
+    html_doc = render_serving_dashboard_html(report)
+    md_doc = render_serving_dashboard_markdown(report)
+    errors = validate_serving_dashboard_artifact_bundle(
+        json_payload=payload,
+        html_document=html_doc,
+        markdown_document=md_doc,
+    )
+    assert errors == []

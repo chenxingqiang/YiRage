@@ -35,7 +35,7 @@ def _synthetic_paged_multistep(*, version: str = "s37") -> dict:
 
 
 def test_runtime_fusion_version_s37(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_validate_vllm_paged_multistep_synthetic(serving):
@@ -85,3 +85,20 @@ def test_cpu_cert_manifest_s37_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s37_contract" in names
+
+
+def test_paged_multistep_quick_generation_tokens(serving):
+    serving.require_torch()
+    report = serving.run_vllm_paged_multistep_bench(
+        quick=True,
+        try_native=False,
+        try_native_full_layer=False,
+        try_native_decoder=False,
+    )
+    assert report.parity_ok is True
+    assert report.token_match_ok is True
+    assert report.generation_parity_ok is True
+    assert report.generation_token_match_ok is True
+    assert report.engine_token_ids == report.hybrid_token_ids
+    assert report.generation_engine_token_ids == report.generation_hybrid_token_ids
+    assert report.paged_kv_bridged is True

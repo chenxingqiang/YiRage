@@ -15,7 +15,7 @@ from test_runtime_fusion_s42_nightly_bundle_validate import _synthetic_bundle_ar
 
 
 def test_runtime_fusion_version_s44(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_nightly_bundle_ci_contract_manifest(serving):
@@ -118,3 +118,11 @@ def test_cpu_cert_manifest_s44_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s44_contract" in names
+
+
+def test_ci_contract_lists_s50_sm_budget_pytest(serving):
+    from yirage.serving.serving_nightly_bundle import serving_nightly_bundle_ci_contract
+
+    pytests = serving_nightly_bundle_ci_contract()["contract_pytests"]
+    assert "tests/python/test_runtime_fusion_s50_vllm_sm_budget.py" in pytests
+    assert "tests/python/test_runtime_fusion_s49_sglang_sm_budget.py" in pytests

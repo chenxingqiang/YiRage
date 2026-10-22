@@ -103,7 +103,7 @@ def _synthetic_combined_for_dashboard(*, version: str = "s38") -> dict:
 
 
 def test_runtime_fusion_version_s36(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_build_dashboard_from_synthetic_archive(serving):
@@ -164,7 +164,7 @@ def test_dashboard_json_contract(serving):
         _synthetic_combined_for_dashboard()
     ).to_dict()
     assert payload["serving_dashboard"] is True
-    assert payload["version"] == "s49"
+    assert payload["version"] == "s50"
     json.dumps(payload)
 
 
@@ -173,3 +173,24 @@ def test_cpu_cert_manifest_s36_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s36_contract" in names
+
+
+def test_dashboard_row_for_vllm_paged_sm_budget(serving):
+    from yirage.serving.serving_dashboard import build_serving_dashboard_from_combined_archive
+
+    archive = _synthetic_combined_for_dashboard()
+    archive["vllm_paged_sm_budget"] = {
+        "parity_ok": True,
+        "token_match_ok": True,
+        "sm_skip_observed": True,
+        "sm_run_observed": True,
+        "paged_kv_bridged": True,
+        "functional_chain": "chain_c_vllm_paged_generation_sm_budget",
+        "decode_steps": 2,
+        "num_layers": 2,
+    }
+    report = build_serving_dashboard_from_combined_archive(archive, allow_partial=True)
+    row = next(item for item in report.rows if item.section == "vllm_paged_sm_budget")
+    assert row.parity_ok is True
+    assert "sm_skip_observed" in row.metrics
+    assert "paged_kv_bridged" in row.metrics

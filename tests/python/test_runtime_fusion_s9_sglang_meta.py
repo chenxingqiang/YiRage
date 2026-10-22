@@ -66,3 +66,31 @@ def test_hybrid_partial_sglang_extend_lens(serving, torch):
 
 def test_rf_inspect_version_s9(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+
+
+def test_all_zero_extend_lens_are_all_hit(serving, torch):
+    extend_seq_lens = [0, 0, 0]
+    mask = serving.radix_hit_mask_from_sglang_extend_lens(extend_seq_lens)
+    np.testing.assert_array_equal(mask, [True, True, True])
+
+    meta = serving.build_sglang_rf_step_meta(
+        extend_lens=extend_seq_lens,
+        seq_lens=[8, 8, 8],
+        enabled={"mlp_a"},
+    )
+    np.testing.assert_array_equal(meta["radix_hit_mask"], [True, True, True])
+    assert meta["extras"]["radix_hit"]["all_hit"] is True
+
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=8,
+        intermediate_size=16,
+        seed=3,
+        name="mlp_a",
+        backend=serving.BACKEND_TORCH,
+    )
+    rf = serving.RuntimeFusion([cap])
+    x = torch.randn(3, 8, dtype=torch.float32)
+    result = rf.step({"hidden": x}, meta=meta)
+    assert result.ran == []
+    assert result.skipped_radix == ["mlp_a"]
+    assert torch.allclose(result.outputs["hidden"], x)

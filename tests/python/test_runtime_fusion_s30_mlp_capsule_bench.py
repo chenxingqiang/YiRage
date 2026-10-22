@@ -67,3 +67,25 @@ def test_g7_chain_a_documented_in_report(serving):
     report = serving.run_mlp_capsule_bench(quick=True)
     assert report.functional_chain == "chain_a_mlp_capsule_min"
     assert report.to_dict()["parity_ok"] is True
+
+
+def test_mlp_capsule_bench_quick_rows_match(serving):
+    """Parity is decided on the report before the timing rows are recorded."""
+    serving.require_torch()
+    report = serving.run_mlp_capsule_bench(
+        hidden_size=32,
+        intermediate_size=64,
+        batch=1,
+        seed=0,
+        warmup=0,
+        iters=1,
+        quick=True,
+    )
+    payload = report.to_dict()
+    assert payload["parity_ok"] is True
+    assert payload["functional_chain"] == "chain_a_mlp_capsule_min"
+    names = [row.name for row in report.rows]
+    assert names == ["eager_mlp_torch", "rf_step_mlp_capsule"]
+    for row in report.rows:
+        assert row.mean_ms >= 0
+        assert row.iters == 1

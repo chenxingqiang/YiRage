@@ -49,7 +49,7 @@ def _synthetic_paged_multistep_native_decoder(*, version: str = "s45") -> dict:
 
 
 def test_runtime_fusion_version_s45(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_paged_multistep_native_decoder_fields_contract(serving):
@@ -224,3 +224,18 @@ def test_cpu_cert_manifest_s45_contract():
 
     names = [s.name for s in serving_cpu_cert_manifest(quick=True)]
     assert "s45_contract" in names
+
+
+def test_paged_multistep_torch_gate_when_native_disabled(serving):
+    serving.require_torch()
+    report = serving.run_vllm_paged_multistep_bench(
+        quick=True,
+        try_native=False,
+        try_native_full_layer=False,
+        try_native_decoder=False,
+    )
+    assert report.parity_ok is True
+    assert report.token_match_ok is True
+    assert report.native_decoder_parity_ok is None
+    assert report.native_decoder_generation_parity_ok is None
+    assert report.paged_kv_bridged is True

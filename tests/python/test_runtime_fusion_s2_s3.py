@@ -71,3 +71,15 @@ def test_s3_force_engine_mlp_flag(serving, torch):
     r = hybrid.forward(x, force_engine_mlp=True)
     assert r.rf_layer_ids == []
     assert r.engine_mlp_layer_ids == [0, 1, 2]
+
+
+def test_s3_noncontiguous_layer_ids_match_engine(serving, torch):
+    model = serving.TorchEngineModel(4, hidden_size=8, intermediate_size=16, seed=2)
+    hybrid = serving.HybridModelOverride(model, rf_mlp_layer_ids=[0, 2])
+    x = torch.randn(2, 8, dtype=torch.float32, device=model.device)
+    with torch.no_grad():
+        result = hybrid.forward(x)
+        ref = model.forward_engine_full(x)
+    assert result.rf_layer_ids == [0, 2]
+    assert result.engine_mlp_layer_ids == [1, 3]
+    assert torch.allclose(result.hidden, ref, rtol=1e-5, atol=1e-5)

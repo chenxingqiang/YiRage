@@ -2,6 +2,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """S46 token-embed multi-layer generation vs torch; vLLM PagedAttention multistep decode bench.
 
+S50 runs that token-embed generation while the SM budget alternates between
+zero (RF skips, engine MLP runs) and a wide budget (RF MLP runs). Paged KV
+meta stays on every step. Tokens still match the engine MLP.
+
 N decode steps with evolving ``VllmPagedKvBatchSpec`` (seq_lens grow per step).
 Torch path: full-layer hybrid vs engine with greedy token match (cert gate).
 Optional native ``vllm`` single-layer MLP + paged meta loop when installed.
@@ -756,3 +760,215 @@ def run_serving_vllm_paged_multistep_archive(
     if errors:
         raise RuntimeError(f"vllm paged multistep archive validation failed: {errors}")
     return payload
+
+
+@dataclass
+class VllmPagedSmBudgetGenerationReport:
+    """S50: paged token-embed generation under alternating SM budgets."""
+
+    version: str
+    parity_ok: bool
+    token_match_ok: bool
+    sm_skip_observed: bool
+    sm_run_observed: bool
+    paged_kv_bridged: bool
+    decode_steps: int
+    num_layers: int
+    batch: int
+    hidden_size: int
+    vocab_size: int
+    functional_chain: str = "chain_c_vllm_paged_generation_sm_budget"
+    step_sm_budget: List[int] = field(default_factory=list)
+    step_used_rf: List[bool] = field(default_factory=list)
+    step_parity_ok: List[bool] = field(default_factory=list)
+    step_token_match_ok: List[bool] = field(default_factory=list)
+    engine_token_ids: List[List[int]] = field(default_factory=list)
+    hybrid_token_ids: List[List[int]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "version": self.version,
+            "parity_ok": self.parity_ok,
+            "token_match_ok": self.token_match_ok,
+            "sm_skip_observed": self.sm_skip_observed,
+            "sm_run_observed": self.sm_run_observed,
+            "paged_kv_bridged": self.paged_kv_bridged,
+            "decode_steps": self.decode_steps,
+            "num_layers": self.num_layers,
+            "batch": self.batch,
+            "hidden_size": self.hidden_size,
+            "vocab_size": self.vocab_size,
+            "functional_chain": self.functional_chain,
+            "step_sm_budget": list(self.step_sm_budget),
+            "step_used_rf": list(self.step_used_rf),
+            "step_parity_ok": list(self.step_parity_ok),
+            "step_token_match_ok": list(self.step_token_match_ok),
+            "engine_token_ids": self.engine_token_ids,
+            "hybrid_token_ids": self.hybrid_token_ids,
+        }
+
+
+def validate_vllm_paged_sm_budget_generation(report: Dict[str, Any]) -> None:
+    """Fail when an S50 paged SM-budget generation report is incomplete."""
+    if report.get("version") != "s50":
+        raise ValueError(f"vllm paged sm budget generation version must be s50, got {report.get('version')}")
+    if report.get("functional_chain") != "chain_c_vllm_paged_generation_sm_budget":
+        raise ValueError("functional_chain must be chain_c_vllm_paged_generation_sm_budget")
+    if not report.get("parity_ok") or not report.get("token_match_ok"):
+        raise ValueError("vllm paged sm budget generation parity/token match failed")
+    if not report.get("sm_skip_observed") or not report.get("sm_run_observed"):
+        raise ValueError("vllm paged sm budget generation must observe both skip and run steps")
+    if report.get("paged_kv_bridged") is not True:
+        raise ValueError("paged KV meta must stay bridged on SM-budget generation steps")
+    steps = int(report["decode_steps"])
+    for key in (
+        "step_sm_budget",
+        "step_used_rf",
+        "step_parity_ok",
+        "step_token_match_ok",
+        "engine_token_ids",
+        "hybrid_token_ids",
+    ):
+        if len(report[key]) != steps:
+            raise ValueError(f"{key} length {len(report[key])} != decode_steps {steps}")
+
+
+def run_vllm_paged_generation_sm_budget(
+    *,
+    decode_steps: int = 4,
+    num_layers: int = 2,
+    hidden_size: int = 16,
+    intermediate_size: int = 32,
+    batch: int = 2,
+    vocab_size: int = 64,
+    page_size: int = 16,
+    seed: int = 0,
+    quick: bool = False,
+    version: str = "s50",
+) -> VllmPagedSmBudgetGenerationReport:
+    """Token-embed paged generation that alternates a zero SM budget with a wide one.
+
+    Even steps set ``sm_budget=0`` so every MLP capsule is skipped and the
+    engine MLP runs. Odd steps leave a wide capsule budget so RF runs. Both
+    must match ``forward_engine_full`` and the greedy token ids. Paged KV
+    meta is attached on every step.
+    """
+    require_torch()
+    import torch
+
+    decode_steps = int(decode_steps)
+    num_layers = int(num_layers)
+    batch = int(batch)
+    hidden_size = int(hidden_size)
+    intermediate_size = int(intermediate_size)
+    vocab_size = int(vocab_size)
+    page_size = int(page_size)
+    seed = int(seed)
+    if quick:
+        decode_steps = min(max(decode_steps, 2), 4)
+        num_layers = min(max(num_layers, 2), 2)
+        batch = min(max(batch, 2), 2)
+        hidden_size = min(hidden_size, 16)
+        intermediate_size = min(intermediate_size, 32)
+        vocab_size = min(vocab_size, 64)
+    if decode_steps < 2:
+        decode_steps = 2
+    if num_layers < 1:
+        num_layers = 1
+    if batch < 1:
+        batch = 1
+
+    model = TorchEngineModel(
+        num_layers,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        seed=seed,
+    )
+    hybrid = HybridModelOverride(model, max_rf_mlp_layers=num_layers)
+    expected_rf = list(range(num_layers))
+    device = model.device
+
+    weight_gen = torch.Generator(device="cpu")
+    weight_gen.manual_seed(seed + 99)
+    lm_weight = (
+        torch.randn(
+            vocab_size, hidden_size, generator=weight_gen, device="cpu", dtype=torch.float32
+        )
+        * 0.02
+    ).to(device)
+    embed_gen = torch.Generator(device="cpu")
+    embed_gen.manual_seed(seed + 11)
+    embed = (
+        torch.randn(
+            vocab_size, hidden_size, generator=embed_gen, device="cpu", dtype=torch.float32
+        )
+        * 0.02
+    ).to(device)
+    token_gen = torch.Generator(device="cpu")
+    token_gen.manual_seed(seed + 13)
+    token_ids = torch.randint(0, vocab_size, (batch,), generator=token_gen).to(device)
+
+    base_seq = [16, 18, 20, 22][:batch]
+    block_tables = _default_block_tables(batch)
+    step_sm_budget: List[int] = []
+    step_used_rf: List[bool] = []
+    step_parity_ok: List[bool] = []
+    step_token_match_ok: List[bool] = []
+    engine_token_ids: List[List[int]] = []
+    hybrid_token_ids: List[List[int]] = []
+    paged_flags: List[bool] = []
+
+    for step in range(decode_steps):
+        budget = 0 if step % 2 == 0 else 64
+        paged_batch = _paged_batch_for_step(
+            step=step,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+        meta = paged_batch.as_rf_meta(sm_budget=budget)
+        h = embed[token_ids]
+        with torch.no_grad():
+            ref = model.forward_engine_full(h)
+            got = hybrid.forward(h, rf_meta=meta)
+            ref_tok = (ref @ lm_weight.T).argmax(dim=-1)
+            hyb_tok = (got.hidden @ lm_weight.T).argmax(dim=-1)
+
+        used_rf = list(got.rf_layer_ids) == expected_rf
+        if budget == 0:
+            used_rf_ok = got.rf_layer_ids == []
+        else:
+            used_rf_ok = used_rf
+        paged_ok = _layer_step_meta_has_paged_kv(got.layer_results)
+        ok = bool(torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-6)) and used_rf_ok and paged_ok
+        tok_ok = bool(torch.equal(ref_tok, hyb_tok))
+
+        step_sm_budget.append(budget)
+        step_used_rf.append(used_rf)
+        step_parity_ok.append(ok)
+        step_token_match_ok.append(tok_ok)
+        paged_flags.append(paged_ok)
+        engine_token_ids.append([int(v) for v in ref_tok.tolist()])
+        hybrid_token_ids.append([int(v) for v in hyb_tok.tolist()])
+        token_ids = ref_tok
+
+    return VllmPagedSmBudgetGenerationReport(
+        version=version,
+        parity_ok=all(step_parity_ok),
+        token_match_ok=all(step_token_match_ok),
+        sm_skip_observed=any(not used for used in step_used_rf),
+        sm_run_observed=any(step_used_rf),
+        paged_kv_bridged=all(paged_flags),
+        decode_steps=decode_steps,
+        num_layers=num_layers,
+        batch=batch,
+        hidden_size=hidden_size,
+        vocab_size=vocab_size,
+        step_sm_budget=step_sm_budget,
+        step_used_rf=step_used_rf,
+        step_parity_ok=step_parity_ok,
+        step_token_match_ok=step_token_match_ok,
+        engine_token_ids=engine_token_ids,
+        hybrid_token_ids=hybrid_token_ids,
+    )

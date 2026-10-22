@@ -104,7 +104,7 @@ def _row_from_subsection(
 def build_serving_dashboard_from_combined_archive(
     archive: Mapping[str, Any],
     *,
-    version: str = "s49",
+    version: str = "s50",
     allow_partial: bool = False,
 ) -> ServingDashboardReport:
     """Build dashboard from combined nightly archive payload."""
@@ -135,6 +135,11 @@ def build_serving_dashboard_from_combined_archive(
     sglang_sm_budget = (
         archive.get("sglang_sm_budget")
         if isinstance(archive.get("sglang_sm_budget"), dict)
+        else None
+    )
+    vllm_paged_sm_budget = (
+        archive.get("vllm_paged_sm_budget")
+        if isinstance(archive.get("vllm_paged_sm_budget"), dict)
         else None
     )
 
@@ -239,6 +244,35 @@ def build_serving_dashboard_from_combined_archive(
                     "num_layers",
                     "sm_skip_observed",
                     "sm_run_observed",
+                    "token_match_ok",
+                ),
+            )
+        )
+    if vllm_paged_sm_budget is not None:
+        raw_chain = vllm_paged_sm_budget.get("functional_chain")
+        functional_chain = (
+            raw_chain
+            if isinstance(raw_chain, str) and raw_chain
+            else "chain_c_vllm_paged_generation_sm_budget"
+        )
+        rows.append(
+            _row_from_subsection(
+                "vllm_paged_sm_budget",
+                functional_chain,
+                vllm_paged_sm_budget,
+                parity_keys=(
+                    "parity_ok",
+                    "token_match_ok",
+                    "sm_skip_observed",
+                    "sm_run_observed",
+                    "paged_kv_bridged",
+                ),
+                metric_keys=(
+                    "decode_steps",
+                    "num_layers",
+                    "sm_skip_observed",
+                    "sm_run_observed",
+                    "paged_kv_bridged",
                     "token_match_ok",
                 ),
             )

@@ -80,4 +80,20 @@ def test_sglang_plugin_requires_package(serving):
 
 
 def test_rf_inspect_version_s10(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
+
+
+def test_forward_batch_all_miss_keeps_capsules_enabled(serving):
+    """All-miss extend lengths leave capsules enabled (no force skip, no all-hit)."""
+    batch = _ForwardBatchLike(extend_seq_lens=[1, 1], seq_lens=[8, 8])
+    enabled = {"mlp_layer_0"}
+    meta = serving.rf_step_meta_from_forward_batch(batch, enabled=enabled)
+    assert not meta.get("force_skip_all", False)
+    mask = np.asarray(meta["radix_hit_mask"], dtype=bool)
+    assert mask.shape == (2,)
+    assert not bool(np.all(mask))
+    radix = serving.parse_radix_hit_mask(mask, batch_size=2)
+    assert radix is not None and not radix.all_hit
+    assert meta["enabled"] == enabled
+    assert meta["extras"]["radix_hit"]["all_hit"] is False
+    assert meta["extras"]["sglang"]["extend_lens"] == [1, 1]

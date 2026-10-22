@@ -72,3 +72,16 @@ def test_runtime_fusion_inspect_lists_capsule(serving):
     assert info["runtime"] == "RuntimeFusion"
     assert info["version"] == "s21"
     assert info["capsules"][0]["plan"]["backend"] == serving.BACKEND_TORCH
+
+
+def test_mlp_capsule_batch1_matches_oracle(serving, torch):
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=16, intermediate_size=32, seed=3, backend=serving.BACKEND_TORCH
+    )
+    x = torch.randn(1, 16, dtype=torch.float32)
+    with torch.no_grad():
+        out = cap.execute({"hidden": x})["hidden"]
+        rms_w, w_g, w_u, w_d = cap.weights()
+        ref = serving.mlp_torch(x, rms_weight=rms_w, w_gate=w_g, w_up=w_u, w_down=w_d)
+    assert tuple(out.shape) == (1, 16)
+    assert torch.allclose(out, ref, rtol=1e-5, atol=1e-5)

@@ -53,7 +53,7 @@ def _synthetic_paged_multistep_generation(*, version: str = "s46") -> dict:
 
 
 def test_runtime_fusion_version_s46(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_multilayer_torch_generation_parity(serving):
@@ -157,3 +157,16 @@ def test_native_decoder_generation_when_vllm(serving):
     )
     assert len(report.native_decoder_generation_step_parity_ok) == 3
     assert len(report.native_decoder_generation_step_token_match_ok) == 3
+
+
+def test_decoder_generation_quick_tokens_without_native(serving):
+    report = serving.run_vllm_paged_multistep_bench(
+        quick=True,
+        try_native=False,
+        try_native_full_layer=False,
+        try_native_decoder=False,
+    )
+    assert report.generation_parity_ok is True
+    assert report.generation_token_match_ok is True
+    assert report.generation_engine_token_ids == report.generation_hybrid_token_ids
+    assert report.native_decoder_generation_parity_ok is None

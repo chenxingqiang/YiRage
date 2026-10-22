@@ -135,7 +135,7 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
 
 
 def test_runtime_fusion_version_s34(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_validate_combined_nightly_archive_synthetic(serving):
@@ -235,3 +235,18 @@ def test_run_combined_nightly_archive_quick(serving):
     assert payload["engine_g1"]["parity_ok"] is True
     assert payload["multistep"]["token_match_ok"] is True
     assert payload["paged_multistep"]["token_match_ok"] is True
+
+
+def test_combined_metadata_paged_sm_budget_defaults_none(serving):
+    from yirage.serving.combined_nightly_archive import (
+        serving_combined_nightly_archive_metadata,
+    )
+
+    payload = _synthetic_combined_archive()
+    meta = serving_combined_nightly_archive_metadata(
+        payload, archive_path="artifacts/combined.json", validation_ok=True, quick=True
+    )
+    assert meta["vllm_paged_sm_budget_parity_ok"] is None
+    assert meta["vllm_paged_sm_budget_token_match_ok"] is None
+    assert meta["vllm_paged_sm_budget_skip_observed"] is None
+    assert meta["vllm_paged_sm_budget_run_observed"] is None

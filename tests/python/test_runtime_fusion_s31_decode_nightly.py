@@ -102,3 +102,21 @@ def test_run_serving_qwen_decode_bench_archive_quick(yirage_serving):
     )
     assert payload["parity_ok"] is True
     assert payload["version"] == "s31"
+
+
+def test_decode_archive_validator_rejects_failed_parity(serving):
+    from copy import deepcopy
+
+    validate_serving_qwen_decode_bench_archive = (
+        serving.validate_serving_qwen_decode_bench_archive
+    )
+
+    failed = deepcopy(_synthetic_decode_archive())
+    failed["parity_ok"] = False
+    errors = validate_serving_qwen_decode_bench_archive(failed)
+    assert errors
+    assert any("parity" in err for err in errors)
+
+    valid = deepcopy(_synthetic_decode_archive())
+    valid["parity_ok"] = True
+    assert validate_serving_qwen_decode_bench_archive(valid) == []

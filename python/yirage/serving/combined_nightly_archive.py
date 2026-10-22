@@ -149,6 +149,9 @@ def serving_combined_nightly_archive_metadata(
     sglang_sm_budget = payload.get("sglang_sm_budget")
     if not isinstance(sglang_sm_budget, dict):
         sglang_sm_budget = None
+    vllm_paged_sm_budget = payload.get("vllm_paged_sm_budget")
+    if not isinstance(vllm_paged_sm_budget, dict):
+        vllm_paged_sm_budget = None
     return {
         "serving_combined_nightly_archive_metadata": True,
         "archive_path": archive_path,
@@ -216,6 +219,18 @@ def serving_combined_nightly_archive_metadata(
         ),
         "sglang_sm_budget_run_observed": (
             sglang_sm_budget.get("sm_run_observed") if sglang_sm_budget is not None else None
+        ),
+        "vllm_paged_sm_budget_parity_ok": (
+            vllm_paged_sm_budget.get("parity_ok") if vllm_paged_sm_budget is not None else None
+        ),
+        "vllm_paged_sm_budget_token_match_ok": (
+            vllm_paged_sm_budget.get("token_match_ok") if vllm_paged_sm_budget is not None else None
+        ),
+        "vllm_paged_sm_budget_skip_observed": (
+            vllm_paged_sm_budget.get("sm_skip_observed") if vllm_paged_sm_budget is not None else None
+        ),
+        "vllm_paged_sm_budget_run_observed": (
+            vllm_paged_sm_budget.get("sm_run_observed") if vllm_paged_sm_budget is not None else None
         ),
         "archive_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         "created_unix": time.time(),

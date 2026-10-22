@@ -267,6 +267,11 @@ def serving_cpu_cert_manifest(
             "pytest",
             "tests/python/test_runtime_fusion_s49_sglang_sm_budget.py",
         ),
+        CertStage(
+            "s50_contract",
+            "pytest",
+            "tests/python/test_runtime_fusion_s50_vllm_sm_budget.py",
+        ),
         CertStage("torch_e2e", "smoke", "demo/serving/torch_e2e.py"),
         CertStage("segment_torch_bench", "smoke", "demo/serving/segment_torch_bench.py"),
         CertStage("vllm_mlp_e2e", "smoke", "demo/serving/vllm_mlp_e2e.py"),
