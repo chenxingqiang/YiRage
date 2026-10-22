@@ -21,7 +21,7 @@ def _run_sglang_native_generation(serving):
 
 
 def test_runtime_fusion_version_s48(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s48"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
 
 
 def test_sglang_native_generation_absent_without_sglang(serving):

@@ -18,7 +18,7 @@ def _synthetic_combined_with_sglang_generation() -> dict:
 
 
 def test_runtime_fusion_version_s47(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s48"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
 
 
 def test_sglang_multilayer_generation_parity(serving):
@@ -37,7 +37,7 @@ def test_sglang_multilayer_generation_parity(serving):
     assert report.engine_token_ids == report.hybrid_token_ids
     assert len(report.engine_token_ids) == decode_steps
     assert set(report.radix_step_kinds) >= {"partial", "miss", "all_hit"}
-    assert report.native_generation_parity_ok is None
+    assert report.native_generation_parity_ok is (True if serving.is_sglang_available() else None)
     assert serving.validate_sglang_multilayer_generation(report.to_dict()) == []
 
 

@@ -146,6 +146,9 @@ def serving_combined_nightly_archive_metadata(
     sglang_generation = payload.get("sglang_generation")
     if not isinstance(sglang_generation, dict):
         sglang_generation = None
+    sglang_sm_budget = payload.get("sglang_sm_budget")
+    if not isinstance(sglang_sm_budget, dict):
+        sglang_sm_budget = None
     return {
         "serving_combined_nightly_archive_metadata": True,
         "archive_path": archive_path,
@@ -201,6 +204,18 @@ def serving_combined_nightly_archive_metadata(
             sglang_generation.get("native_generation_token_match_ok")
             if sglang_generation is not None
             else None
+        ),
+        "sglang_sm_budget_parity_ok": (
+            sglang_sm_budget.get("parity_ok") if sglang_sm_budget is not None else None
+        ),
+        "sglang_sm_budget_token_match_ok": (
+            sglang_sm_budget.get("token_match_ok") if sglang_sm_budget is not None else None
+        ),
+        "sglang_sm_budget_skip_observed": (
+            sglang_sm_budget.get("sm_skip_observed") if sglang_sm_budget is not None else None
+        ),
+        "sglang_sm_budget_run_observed": (
+            sglang_sm_budget.get("sm_run_observed") if sglang_sm_budget is not None else None
         ),
         "archive_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         "created_unix": time.time(),

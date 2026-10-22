@@ -104,7 +104,7 @@ def _row_from_subsection(
 def build_serving_dashboard_from_combined_archive(
     archive: Mapping[str, Any],
     *,
-    version: str = "s48",
+    version: str = "s49",
     allow_partial: bool = False,
 ) -> ServingDashboardReport:
     """Build dashboard from combined nightly archive payload."""
@@ -130,6 +130,11 @@ def build_serving_dashboard_from_combined_archive(
     sglang_generation = (
         archive.get("sglang_generation")
         if isinstance(archive.get("sglang_generation"), dict)
+        else None
+    )
+    sglang_sm_budget = (
+        archive.get("sglang_sm_budget")
+        if isinstance(archive.get("sglang_sm_budget"), dict)
         else None
     )
 
@@ -213,6 +218,28 @@ def build_serving_dashboard_from_combined_archive(
                     "token_match_ok",
                     "native_generation_parity_ok",
                     "native_generation_token_match_ok",
+                ),
+            )
+        )
+    if sglang_sm_budget is not None:
+        raw_chain = sglang_sm_budget.get("functional_chain")
+        functional_chain = (
+            raw_chain
+            if isinstance(raw_chain, str) and raw_chain
+            else "chain_d_sglang_generation_sm_budget"
+        )
+        rows.append(
+            _row_from_subsection(
+                "sglang_sm_budget",
+                functional_chain,
+                sglang_sm_budget,
+                parity_keys=("parity_ok", "token_match_ok", "sm_skip_observed", "sm_run_observed"),
+                metric_keys=(
+                    "decode_steps",
+                    "num_layers",
+                    "sm_skip_observed",
+                    "sm_run_observed",
+                    "token_match_ok",
                 ),
             )
         )

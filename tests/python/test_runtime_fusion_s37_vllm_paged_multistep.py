@@ -35,7 +35,7 @@ def _synthetic_paged_multistep(*, version: str = "s37") -> dict:
 
 
 def test_runtime_fusion_version_s37(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s48"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s49"
 
 
 def test_validate_vllm_paged_multistep_synthetic(serving):

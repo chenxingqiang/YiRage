@@ -10,6 +10,10 @@ S48 compares a native SGLang MLP stack to the RF MLP hook on that same
 token-embed trajectory when ``sglang`` is installed. Attention stays with
 the engine.
 
+S49 runs the same token-embed generation while the SM budget alternates
+between a zero capsule budget (RF skips, engine MLP runs) and a wide budget
+(RF MLP runs). Tokens still match the engine MLP reference.
+
 When ``sglang`` is not installed, the torch surrogate path is the cert gate
 and native generation fields stay unset.
 """
@@ -173,6 +177,72 @@ def _reference_hybrid_sglang_forward(
     return h
 
 
+def _ensure_sglang_parallel_context() -> None:
+    """Publish a CPU test context so SGLang linears can read ``tp_size``.
+
+    SGLang 0.5 refuses to build ``MergedColumnParallelLinear`` until the
+    parallel namespace is published and ``tp_group`` is written. Attention
+    stays unused; this only unblocks the MLP stack.
+    """
+    from sglang.srt.runtime_context import SpawnRanks, get_parallel, publish, reset_context
+    from sglang.srt.server_args import ServerArgs
+
+    class _CpuTpGroup:
+        world_size = 1
+        rank_in_group = 0
+
+    try:
+        _ = get_parallel().tp_size
+        _ = get_parallel().tp_group.world_size
+    except (RuntimeError, ValueError, AttributeError):
+        reset_context()
+        publish(
+            ServerArgs(model_path="dummy", device="cpu"),
+            role="test",
+            ranks=SpawnRanks(world_rank=0, dp_rank=None),
+        )
+        get_parallel().override_permanently(tp_group=_CpuTpGroup())
+
+
+def _build_sglang_mlp_surface(
+    *,
+    hidden_size: int,
+    intermediate_size: int,
+    layer_id: int,
+    device: str,
+):
+    """SGLang post-attention MLP plus RMSNorm, without the attention stack.
+
+    ``Qwen2DecoderLayer`` pulls RoPE through ``vllm``. The native generation
+    tier only compares the MLP, so it builds ``Qwen2MLP`` and ``RMSNorm``
+    directly.
+    """
+    require_torch()
+    import torch
+    from sglang.srt.layers.layernorm import RMSNorm
+    from sglang.srt.models.qwen2 import Qwen2MLP
+
+    _ensure_sglang_parallel_context()
+    mlp = Qwen2MLP(
+        int(hidden_size),
+        int(intermediate_size),
+        "silu",
+        reduce_results=False,
+    )
+    norm = RMSNorm(int(hidden_size), eps=1e-6)
+
+    class _Surface(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.mlp = mlp
+            self.post_attention_layernorm = norm
+            self.layer_id = int(layer_id)
+
+    surface = _Surface().to(device)
+    surface.eval()
+    return surface
+
+
 def build_minimal_sglang_qwen2_decoder_layer(
     *,
     hidden_size: int = 64,
@@ -189,6 +259,7 @@ def build_minimal_sglang_qwen2_decoder_layer(
     import torch
     from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 
+    _ensure_sglang_parallel_context()
     dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
     cfg = Qwen2Config(
         hidden_size=int(hidden_size),
@@ -221,7 +292,7 @@ def _sglang_native_mlp_forward(sglang_decoder_layer, hidden_after_attn):
 
     with torch.no_grad():
         normed = sglang_decoder_layer.post_attention_layernorm(hidden_after_attn)
-        return sglang_decoder_layer.mlp(normed)
+        return hidden_after_attn + sglang_decoder_layer.mlp(normed)
 
 
 def run_torch_sglang_mlp_rf_e2e(
@@ -418,11 +489,21 @@ def run_sglang_qwen2_mlp_rf_e2e(
         )
     all_hit, partial = _radix_flags(forward_batch.extend_seq_lens)
 
-    layer = build_minimal_sglang_qwen2_decoder_layer(
-        hidden_size=hidden_size,
-        intermediate_size=intermediate_size,
-        layer_id=layer_id,
-    )
+    try:
+        layer = build_minimal_sglang_qwen2_decoder_layer(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            layer_id=layer_id,
+        )
+    except (ImportError, ModuleNotFoundError, RuntimeError):
+        # Full decoder attention pulls RoPE from vllm. MLP parity does not.
+        layer = _build_sglang_mlp_surface(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            layer_id=layer_id,
+            device="cpu",
+        )
+    _init_sglang_decoder_weights(layer)
     hook = build_sglang_qwen2_mlp_rf_hook(layer, layer_id=layer_id)
     device = str(next(layer.parameters()).device)
     h_attn = torch.randn(batch, hidden_size, dtype=torch.float32, device=device)
@@ -647,10 +728,11 @@ def _run_sglang_native_mlp_generation(
     layers = []
     hooks = []
     for layer_id in range(int(num_layers)):
-        layer = build_minimal_sglang_qwen2_decoder_layer(
+        layer = _build_sglang_mlp_surface(
             hidden_size=hidden_size,
             intermediate_size=intermediate_size,
             layer_id=layer_id,
+            device="cpu",
         )
         _init_sglang_decoder_weights(layer)
         hooks.append(build_sglang_qwen2_mlp_rf_hook(layer, layer_id=layer_id))
@@ -884,4 +966,216 @@ def run_sglang_multilayer_generation(
         native_generation_step_token_match_ok=native_generation_step_token_match_ok,
         native_generation_ref_token_ids=native_generation_ref_token_ids,
         native_generation_rf_token_ids=native_generation_rf_token_ids,
+    )
+
+
+@dataclass
+class SglangSmBudgetGenerationReport:
+    """S49: generation under alternating SM budgets."""
+
+    version: str
+    parity_ok: bool
+    token_match_ok: bool
+    sm_skip_observed: bool
+    sm_run_observed: bool
+    decode_steps: int
+    num_layers: int
+    batch: int
+    hidden_size: int
+    vocab_size: int
+    functional_chain: str = "chain_d_sglang_generation_sm_budget"
+    step_sm_budget: List[int] = field(default_factory=list)
+    step_used_rf: List[bool] = field(default_factory=list)
+    step_parity_ok: List[bool] = field(default_factory=list)
+    step_token_match_ok: List[bool] = field(default_factory=list)
+    engine_token_ids: List[List[int]] = field(default_factory=list)
+    hybrid_token_ids: List[List[int]] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "version": self.version,
+            "parity_ok": self.parity_ok,
+            "token_match_ok": self.token_match_ok,
+            "sm_skip_observed": self.sm_skip_observed,
+            "sm_run_observed": self.sm_run_observed,
+            "decode_steps": self.decode_steps,
+            "num_layers": self.num_layers,
+            "batch": self.batch,
+            "hidden_size": self.hidden_size,
+            "vocab_size": self.vocab_size,
+            "functional_chain": self.functional_chain,
+            "step_sm_budget": list(self.step_sm_budget),
+            "step_used_rf": list(self.step_used_rf),
+            "step_parity_ok": list(self.step_parity_ok),
+            "step_token_match_ok": list(self.step_token_match_ok),
+            "engine_token_ids": self.engine_token_ids,
+            "hybrid_token_ids": self.hybrid_token_ids,
+        }
+
+
+def validate_sglang_sm_budget_generation(report: Mapping[str, Any]) -> None:
+    """Fail when an S49 SM-budget generation report is incomplete."""
+    if report.get("version") != "s49":
+        raise ValueError(f"sglang sm budget generation version must be s49, got {report.get('version')}")
+    if report.get("functional_chain") != "chain_d_sglang_generation_sm_budget":
+        raise ValueError("functional_chain must be chain_d_sglang_generation_sm_budget")
+    if not report.get("parity_ok") or not report.get("token_match_ok"):
+        raise ValueError("sglang sm budget generation parity/token match failed")
+    if not report.get("sm_skip_observed") or not report.get("sm_run_observed"):
+        raise ValueError("sglang sm budget generation must observe both skip and run steps")
+    steps = int(report["decode_steps"])
+    for key in (
+        "step_sm_budget",
+        "step_used_rf",
+        "step_parity_ok",
+        "step_token_match_ok",
+        "engine_token_ids",
+        "hybrid_token_ids",
+    ):
+        if len(report[key]) != steps:
+            raise ValueError(f"{key} length {len(report[key])} != decode_steps {steps}")
+    if any(not ok for ok in report["step_parity_ok"]):
+        raise ValueError("step_parity_ok contains a failure")
+    if any(not ok for ok in report["step_token_match_ok"]):
+        raise ValueError("step_token_match_ok contains a failure")
+
+
+def run_sglang_generation_sm_budget(
+    *,
+    decode_steps: int = 4,
+    num_layers: int = 2,
+    hidden_size: int = 16,
+    intermediate_size: int = 32,
+    batch: int = 2,
+    vocab_size: int = 64,
+    seed: int = 0,
+    quick: bool = False,
+    version: str = "s49",
+) -> SglangSmBudgetGenerationReport:
+    """Token-embed generation that alternates a zero SM budget with a wide one.
+
+    Even steps set ``sm_budget=0`` so every MLP capsule is skipped and the
+    engine MLP runs. Odd steps leave a wide capsule budget so RF runs. Both
+    must match the engine MLP reference and the greedy token ids.
+    Radix stays a full miss so the skip is caused by the SM budget alone.
+    """
+    require_torch()
+    import torch
+
+    decode_steps = int(decode_steps)
+    num_layers = int(num_layers)
+    batch = int(batch)
+    hidden_size = int(hidden_size)
+    intermediate_size = int(intermediate_size)
+    vocab_size = int(vocab_size)
+    seed = int(seed)
+    if quick:
+        decode_steps = min(max(decode_steps, 2), 4)
+        num_layers = min(max(num_layers, 2), 2)
+        batch = min(max(batch, 2), 2)
+        hidden_size = min(hidden_size, 16)
+        intermediate_size = min(intermediate_size, 32)
+        vocab_size = min(vocab_size, 64)
+    if decode_steps < 2:
+        decode_steps = 2
+    if num_layers < 1:
+        num_layers = 1
+    if batch < 1:
+        batch = 1
+
+    model = TorchEngineModel(
+        num_layers,
+        hidden_size=hidden_size,
+        intermediate_size=intermediate_size,
+        seed=seed,
+    )
+    hybrid = HybridModelOverride(model, max_rf_mlp_layers=num_layers)
+    expected_rf = list(range(num_layers))
+    device = model.device
+
+    weight_gen = torch.Generator(device="cpu")
+    weight_gen.manual_seed(seed + 99)
+    lm_weight = (
+        torch.randn(
+            vocab_size, hidden_size, generator=weight_gen, device="cpu", dtype=torch.float32
+        )
+        * 0.02
+    ).to(device)
+    embed_gen = torch.Generator(device="cpu")
+    embed_gen.manual_seed(seed + 11)
+    embed = (
+        torch.randn(
+            vocab_size, hidden_size, generator=embed_gen, device="cpu", dtype=torch.float32
+        )
+        * 0.02
+    ).to(device)
+    token_gen = torch.Generator(device="cpu")
+    token_gen.manual_seed(seed + 13)
+    token_ids = torch.randint(0, vocab_size, (batch,), generator=token_gen).to(device)
+
+    block_table_rows = [[1, 2, 3, 4], [3, 4, 5, 6], [5, 6, 7, 8], [7, 8, 9, 10]]
+    step_sm_budget: List[int] = []
+    step_used_rf: List[bool] = []
+    step_parity_ok: List[bool] = []
+    step_token_match_ok: List[bool] = []
+    engine_token_ids: List[List[int]] = []
+    hybrid_token_ids: List[List[int]] = []
+
+    for step in range(decode_steps):
+        # 0 forces every capsule to skip. A wide budget lets every layer run.
+        budget = 0 if step % 2 == 0 else 64
+        extend = [1] * batch
+        forward_batch = SglangForwardBatchSpec(
+            extend_seq_lens=extend,
+            seq_lens=[16 + step, 18 + step, 20 + step, 22 + step][:batch],
+            block_tables=block_table_rows[:batch],
+            page_size=16,
+        )
+        meta = forward_batch.as_meta()
+        extras = dict(meta.get("extras") or {})
+        extras["total_sms"] = 108
+        extras["reserved_aux_sms"] = 8
+        meta["extras"] = extras
+        meta["sm_budget"] = budget
+
+        h = embed[token_ids]
+        with torch.no_grad():
+            ref = _reference_hybrid_sglang_forward(model, expected_rf, h, extend)
+            got = hybrid.forward(h, rf_meta=meta)
+            ref_tok = (ref @ lm_weight.T).argmax(dim=-1)
+            hyb_tok = (got.hidden @ lm_weight.T).argmax(dim=-1)
+
+        used_rf = list(got.rf_layer_ids) == expected_rf
+        if budget == 0:
+            used_rf_ok = got.rf_layer_ids == []
+        else:
+            used_rf_ok = used_rf
+        ok = bool(torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-6)) and used_rf_ok
+        tok_ok = bool(torch.equal(ref_tok, hyb_tok))
+
+        step_sm_budget.append(budget)
+        step_used_rf.append(used_rf)
+        step_parity_ok.append(ok)
+        step_token_match_ok.append(tok_ok)
+        engine_token_ids.append([int(v) for v in ref_tok.tolist()])
+        hybrid_token_ids.append([int(v) for v in hyb_tok.tolist()])
+        token_ids = ref_tok
+
+    return SglangSmBudgetGenerationReport(
+        version=version,
+        parity_ok=all(step_parity_ok),
+        token_match_ok=all(step_token_match_ok),
+        sm_skip_observed=any(not used for used in step_used_rf),
+        sm_run_observed=any(step_used_rf),
+        decode_steps=decode_steps,
+        num_layers=num_layers,
+        batch=batch,
+        hidden_size=hidden_size,
+        vocab_size=vocab_size,
+        step_sm_budget=step_sm_budget,
+        step_used_rf=step_used_rf,
+        step_parity_ok=step_parity_ok,
+        step_token_match_ok=step_token_match_ok,
+        engine_token_ids=engine_token_ids,
+        hybrid_token_ids=hybrid_token_ids,
     )
