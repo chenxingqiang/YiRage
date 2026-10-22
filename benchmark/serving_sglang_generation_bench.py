@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S47 SGLang ForwardBatch multi-layer generation vs torch (chain D).
+"""S48 SGLang ForwardBatch multi-layer generation vs torch (chain D).
+
+S48 also reports native SGLang MLP generation parity when sglang is installed (native_generation_parity_ok).
 
 Requires PyTorch only (no yirage.core)::
 
@@ -51,7 +53,7 @@ def main() -> int:
     report = sglang_e2e.run_sglang_multilayer_generation(
         decode_steps=args.decode_steps,
         quick=args.quick,
-        version="s47",
+        version="s48",
     )
     payload = report.to_dict()
     if args.output:

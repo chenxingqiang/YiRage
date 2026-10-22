@@ -49,7 +49,7 @@ def _synthetic_paged_multistep_native_decoder(*, version: str = "s45") -> dict:
 
 
 def test_runtime_fusion_version_s45(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s47"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s48"
 
 
 def test_paged_multistep_native_decoder_fields_contract(serving):

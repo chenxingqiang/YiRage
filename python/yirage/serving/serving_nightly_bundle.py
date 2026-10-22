@@ -47,6 +47,7 @@ def serving_nightly_bundle_ci_contract() -> Dict[str, Any]:
             "tests/python/test_runtime_fusion_s45_native_decoder_paged.py",
             "tests/python/test_runtime_fusion_s46_decoder_generation.py",
             "tests/python/test_runtime_fusion_s47_sglang_generation.py",
+            "tests/python/test_runtime_fusion_s48_sglang_native_generation.py",
         ],
         "bench_smokes": [
             "benchmark/serving_combined_nightly_bundle_validate.py",
@@ -184,15 +185,35 @@ def validate_serving_combined_nightly_bundle(
         if isinstance(sglang_generation, dict):
             sglang_generation_parity = sglang_generation.get("parity_ok")
             sglang_generation_token = sglang_generation.get("token_match_ok")
+            sglang_native_generation_parity = sglang_generation.get(
+                "native_generation_parity_ok"
+            )
+            sglang_native_generation_token = sglang_generation.get(
+                "native_generation_token_match_ok"
+            )
         else:
             sglang_generation_parity = None
             sglang_generation_token = None
+            sglang_native_generation_parity = None
+            sglang_native_generation_token = None
         meta_sglang_generation_parity = archive_metadata.get("sglang_generation_parity_ok")
         if meta_sglang_generation_parity != sglang_generation_parity:
             errors.append("archive_metadata sglang_generation_parity_ok mismatch")
         meta_sglang_generation_token = archive_metadata.get("sglang_generation_token_match_ok")
         if meta_sglang_generation_token != sglang_generation_token:
             errors.append("archive_metadata sglang_generation_token_match_ok mismatch")
+        meta_sglang_native_generation_parity = archive_metadata.get(
+            "sglang_native_generation_parity_ok"
+        )
+        if meta_sglang_native_generation_parity != sglang_native_generation_parity:
+            errors.append("archive_metadata sglang_native_generation_parity_ok mismatch")
+        meta_sglang_native_generation_token = archive_metadata.get(
+            "sglang_native_generation_token_match_ok"
+        )
+        if meta_sglang_native_generation_token != sglang_native_generation_token:
+            errors.append(
+                "archive_metadata sglang_native_generation_token_match_ok mismatch"
+            )
         meta_sha = archive_metadata.get("archive_sha256")
         if isinstance(meta_sha, str) and meta_sha != expected_sha:
             errors.append("archive_metadata archive_sha256 mismatch with combined archive payload")
@@ -296,6 +317,12 @@ def serving_combined_nightly_bundle_metadata(
         "sglang_generation_token_match_ok": archive_metadata.get(
             "sglang_generation_token_match_ok"
         ),
+        "sglang_native_generation_parity_ok": archive_metadata.get(
+            "sglang_native_generation_parity_ok"
+        ),
+        "sglang_native_generation_token_match_ok": archive_metadata.get(
+            "sglang_native_generation_token_match_ok"
+        ),
         "created_unix": time.time(),
     }
 
@@ -330,4 +357,8 @@ def validate_serving_combined_nightly_bundle_metadata(payload: Mapping[str, Any]
         errors.append("sglang_generation_parity_ok must be present")
     if "sglang_generation_token_match_ok" not in payload:
         errors.append("sglang_generation_token_match_ok must be present")
+    if "sglang_native_generation_parity_ok" not in payload:
+        errors.append("sglang_native_generation_parity_ok must be present")
+    if "sglang_native_generation_token_match_ok" not in payload:
+        errors.append("sglang_native_generation_token_match_ok must be present")
     return errors
