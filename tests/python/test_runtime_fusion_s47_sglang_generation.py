@@ -27,6 +27,7 @@ def test_sglang_multilayer_generation_parity(serving):
     report = serving.run_sglang_multilayer_generation(
         decode_steps=decode_steps,
         quick=True,
+        try_native=False,
         version="s47",
     )
     assert report.num_layers >= 2

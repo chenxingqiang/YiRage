@@ -173,6 +173,65 @@ def _reference_hybrid_sglang_forward(
     return h
 
 
+class _CpuTpGroup:
+    """Single-rank stand-in so SGLang linear layers can run without NCCL."""
+
+    world_size = 1
+
+
+def _ensure_sglang_parallel_context() -> None:
+    """Publish a CPU tp_size=1 context when SGLang has not been configured."""
+    from sglang.srt.runtime_context import SpawnRanks, get_parallel, publish, reset_context
+    from sglang.srt.server_args import ServerArgs
+
+    try:
+        _ = get_parallel().tp_size
+    except (RuntimeError, ValueError):
+        reset_context()
+        publish(
+            ServerArgs(model_path="dummy", device="cpu"),
+            role="test",
+            ranks=SpawnRanks(world_rank=0, dp_rank=None),
+        )
+
+
+def _sglang_tp_group_override():
+    from sglang.srt.runtime_context import get_parallel
+
+    return get_parallel().override(tp_group=_CpuTpGroup())
+
+
+def _build_sglang_mlp_surface(cfg, device: str):
+    """MLP + post-attention RMSNorm from SGLang, without the attention stack.
+
+    SGLang 0.5 ``Qwen2DecoderLayer`` constructs RoPE through ``vllm``. The
+    serving native tier only compares the post-attention MLP, so this surface
+    is the real SGLang MLP when the full decoder cannot be built.
+    """
+    require_torch()
+    import torch
+    from sglang.srt.layers.layernorm import RMSNorm
+    from sglang.srt.models.qwen2 import Qwen2MLP
+
+    class _Surface(torch.nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.mlp = Qwen2MLP(
+                hidden_size=int(cfg.hidden_size),
+                intermediate_size=int(cfg.intermediate_size),
+                hidden_act=str(cfg.hidden_act),
+                prefix="mlp",
+                reduce_results=False,
+            )
+            self.post_attention_layernorm = RMSNorm(
+                int(cfg.hidden_size), eps=float(cfg.rms_norm_eps)
+            )
+
+    layer = _Surface().to(device)
+    layer.eval()
+    return layer
+
+
 def build_minimal_sglang_qwen2_decoder_layer(
     *,
     hidden_size: int = 64,
@@ -190,6 +249,7 @@ def build_minimal_sglang_qwen2_decoder_layer(
     from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 
     dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
+    _ensure_sglang_parallel_context()
     cfg = Qwen2Config(
         hidden_size=int(hidden_size),
         intermediate_size=int(intermediate_size),
@@ -204,14 +264,20 @@ def build_minimal_sglang_qwen2_decoder_layer(
     except ImportError as exc:
         raise RuntimeError("SGLang Qwen2DecoderLayer import failed") from exc
     try:
-        layer = Qwen2DecoderLayer(config=cfg, layer_id=layer_id)
-    except TypeError:
         try:
-            layer = Qwen2DecoderLayer(cfg, layer_id=layer_id)
+            layer = Qwen2DecoderLayer(config=cfg, layer_id=layer_id)
         except TypeError:
-            layer = Qwen2DecoderLayer(cfg, prefix=f"layers.{layer_id}")
+            try:
+                layer = Qwen2DecoderLayer(cfg, layer_id=layer_id)
+            except TypeError:
+                layer = Qwen2DecoderLayer(cfg, prefix=f"layers.{layer_id}")
+    except (ImportError, ModuleNotFoundError, RuntimeError, ValueError):
+        layer = _build_sglang_mlp_surface(cfg, dev)
+        _init_sglang_decoder_weights(layer)
+        return layer
     layer = layer.to(dev)
     layer.eval()
+    _init_sglang_decoder_weights(layer)
     return layer
 
 
@@ -220,8 +286,13 @@ def _sglang_native_mlp_forward(sglang_decoder_layer, hidden_after_attn):
     import torch
 
     with torch.no_grad():
-        normed = sglang_decoder_layer.post_attention_layernorm(hidden_after_attn)
-        return sglang_decoder_layer.mlp(normed)
+        with _sglang_tp_group_override():
+            normed = sglang_decoder_layer.post_attention_layernorm(hidden_after_attn)
+            mlp_out = sglang_decoder_layer.mlp(normed)
+        if isinstance(mlp_out, tuple):
+            mlp_out = mlp_out[0]
+        # Match mlp_torch, which returns the residual MLP block.
+        return hidden_after_attn + mlp_out
 
 
 def run_torch_sglang_mlp_rf_e2e(

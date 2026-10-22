@@ -124,12 +124,12 @@ def _split_gate_up_weight(gate_up_w: Any):
         arr = np.asarray(gate_up_w)
         return arr[:inter], arr[inter:]
     if hidden_b % 2 == 0:
+        # Already (hidden, 2 * intermediate) after ``_linear_weight_t``.
         inter = hidden_b // 2
-        w_t = gate_up_w if not hasattr(gate_up_w, "t") else gate_up_w.t()
-        if hasattr(w_t, "chunk"):
-            gate, up = w_t.chunk(2, dim=1)
+        if hasattr(gate_up_w, "chunk"):
+            gate, up = gate_up_w.chunk(2, dim=1)
             return gate, up
-        arr = np.asarray(w_t)
+        arr = np.asarray(gate_up_w)
         return arr[:, :inter], arr[:, inter:]
     raise ValueError(f"cannot infer gate/up split from gate_up shape={shape}")
 
