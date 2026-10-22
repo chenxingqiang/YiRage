@@ -1,6 +1,6 @@
 # Copyright 2025 Chen Xingqiang (YiRage Project)
 # SPDX-License-Identifier: Apache-2.0
-"""S37/S40: vLLM PagedAttention multistep decode bench (G7 chain C paged extension).
+"""S46 token-embed multi-layer generation vs torch; vLLM PagedAttention multistep decode bench.
 
 N decode steps with evolving ``VllmPagedKvBatchSpec`` (seq_lens grow per step).
 Torch path: full-layer hybrid vs engine with greedy token match (cert gate).
@@ -56,6 +56,19 @@ class VllmPagedMultistepReport:
     native_decoder_step_token_match_ok: List[bool] = field(default_factory=list)
     native_decoder_ref_token_ids: List[List[int]] = field(default_factory=list)
     native_decoder_rf_token_ids: List[List[int]] = field(default_factory=list)
+    generation_functional_chain: str = "chain_c_multilayer_decoder_generation_vs_torch"
+    generation_parity_ok: bool = False
+    generation_token_match_ok: bool = False
+    generation_step_parity_ok: List[bool] = field(default_factory=list)
+    generation_step_token_match_ok: List[bool] = field(default_factory=list)
+    generation_engine_token_ids: List[List[int]] = field(default_factory=list)
+    generation_hybrid_token_ids: List[List[int]] = field(default_factory=list)
+    native_decoder_generation_parity_ok: Optional[bool] = None
+    native_decoder_generation_token_match_ok: Optional[bool] = None
+    native_decoder_generation_step_parity_ok: List[bool] = field(default_factory=list)
+    native_decoder_generation_step_token_match_ok: List[bool] = field(default_factory=list)
+    native_decoder_generation_ref_token_ids: List[List[int]] = field(default_factory=list)
+    native_decoder_generation_rf_token_ids: List[List[int]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -86,6 +99,27 @@ class VllmPagedMultistepReport:
             "native_decoder_step_token_match_ok": list(self.native_decoder_step_token_match_ok),
             "native_decoder_ref_token_ids": [list(row) for row in self.native_decoder_ref_token_ids],
             "native_decoder_rf_token_ids": [list(row) for row in self.native_decoder_rf_token_ids],
+            "generation_functional_chain": self.generation_functional_chain,
+            "generation_parity_ok": self.generation_parity_ok,
+            "generation_token_match_ok": self.generation_token_match_ok,
+            "generation_step_parity_ok": list(self.generation_step_parity_ok),
+            "generation_step_token_match_ok": list(self.generation_step_token_match_ok),
+            "generation_engine_token_ids": [list(row) for row in self.generation_engine_token_ids],
+            "generation_hybrid_token_ids": [list(row) for row in self.generation_hybrid_token_ids],
+            "native_decoder_generation_parity_ok": self.native_decoder_generation_parity_ok,
+            "native_decoder_generation_token_match_ok": self.native_decoder_generation_token_match_ok,
+            "native_decoder_generation_step_parity_ok": list(
+                self.native_decoder_generation_step_parity_ok
+            ),
+            "native_decoder_generation_step_token_match_ok": list(
+                self.native_decoder_generation_step_token_match_ok
+            ),
+            "native_decoder_generation_ref_token_ids": [
+                list(row) for row in self.native_decoder_generation_ref_token_ids
+            ],
+            "native_decoder_generation_rf_token_ids": [
+                list(row) for row in self.native_decoder_generation_rf_token_ids
+            ],
         }
 
 
@@ -106,6 +140,16 @@ def validate_serving_vllm_paged_multistep_bench(payload: Dict[str, Any]) -> List
     hyb = payload.get("hybrid_token_ids")
     if not isinstance(eng, list) or not isinstance(hyb, list) or len(eng) != len(hyb):
         errors.append("engine_token_ids and hybrid_token_ids must be same-length lists")
+    if payload.get("generation_parity_ok") is not True:
+        errors.append("generation_parity_ok must be true")
+    if payload.get("generation_token_match_ok") is not True:
+        errors.append("generation_token_match_ok must be true")
+    gen_eng = payload.get("generation_engine_token_ids")
+    gen_hyb = payload.get("generation_hybrid_token_ids")
+    if not isinstance(gen_eng, list) or not isinstance(gen_hyb, list) or len(gen_eng) != len(gen_hyb):
+        errors.append(
+            "generation_engine_token_ids and generation_hybrid_token_ids must be same-length lists"
+        )
     return errors
 
 
@@ -336,6 +380,98 @@ def _run_vllm_native_decoder_paged_multistep(
     return step_parity, step_token, ref_tokens, rf_tokens
 
 
+def _run_vllm_native_decoder_generation(
+    *,
+    decode_steps: int,
+    num_layers: int,
+    hidden_size: int,
+    intermediate_size: int,
+    batch: int,
+    base_seq: Sequence[int],
+    block_tables: Sequence[Sequence[int]],
+    page_size: int,
+    embed,
+    token_ids,
+    lm_weight,
+) -> Optional[
+    tuple[
+        List[bool],
+        List[bool],
+        List[List[int]],
+        List[List[int]],
+    ]
+]:
+    """Native vLLM decoder token-embed generation vs RF-on-MLP with paged KV (S46)."""
+    if not is_vllm_available() or num_layers < 1:
+        return None
+    require_torch()
+    import torch
+
+    layers = [
+        build_minimal_vllm_qwen2_decoder_layer(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            layer_id=layer_id,
+        )
+        for layer_id in range(num_layers)
+    ]
+    hooks = [
+        build_vllm_qwen2_mlp_rf_hook(layer, layer_id=layer_id)
+        for layer_id, layer in enumerate(layers)
+    ]
+    device = str(next(layers[0].parameters()).device)
+    ids = token_ids.detach().clone().to(device)
+    table = embed.to(device)
+    weight = lm_weight.to(device)
+
+    step_parity: List[bool] = []
+    step_token: List[bool] = []
+    ref_tokens: List[List[int]] = []
+    rf_tokens: List[List[int]] = []
+
+    for step in range(decode_steps):
+        paged_batch = _paged_batch_for_step(
+            step=step,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+        meta = dict(paged_batch.as_rf_meta())
+        h = table[ids]
+        positions = torch.tensor(
+            [int(s) - 1 for s in paged_batch.seq_lens],
+            dtype=torch.long,
+            device=device,
+        )
+        with vllm_test_config_context():
+            with torch.no_grad():
+                ref_hidden = _vllm_chain_native_decoder_layers(
+                    layers,
+                    positions=positions,
+                    hidden_states=h,
+                )
+                rf_hidden = _vllm_chain_native_decoder_layers_rf_mlp(
+                    layers,
+                    hooks,
+                    positions=positions,
+                    hidden_states=h,
+                    rf_meta_base=meta,
+                )
+        ok = bool(torch.allclose(ref_hidden, rf_hidden, rtol=1e-4, atol=1e-4))
+        ok = ok and _paged_kv_present(meta)
+        step_parity.append(ok)
+
+        ref_tok = (ref_hidden @ weight.T).argmax(-1)
+        rf_tok = (rf_hidden @ weight.T).argmax(-1)
+        step_token.append(bool(torch.equal(ref_tok, rf_tok)))
+        ref_tokens.append(ref_tok.tolist())
+        rf_tokens.append(rf_tok.tolist())
+        ids = ref_tok
+
+    return step_parity, step_token, ref_tokens, rf_tokens
+
+
 def run_vllm_paged_multistep_bench(
     *,
     decode_steps: int = 4,
@@ -350,9 +486,9 @@ def run_vllm_paged_multistep_bench(
     try_native: bool = True,
     try_native_full_layer: bool = True,
     try_native_decoder: bool = True,
-    version: str = "s45",
+    version: str = "s46",
 ) -> VllmPagedMultistepReport:
-    """Run multistep paged-KV hybrid vs engine with per-step token parity."""
+    """Run multistep paged-KV hybrid vs engine, then token-embed generation vs torch."""
     require_torch()
     import torch
 
@@ -425,6 +561,50 @@ def run_vllm_paged_multistep_bench(
     parity_ok = all(step_parity)
     token_match_ok = all(step_token)
 
+    # S46: token-embed generation on the reference-token trajectory (same model and paged meta).
+    embed_gen = torch.Generator(device="cpu")
+    embed_gen.manual_seed(seed + 11)
+    embed = (
+        torch.randn(
+            vocab_size, hidden_size, generator=embed_gen, device="cpu", dtype=torch.float32
+        )
+        * 0.02
+    ).to(device)
+    tok_gen = torch.Generator(device="cpu")
+    tok_gen.manual_seed(seed + 13)
+    token_ids = torch.randint(0, vocab_size, (batch,), generator=tok_gen).to(device)
+    initial_token_ids = token_ids.detach().clone()
+
+    generation_step_parity: List[bool] = []
+    generation_step_token: List[bool] = []
+    generation_engine_tokens: List[List[int]] = []
+    generation_hybrid_tokens: List[List[int]] = []
+    for step in range(decode_steps):
+        paged_batch = _paged_batch_for_step(
+            step=step,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+        )
+        meta = paged_batch.as_rf_meta()
+        h = embed[token_ids]
+        with torch.no_grad():
+            ref = model.forward_engine_full(h)
+            got = hybrid.forward(h, rf_meta=meta)
+        ok = bool(torch.allclose(got.hidden, ref, rtol=1e-5, atol=1e-6))
+        ok = ok and list(got.rf_layer_ids) == expected_rf
+        ok = ok and _layer_step_meta_has_paged_kv(got.layer_results)
+        generation_step_parity.append(ok)
+        ref_tok = (ref @ lm_weight.T).argmax(-1)
+        hyb_tok = (got.hidden @ lm_weight.T).argmax(-1)
+        generation_step_token.append(bool(torch.equal(ref_tok, hyb_tok)))
+        generation_engine_tokens.append(ref_tok.tolist())
+        generation_hybrid_tokens.append(hyb_tok.tolist())
+        token_ids = ref_tok
+    generation_parity_ok = all(generation_step_parity)
+    generation_token_match_ok = all(generation_step_token)
+
     vllm_avail = is_vllm_available()
     native_steps: Optional[List[bool]] = None
     if try_native and vllm_avail:
@@ -457,6 +637,10 @@ def run_vllm_paged_multistep_bench(
     native_decoder_token_steps: Optional[List[bool]] = None
     native_decoder_ref_tokens: List[List[int]] = []
     native_decoder_rf_tokens: List[List[int]] = []
+    native_decoder_generation_steps: Optional[List[bool]] = None
+    native_decoder_generation_token_steps: Optional[List[bool]] = None
+    native_decoder_generation_ref_tokens: List[List[int]] = []
+    native_decoder_generation_rf_tokens: List[List[int]] = []
     if try_native_decoder and vllm_avail and num_layers > 0:
         decoder_out = _run_vllm_native_decoder_paged_multistep(
             decode_steps=decode_steps,
@@ -474,9 +658,37 @@ def run_vllm_paged_multistep_bench(
             native_decoder_steps, native_decoder_token_steps, native_decoder_ref_tokens, native_decoder_rf_tokens = (
                 decoder_out
             )
+        gen_decoder_out = _run_vllm_native_decoder_generation(
+            decode_steps=decode_steps,
+            num_layers=num_layers,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            base_seq=base_seq,
+            block_tables=block_tables,
+            page_size=page_size,
+            embed=embed,
+            token_ids=initial_token_ids,
+            lm_weight=lm_weight,
+        )
+        if gen_decoder_out is not None:
+            (
+                native_decoder_generation_steps,
+                native_decoder_generation_token_steps,
+                native_decoder_generation_ref_tokens,
+                native_decoder_generation_rf_tokens,
+            ) = gen_decoder_out
     native_decoder_parity_ok = all(native_decoder_steps) if native_decoder_steps else None
     native_decoder_token_match_ok = (
         all(native_decoder_token_steps) if native_decoder_token_steps else None
+    )
+    native_decoder_generation_parity_ok = (
+        all(native_decoder_generation_steps) if native_decoder_generation_steps else None
+    )
+    native_decoder_generation_token_match_ok = (
+        all(native_decoder_generation_token_steps)
+        if native_decoder_generation_token_steps
+        else None
     )
 
     return VllmPagedMultistepReport(
@@ -505,6 +717,21 @@ def run_vllm_paged_multistep_bench(
         native_decoder_step_token_match_ok=list(native_decoder_token_steps or []),
         native_decoder_ref_token_ids=native_decoder_ref_tokens,
         native_decoder_rf_token_ids=native_decoder_rf_tokens,
+        generation_functional_chain="chain_c_multilayer_decoder_generation_vs_torch",
+        generation_parity_ok=generation_parity_ok,
+        generation_token_match_ok=generation_token_match_ok,
+        generation_step_parity_ok=generation_step_parity,
+        generation_step_token_match_ok=generation_step_token,
+        generation_engine_token_ids=generation_engine_tokens,
+        generation_hybrid_token_ids=generation_hybrid_tokens,
+        native_decoder_generation_parity_ok=native_decoder_generation_parity_ok,
+        native_decoder_generation_token_match_ok=native_decoder_generation_token_match_ok,
+        native_decoder_generation_step_parity_ok=list(native_decoder_generation_steps or []),
+        native_decoder_generation_step_token_match_ok=list(
+            native_decoder_generation_token_steps or []
+        ),
+        native_decoder_generation_ref_token_ids=native_decoder_generation_ref_tokens,
+        native_decoder_generation_rf_token_ids=native_decoder_generation_rf_tokens,
     )
 
 
@@ -515,7 +742,7 @@ def run_serving_vllm_paged_multistep_archive(
     try_native: bool = True,
     try_native_full_layer: bool = True,
     try_native_decoder: bool = True,
-    version: str = "s45",
+    version: str = "s46",
 ) -> Dict[str, Any]:
     payload = run_vllm_paged_multistep_bench(
         decode_steps=decode_steps,

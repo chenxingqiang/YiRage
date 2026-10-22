@@ -30,6 +30,10 @@ def _synthetic_paged_multistep_native_decoder(*, version: str = "s45") -> dict:
         "step_token_match_ok": ok,
         "engine_token_ids": tok,
         "hybrid_token_ids": tok,
+        "generation_parity_ok": True,
+        "generation_token_match_ok": True,
+        "generation_engine_token_ids": tok,
+        "generation_hybrid_token_ids": tok,
         "vllm_native_available": False,
         "native_parity_ok": None,
         "native_step_parity_ok": [],
@@ -45,7 +49,7 @@ def _synthetic_paged_multistep_native_decoder(*, version: str = "s45") -> dict:
 
 
 def test_runtime_fusion_version_s45(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s46"
 
 
 def test_paged_multistep_native_decoder_fields_contract(serving):
