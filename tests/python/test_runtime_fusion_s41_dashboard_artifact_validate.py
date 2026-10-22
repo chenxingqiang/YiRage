@@ -16,7 +16,7 @@ from test_runtime_fusion_s36_serving_dashboard import _synthetic_combined_for_da
 
 
 def test_runtime_fusion_version_s41(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s46"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s47"
 
 
 def test_validate_dashboard_artifact_bundle(serving):

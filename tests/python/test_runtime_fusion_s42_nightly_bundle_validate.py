@@ -63,7 +63,7 @@ def _synthetic_bundle_artifacts(*, version: str = "s45") -> dict:
 
 
 def test_runtime_fusion_version_s42(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s46"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s47"
 
 
 def test_validate_nightly_bundle_synthetic(serving):
