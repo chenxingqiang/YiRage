@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """S37: vLLM PagedAttention multistep decode bench CLI (G7 chain C paged).
 
+S46 also reports token-embed generation parity (generation_parity_ok).
+
 Requires PyTorch only (no yirage.core)::
 
     export YIRAGE_BACKEND=cpu PYTHONPATH=python
@@ -53,7 +55,7 @@ def main() -> int:
         decode_steps=args.decode_steps,
         quick=args.quick,
         try_native=not args.no_native,
-        version="s40",
+        version="s46",
     )
     payload = report.to_dict()
     if args.output:

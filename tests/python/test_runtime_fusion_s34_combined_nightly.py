@@ -117,6 +117,10 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
             "functional_chain": "chain_c_vllm_paged_multistep",
             "engine_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             "hybrid_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+            "generation_parity_ok": True,
+            "generation_token_match_ok": True,
+            "generation_engine_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+            "generation_hybrid_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             "vllm_native_available": False,
             "native_parity_ok": None,
             "native_step_parity_ok": [],
@@ -131,7 +135,7 @@ def _synthetic_combined_archive(*, version: str = "s34") -> dict:
 
 
 def test_runtime_fusion_version_s34(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s46"
 
 
 def test_validate_combined_nightly_archive_synthetic(serving):

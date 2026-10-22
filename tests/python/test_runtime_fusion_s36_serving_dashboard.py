@@ -85,6 +85,10 @@ def _synthetic_combined_for_dashboard(*, version: str = "s38") -> dict:
             "functional_chain": "chain_c_vllm_paged_multistep",
             "engine_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             "hybrid_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+            "generation_parity_ok": True,
+            "generation_token_match_ok": True,
+            "generation_engine_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
+            "generation_hybrid_token_ids": [[1, 2, 3], [4, 5, 6], [7, 8, 9]],
             "vllm_native_available": False,
             "native_parity_ok": None,
             "native_step_parity_ok": [],
@@ -99,7 +103,7 @@ def _synthetic_combined_for_dashboard(*, version: str = "s38") -> dict:
 
 
 def test_runtime_fusion_version_s36(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s46"
 
 
 def test_build_dashboard_from_synthetic_archive(serving):
@@ -160,7 +164,7 @@ def test_dashboard_json_contract(serving):
         _synthetic_combined_for_dashboard()
     ).to_dict()
     assert payload["serving_dashboard"] is True
-    assert payload["version"] == "s45"
+    assert payload["version"] == "s46"
     json.dumps(payload)
 
 

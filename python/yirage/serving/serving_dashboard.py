@@ -104,7 +104,7 @@ def _row_from_subsection(
 def build_serving_dashboard_from_combined_archive(
     archive: Mapping[str, Any],
     *,
-    version: str = "s45",
+    version: str = "s46",
     allow_partial: bool = False,
 ) -> ServingDashboardReport:
     """Build dashboard from combined nightly archive payload."""
@@ -181,6 +181,10 @@ def build_serving_dashboard_from_combined_archive(
                     "native_decoder_parity_ok",
                     "native_decoder_token_match_ok",
                     "vllm_native_available",
+                    "generation_parity_ok",
+                    "generation_token_match_ok",
+                    "native_decoder_generation_parity_ok",
+                    "native_decoder_generation_token_match_ok",
                 ),
             )
         )

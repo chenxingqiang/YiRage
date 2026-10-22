@@ -27,11 +27,15 @@ def _synthetic_paged_multistep(*, version: str = "s37") -> dict:
         "step_token_match_ok": ok,
         "engine_token_ids": tok,
         "hybrid_token_ids": tok,
+        "generation_parity_ok": True,
+        "generation_token_match_ok": True,
+        "generation_engine_token_ids": tok,
+        "generation_hybrid_token_ids": tok,
     }
 
 
 def test_runtime_fusion_version_s37(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s45"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s46"
 
 
 def test_validate_vllm_paged_multistep_synthetic(serving):
