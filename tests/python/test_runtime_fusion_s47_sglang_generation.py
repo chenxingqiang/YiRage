@@ -18,7 +18,7 @@ def _synthetic_combined_with_sglang_generation() -> dict:
 
 
 def test_runtime_fusion_version_s47(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s47"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s48"
 
 
 def test_sglang_multilayer_generation_parity(serving):

@@ -6,8 +6,12 @@ Full path = engine Attention → RF MLP hook driven by ForwardBatch meta
 (``extend_seq_lens``, ``block_tables``, ``seq_lens``) → parity vs engine MLP.
 
 S47 adds token-embed multi-layer generation over the same ForwardBatch meta.
+S48 compares a native SGLang MLP stack to the RF MLP hook on that same
+token-embed trajectory when ``sglang`` is installed. Attention stays with
+the engine.
 
-When ``sglang`` is not installed, the torch surrogate path is the cert gate.
+When ``sglang`` is not installed, the torch surrogate path is the cert gate
+and native generation fields stay unset.
 """
 
 from __future__ import annotations
@@ -501,7 +505,7 @@ def run_sglang_mlp_rf_e2e_auto(
 
 @dataclass(frozen=True)
 class SglangMultilayerGenerationReport:
-    """S47 token-embed multi-layer generation under SGLang ForwardBatch meta."""
+    """Token-embed multi-layer generation under SGLang ForwardBatch meta."""
 
     version: str
     parity_ok: bool
@@ -520,6 +524,11 @@ class SglangMultilayerGenerationReport:
     hybrid_token_ids: List[List[int]] = field(default_factory=list)
     sglang_native_available: bool = False
     native_generation_parity_ok: Optional[bool] = None
+    native_generation_token_match_ok: Optional[bool] = None
+    native_generation_step_parity_ok: List[bool] = field(default_factory=list)
+    native_generation_step_token_match_ok: List[bool] = field(default_factory=list)
+    native_generation_ref_token_ids: List[List[int]] = field(default_factory=list)
+    native_generation_rf_token_ids: List[List[int]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -541,6 +550,17 @@ class SglangMultilayerGenerationReport:
             "hybrid_token_ids": [list(row) for row in self.hybrid_token_ids],
             "sglang_native_available": self.sglang_native_available,
             "native_generation_parity_ok": self.native_generation_parity_ok,
+            "native_generation_token_match_ok": self.native_generation_token_match_ok,
+            "native_generation_step_parity_ok": list(self.native_generation_step_parity_ok),
+            "native_generation_step_token_match_ok": list(
+                self.native_generation_step_token_match_ok
+            ),
+            "native_generation_ref_token_ids": [
+                list(row) for row in self.native_generation_ref_token_ids
+            ],
+            "native_generation_rf_token_ids": [
+                list(row) for row in self.native_generation_rf_token_ids
+            ],
         }
 
 
@@ -584,6 +604,94 @@ def validate_sglang_multilayer_generation(payload: Dict[str, Any]) -> List[str]:
     return errors
 
 
+def _init_sglang_decoder_weights(layer) -> None:
+    """Normal-init every non-empty parameter so native MLP and the RF hook match."""
+    require_torch()
+    import torch
+
+    with torch.no_grad():
+        for param in layer.parameters():
+            if param.numel() > 0:
+                torch.nn.init.normal_(param, mean=0.0, std=0.02)
+
+
+def _run_sglang_native_mlp_generation(
+    *,
+    decode_steps: int,
+    num_layers: int,
+    hidden_size: int,
+    intermediate_size: int,
+    batch: int,
+    embed,
+    token_ids,
+    lm_weight,
+) -> Optional[
+    tuple[
+        List[bool],
+        List[bool],
+        List[List[int]],
+        List[List[int]],
+    ]
+]:
+    """Native SGLang MLP stack vs RF MLP hook on one token-embed trajectory.
+
+    Attention stays with the engine. Each decode step is a Radix miss
+    (``extend_seq_lens`` all 1) so every MLP runs. Returns None when
+    ``sglang`` is not installed or ``num_layers < 1``.
+    """
+    if not is_sglang_available() or int(num_layers) < 1:
+        return None
+    require_torch()
+    import torch
+
+    layers = []
+    hooks = []
+    for layer_id in range(int(num_layers)):
+        layer = build_minimal_sglang_qwen2_decoder_layer(
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            layer_id=layer_id,
+        )
+        _init_sglang_decoder_weights(layer)
+        hooks.append(build_sglang_qwen2_mlp_rf_hook(layer, layer_id=layer_id))
+        layers.append(layer)
+
+    device = str(next(layers[0].parameters()).device)
+    ids = token_ids.detach().clone().to(device)
+    table = embed.to(device)
+    weight = lm_weight.to(device)
+    block_table_rows = [[1, 2, 3, 4], [3, 4, 5, 6], [5, 6, 7, 8], [7, 8, 9, 10]]
+
+    step_parity: List[bool] = []
+    step_token: List[bool] = []
+    ref_token_ids: List[List[int]] = []
+    rf_token_ids: List[List[int]] = []
+
+    for step in range(int(decode_steps)):
+        batch_spec = SglangForwardBatchSpec(
+            extend_seq_lens=[1] * int(batch),
+            seq_lens=[16 + step, 18 + step, 20 + step, 22 + step][: int(batch)],
+            block_tables=block_table_rows[: int(batch)],
+            page_size=16,
+        )
+        h = table[ids]
+        ref = h
+        rf = h
+        with torch.no_grad():
+            for layer, hook in zip(layers, hooks):
+                ref = _sglang_native_mlp_forward(layer, ref)
+                rf = hook.forward_mlp(rf, forward_batch=batch_spec).hidden
+        step_parity.append(bool(torch.allclose(ref, rf, rtol=1e-4, atol=1e-4)))
+        ref_tok = (ref @ weight.T).argmax(dim=-1)
+        rf_tok = (rf @ weight.T).argmax(dim=-1)
+        step_token.append(bool(torch.equal(ref_tok, rf_tok)))
+        ref_token_ids.append([int(v) for v in ref_tok.tolist()])
+        rf_token_ids.append([int(v) for v in rf_tok.tolist()])
+        ids = ref_tok
+
+    return step_parity, step_token, ref_token_ids, rf_token_ids
+
+
 def run_sglang_multilayer_generation(
     *,
     decode_steps: int = 3,
@@ -595,13 +703,16 @@ def run_sglang_multilayer_generation(
     vocab_size: int = 64,
     seed: int = 0,
     quick: bool = False,
-    version: str = "s47",
+    try_native: bool = True,
+    version: str = "s48",
 ) -> SglangMultilayerGenerationReport:
     """Greedy token-embed generation: reference hybrid vs RF under rotating Radix meta.
 
     Each step embeds the reference-trajectory token ids, runs ForwardBatch meta
     (partial, miss, or all-hit), and compares hidden states plus argmax tokens.
-    ``native_generation_parity_ok`` stays unset; this tier does not launch SGLang.
+    Native MLP generation runs only when ``sglang`` is installed. It compares
+    the SGLang MLP stack to the RF MLP hook on the same token-embed trajectory.
+    Attention stays outside that comparison.
     """
     require_torch()
     import torch
@@ -658,6 +769,7 @@ def run_sglang_multilayer_generation(
     token_gen = torch.Generator(device="cpu")
     token_gen.manual_seed(seed + 13)
     token_ids = torch.randint(0, vocab_size, (batch,), generator=token_gen).to(device)
+    initial_token_ids = token_ids.clone()
 
     block_table_rows = [[1, 2, 3, 4], [3, 4, 5, 6], [5, 6, 7, 8], [7, 8, 9, 10]]
     radix_step_kinds: List[str] = []
@@ -715,6 +827,41 @@ def run_sglang_multilayer_generation(
         # Follow the reference argmax so later steps share one token trajectory.
         token_ids = ref_tok
 
+    native_generation_parity_ok: Optional[bool] = None
+    native_generation_token_match_ok: Optional[bool] = None
+    native_generation_step_parity_ok: List[bool] = []
+    native_generation_step_token_match_ok: List[bool] = []
+    native_generation_ref_token_ids: List[List[int]] = []
+    native_generation_rf_token_ids: List[List[int]] = []
+    if try_native:
+        native_out = _run_sglang_native_mlp_generation(
+            decode_steps=decode_steps,
+            num_layers=num_layers,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            batch=batch,
+            embed=embed,
+            token_ids=initial_token_ids,
+            lm_weight=lm_weight,
+        )
+        if native_out is not None:
+            (
+                native_generation_step_parity_ok,
+                native_generation_step_token_match_ok,
+                native_generation_ref_token_ids,
+                native_generation_rf_token_ids,
+            ) = native_out
+            native_generation_parity_ok = (
+                all(native_generation_step_parity_ok)
+                if native_generation_step_parity_ok
+                else None
+            )
+            native_generation_token_match_ok = (
+                all(native_generation_step_token_match_ok)
+                if native_generation_step_token_match_ok
+                else None
+            )
+
     return SglangMultilayerGenerationReport(
         version=version,
         parity_ok=all(step_parity_ok),
@@ -731,5 +878,10 @@ def run_sglang_multilayer_generation(
         engine_token_ids=engine_token_ids,
         hybrid_token_ids=hybrid_token_ids,
         sglang_native_available=is_sglang_available(),
-        native_generation_parity_ok=None,
+        native_generation_parity_ok=native_generation_parity_ok,
+        native_generation_token_match_ok=native_generation_token_match_ok,
+        native_generation_step_parity_ok=native_generation_step_parity_ok,
+        native_generation_step_token_match_ok=native_generation_step_token_match_ok,
+        native_generation_ref_token_ids=native_generation_ref_token_ids,
+        native_generation_rf_token_ids=native_generation_rf_token_ids,
     )

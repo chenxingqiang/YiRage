@@ -192,6 +192,16 @@ def serving_combined_nightly_archive_metadata(
         "sglang_generation_token_match_ok": (
             sglang_generation.get("token_match_ok") if sglang_generation is not None else None
         ),
+        "sglang_native_generation_parity_ok": (
+            sglang_generation.get("native_generation_parity_ok")
+            if sglang_generation is not None
+            else None
+        ),
+        "sglang_native_generation_token_match_ok": (
+            sglang_generation.get("native_generation_token_match_ok")
+            if sglang_generation is not None
+            else None
+        ),
         "archive_sha256": hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         "created_unix": time.time(),
     }
