@@ -116,20 +116,21 @@ def _split_gate_up_weight(gate_up_w: Any):
     if len(shape) != 2:
         raise ValueError(f"gate_up weight must be rank-2, got shape={shape}")
     hidden_a, hidden_b = int(shape[0]), int(shape[1])
-    if hidden_a % 2 == 0 and hidden_a > hidden_b:
-        inter = hidden_a // 2
+    # Column-parallel SGLang stores gate_up as (2I, H).
+    if hidden_a % 2 == 0 and hidden_a >= 2 * hidden_b:
         if hasattr(gate_up_w, "chunk"):
             gate, up = gate_up_w.chunk(2, dim=0)
             return gate, up
         arr = np.asarray(gate_up_w)
+        inter = hidden_a // 2
         return arr[:inter], arr[inter:]
-    if hidden_b % 2 == 0:
-        inter = hidden_b // 2
-        w_t = gate_up_w if not hasattr(gate_up_w, "t") else gate_up_w.t()
-        if hasattr(w_t, "chunk"):
-            gate, up = w_t.chunk(2, dim=1)
+    # After ``weight.T`` the same matrix is (H, 2I). Keep that orientation.
+    if hidden_b % 2 == 0 and hidden_b >= 2 * hidden_a:
+        if hasattr(gate_up_w, "chunk"):
+            gate, up = gate_up_w.chunk(2, dim=1)
             return gate, up
-        arr = np.asarray(w_t)
+        arr = np.asarray(gate_up_w)
+        inter = hidden_b // 2
         return arr[:, :inter], arr[:, inter:]
     raise ValueError(f"cannot infer gate/up split from gate_up shape={shape}")
 

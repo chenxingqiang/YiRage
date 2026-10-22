@@ -38,6 +38,7 @@ on:
       - "tests/python/test_runtime_fusion_s46_decoder_generation.py"
       - "tests/python/test_runtime_fusion_s47_sglang_generation.py"
       - "tests/python/test_runtime_fusion_s48_sglang_native_generation.py"
+      - "tests/python/test_runtime_fusion_s49_sglang_sm_budget.py"
       - "tests/integration/test_serving_nightly_bundle_ci_contract.py"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   push:
@@ -76,6 +77,7 @@ on:
       - "tests/python/test_runtime_fusion_s46_decoder_generation.py"
       - "tests/python/test_runtime_fusion_s47_sglang_generation.py"
       - "tests/python/test_runtime_fusion_s48_sglang_native_generation.py"
+      - "tests/python/test_runtime_fusion_s49_sglang_sm_budget.py"
       - "tests/integration/test_serving_nightly_bundle_ci_contract.py"
       - ".github/workflows/serving-combined-nightly-archive.yml"
   schedule:
@@ -105,7 +107,7 @@ jobs:
           YIRAGE_BACKEND: cpu
           PYTHONPATH: python:tests/python
         run: |
-          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py tests/python/test_runtime_fusion_s35_engine_native_multistep.py tests/python/test_runtime_fusion_s36_serving_dashboard.py tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py tests/python/test_runtime_fusion_s38_paged_multistep_archive.py tests/python/test_runtime_fusion_s39_serving_dashboard_html.py tests/python/test_runtime_fusion_s40_vllm_paged_native_multistep.py tests/python/test_runtime_fusion_s41_dashboard_artifact_validate.py tests/python/test_runtime_fusion_s42_nightly_bundle_validate.py tests/python/test_runtime_fusion_s43_native_full_layer_paged.py tests/python/test_runtime_fusion_s44_nightly_bundle_ci_contract.py tests/python/test_runtime_fusion_s45_native_decoder_paged.py tests/python/test_runtime_fusion_s46_decoder_generation.py tests/python/test_runtime_fusion_s47_sglang_generation.py tests/python/test_runtime_fusion_s48_sglang_native_generation.py tests/integration/test_serving_nightly_bundle_ci_contract.py -v -k "not slow" --tb=short
+          python3 -m pytest tests/python/test_runtime_fusion_s34_combined_nightly.py tests/python/test_runtime_fusion_s35_engine_native_multistep.py tests/python/test_runtime_fusion_s36_serving_dashboard.py tests/python/test_runtime_fusion_s37_vllm_paged_multistep.py tests/python/test_runtime_fusion_s38_paged_multistep_archive.py tests/python/test_runtime_fusion_s39_serving_dashboard_html.py tests/python/test_runtime_fusion_s40_vllm_paged_native_multistep.py tests/python/test_runtime_fusion_s41_dashboard_artifact_validate.py tests/python/test_runtime_fusion_s42_nightly_bundle_validate.py tests/python/test_runtime_fusion_s43_native_full_layer_paged.py tests/python/test_runtime_fusion_s44_nightly_bundle_ci_contract.py tests/python/test_runtime_fusion_s45_native_decoder_paged.py tests/python/test_runtime_fusion_s46_decoder_generation.py tests/python/test_runtime_fusion_s47_sglang_generation.py tests/python/test_runtime_fusion_s48_sglang_native_generation.py tests/python/test_runtime_fusion_s49_sglang_sm_budget.py tests/integration/test_serving_nightly_bundle_ci_contract.py -v -k "not slow" --tb=short
           python3 benchmark/serving_combined_nightly_archive.py --quick --g1-only --json
           python3 benchmark/serving_engine_native_multistep_bench.py --quick --no-native --json
           python3 benchmark/serving_dashboard.py --g1-only --json
