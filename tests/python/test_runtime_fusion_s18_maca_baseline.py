@@ -89,4 +89,4 @@ def test_mcpytorch_baseline_with_maca_backend(serving):
 
 
 def test_rf_inspect_version_s18(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"

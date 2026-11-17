@@ -101,7 +101,7 @@ def test_vllm_hook_raises_without_package(serving):
 
 
 def test_rf_inspect_version_s8(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_segment_torch_bench_tiny_parity(serving):
