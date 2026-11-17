@@ -151,14 +151,14 @@ test-serving-search-tier-archive-profile:
 	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/serving_search_tier_archive.py \
 		--json --quick --tier seed_verify --output artifacts/serving-search-tier-seed_verify.json
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_search_tier_archive.py \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_search_tier_archive.py \
 		artifacts/serving-search-tier-seed_verify.json \
 		--metadata-output artifacts/serving-search-tier-seed_verify.meta.json --quick
 
 validate-serving-search-tier-archive:
 	@test -n "$(ARCHIVE)" || (echo "Usage: make validate-serving-search-tier-archive ARCHIVE=path/to/archive.json" && exit 1)
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_search_tier_archive.py "$(ARCHIVE)"
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_search_tier_archive.py "$(ARCHIVE)"
 
 test-serving-search-tier-nightly-profile:
 	@mkdir -p artifacts
@@ -166,7 +166,7 @@ test-serving-search-tier-nightly-profile:
 	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/serving_search_tier_archive.py \
 		--json --quick --multi-tier --output artifacts/serving-search-tier-multi.json
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_search_tier_archive.py \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_search_tier_archive.py \
 		artifacts/serving-search-tier-multi.json \
 		--metadata-output artifacts/serving-search-tier-multi.meta.json --quick
 
@@ -176,14 +176,14 @@ test-serving-decode-bench-nightly-profile:
 	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/serving_decode_bench_archive.py \
 		--json --quick --output artifacts/serving-decode-bench.json
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_qwen_decode_bench_archive.py \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_qwen_decode_bench_archive.py \
 		artifacts/serving-decode-bench.json \
 		--metadata-output artifacts/serving-decode-bench.meta.json --quick
 
 validate-serving-qwen-decode-bench-archive:
 	@test -n "$(ARCHIVE)" || (echo "Usage: make validate-serving-qwen-decode-bench-archive ARCHIVE=path/to/archive.json" && exit 1)
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_qwen_decode_bench_archive.py "$(ARCHIVE)"
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_qwen_decode_bench_archive.py "$(ARCHIVE)"
 
 test-serving-engine-g1-regression-profile:
 	@mkdir -p artifacts
@@ -196,20 +196,20 @@ test-serving-combined-nightly-profile:
 	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/serving_combined_nightly_archive.py \
 		--json --quick --output artifacts/serving-combined-nightly.json
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_combined_nightly_archive.py \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_combined_nightly_archive.py \
 		artifacts/serving-combined-nightly.json \
 		--metadata-output artifacts/serving-combined-nightly.meta.json --quick
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/render_serving_dashboard.py \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/render_serving_dashboard.py \
 		artifacts/serving-combined-nightly.json \
 		--output artifacts/serving-dashboard.json \
 		--markdown-output artifacts/serving-dashboard.md \
 		--html-output artifacts/serving-dashboard.html --json
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_dashboard.py \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_dashboard.py \
 		artifacts/serving-dashboard.json \
 		--html artifacts/serving-dashboard.html \
 		--markdown artifacts/serving-dashboard.md \
 		--metadata-output artifacts/serving-dashboard.meta.json
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_combined_nightly_bundle.py \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_combined_nightly_bundle.py \
 		artifacts/serving-combined-nightly.json \
 		--archive-meta artifacts/serving-combined-nightly.meta.json \
 		--dashboard artifacts/serving-dashboard.json \
@@ -220,7 +220,7 @@ test-serving-combined-nightly-profile:
 
 validate-serving-combined-nightly-bundle:
 	@test -n "$(ARCHIVE)" || (echo "Usage: make validate-serving-combined-nightly-bundle ARCHIVE=path/to/archive.json [DASHBOARD=...]" && exit 1)
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_combined_nightly_bundle.py "$(ARCHIVE)" \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_combined_nightly_bundle.py "$(ARCHIVE)" \
 		--archive-meta $(if $(ARCHIVE_META),$(ARCHIVE_META),$(dir $(ARCHIVE))serving-combined-nightly.meta.json) \
 		--dashboard $(if $(DASHBOARD),$(DASHBOARD),$(dir $(ARCHIVE))serving-dashboard.json) \
 		--dashboard-meta $(if $(DASHBOARD_META),$(DASHBOARD_META),$(dir $(ARCHIVE))serving-dashboard.meta.json) \
@@ -228,13 +228,13 @@ validate-serving-combined-nightly-bundle:
 
 validate-serving-dashboard:
 	@test -n "$(JSON)" || (echo "Usage: make validate-serving-dashboard JSON=path/to/dashboard.json [HTML=...] [MD=...]" && exit 1)
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_dashboard.py "$(JSON)" \
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_dashboard.py "$(JSON)" \
 		$(if $(HTML),--html $(HTML),) $(if $(MD),--markdown $(MD),)
 
 validate-serving-combined-nightly-archive:
 	@test -n "$(ARCHIVE)" || (echo "Usage: make validate-serving-combined-nightly-archive ARCHIVE=path/to/archive.json" && exit 1)
 	LD_LIBRARY_PATH=build/abstract_subexpr/release:build/formal_verifier/release:$$LD_LIBRARY_PATH \
-	YIRAGE_BACKEND=cpu PYTHONPATH=python:tests/python python3 scripts/validate_serving_combined_nightly_archive.py "$(ARCHIVE)"
+	YIRAGE_BACKEND=cpu PYTHONPATH=python python3 scripts/validate_serving_combined_nightly_archive.py "$(ARCHIVE)"
 
 test-cpu-cert-walkthrough-profile:
 	PYTHONPATH=. python3 scripts/cpu_certification.py --json --walkthrough-profile
