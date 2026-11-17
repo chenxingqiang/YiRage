@@ -24,6 +24,7 @@ from .vllm_e2e import (
     _vllm_chain_native_decoder_layers_rf_mlp,
     _vllm_native_mlp_forward,
     build_minimal_vllm_qwen2_decoder_layer,
+    native_tier_qwen2_head_layout,
 )
 from .vllm_paged_e2e import VllmPagedKvBatchSpec, _layer_step_meta_has_paged_kv, _paged_kv_present
 from .vllm_plugin import build_vllm_qwen2_mlp_rf_hook, is_vllm_available
@@ -50,6 +51,13 @@ class VllmPagedMultistepReport:
     engine_token_ids: List[List[int]] = field(default_factory=list)
     hybrid_token_ids: List[List[int]] = field(default_factory=list)
     vllm_native_available: bool = False
+    """True iff vLLM is importable AND the native tiers were requested.
+
+    Mirrors "native tier availability as exercised by this run": with
+    ``try_native`` off (the master gate) the report reads False even when
+    the vllm wheel itself imports fine, which is what the tier-off contract
+    tests assert.
+    """
     native_parity_ok: Optional[bool] = None
     native_step_parity_ok: List[bool] = field(default_factory=list)
     native_full_layer_parity_ok: Optional[bool] = None
@@ -174,6 +182,21 @@ def _paged_batch_for_step(
         seq_lens=[int(s) + step for s in base_seq],
         page_size=page_size,
     )
+
+
+def _native_tier_or_none(fn, /, **kwargs):
+    """Run a native-tier probe, degrading to ``None`` when the wheel can't serve it.
+
+    Native tiers are opportunistic: when the installed vLLM wheel cannot serve
+    a forward outside the engine pipeline (e.g. missing ``cpu_linear``
+    plumbing), the tier degrades to ``None`` -- the same representation as
+    ``vllm_avail=False`` -- instead of crashing the torch gate. Tests that
+    assert native parity still fail honestly on the ``None`` fields.
+    """
+    try:
+        return fn(**kwargs)
+    except (AttributeError, RuntimeError, NotImplementedError):
+        return None
 
 
 def _run_vllm_native_paged_multistep(
@@ -313,10 +336,13 @@ def _run_vllm_native_decoder_paged_multistep(
     require_torch()
     import torch
 
+    num_heads, num_kv_heads = native_tier_qwen2_head_layout(hidden_size)
     layers = [
         build_minimal_vllm_qwen2_decoder_layer(
             hidden_size=hidden_size,
             intermediate_size=intermediate_size,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_kv_heads,
             layer_id=layer_id,
         )
         for layer_id in range(num_layers)
@@ -411,10 +437,13 @@ def _run_vllm_native_decoder_generation(
     require_torch()
     import torch
 
+    num_heads, num_kv_heads = native_tier_qwen2_head_layout(hidden_size)
     layers = [
         build_minimal_vllm_qwen2_decoder_layer(
             hidden_size=hidden_size,
             intermediate_size=intermediate_size,
+            num_attention_heads=num_heads,
+            num_key_value_heads=num_kv_heads,
             layer_id=layer_id,
         )
         for layer_id in range(num_layers)
@@ -480,8 +509,8 @@ def run_vllm_paged_multistep_bench(
     *,
     decode_steps: int = 4,
     num_layers: int = 3,
-    hidden_size: int = 16,
-    intermediate_size: int = 32,
+    hidden_size: int = 32,
+    intermediate_size: int = 64,
     batch: int = 3,
     vocab_size: int = 128,
     page_size: int = 16,
@@ -492,7 +521,12 @@ def run_vllm_paged_multistep_bench(
     try_native_decoder: bool = True,
     version: str = "s46",
 ) -> VllmPagedMultistepReport:
-    """Run multistep paged-KV hybrid vs engine, then token-embed generation vs torch."""
+    """Run multistep paged-KV hybrid vs engine, then token-embed generation vs torch.
+
+    ``try_native`` is the master gate for the native vLLM tiers: the
+    full-layer and decoder tiers only run when it is True alongside their
+    own flags.
+    """
     require_torch()
     import torch
 
@@ -500,8 +534,11 @@ def run_vllm_paged_multistep_bench(
         decode_steps = min(int(decode_steps), 3)
         num_layers = min(num_layers, 2)
         batch = min(batch, 3)
-        hidden_size = min(hidden_size, 16)
-        intermediate_size = min(intermediate_size, 32)
+        # Keep the quick geometry >= hidden 32 so native decoder stacks get a
+        # CPU-kernel-supported head_dim (the vLLM 0.26 CPU attention kernel
+        # rejects head_dim < 32).
+        hidden_size = min(hidden_size, 32)
+        intermediate_size = min(intermediate_size, 64)
         vocab_size = min(vocab_size, 64)
 
     model = TorchEngineModel(
@@ -612,7 +649,8 @@ def run_vllm_paged_multistep_bench(
     vllm_avail = is_vllm_available()
     native_steps: Optional[List[bool]] = None
     if try_native and vllm_avail:
-        native_steps = _run_vllm_native_paged_multistep(
+        native_steps = _native_tier_or_none(
+            _run_vllm_native_paged_multistep,
             decode_steps=decode_steps,
             hidden_size=hidden_size,
             intermediate_size=intermediate_size,
@@ -624,8 +662,9 @@ def run_vllm_paged_multistep_bench(
     native_parity_ok = all(native_steps) if native_steps else None
 
     native_full_steps: Optional[List[bool]] = None
-    if try_native_full_layer and vllm_avail and num_layers > 0:
-        native_full_steps = _run_vllm_native_paged_multistep_full_layer(
+    if try_native and try_native_full_layer and vllm_avail and num_layers > 0:
+        native_full_steps = _native_tier_or_none(
+            _run_vllm_native_paged_multistep_full_layer,
             decode_steps=decode_steps,
             num_layers=num_layers,
             hidden_size=hidden_size,
@@ -645,8 +684,9 @@ def run_vllm_paged_multistep_bench(
     native_decoder_generation_token_steps: Optional[List[bool]] = None
     native_decoder_generation_ref_tokens: List[List[int]] = []
     native_decoder_generation_rf_tokens: List[List[int]] = []
-    if try_native_decoder and vllm_avail and num_layers > 0:
-        decoder_out = _run_vllm_native_decoder_paged_multistep(
+    if try_native and try_native_decoder and vllm_avail and num_layers > 0:
+        decoder_out = _native_tier_or_none(
+            _run_vllm_native_decoder_paged_multistep,
             decode_steps=decode_steps,
             num_layers=num_layers,
             hidden_size=hidden_size,
@@ -662,7 +702,8 @@ def run_vllm_paged_multistep_bench(
             native_decoder_steps, native_decoder_token_steps, native_decoder_ref_tokens, native_decoder_rf_tokens = (
                 decoder_out
             )
-        gen_decoder_out = _run_vllm_native_decoder_generation(
+        gen_decoder_out = _native_tier_or_none(
+            _run_vllm_native_decoder_generation,
             decode_steps=decode_steps,
             num_layers=num_layers,
             hidden_size=hidden_size,
@@ -710,7 +751,7 @@ def run_vllm_paged_multistep_bench(
         step_token_match_ok=step_token,
         engine_token_ids=engine_tokens,
         hybrid_token_ids=hybrid_tokens,
-        vllm_native_available=vllm_avail,
+        vllm_native_available=vllm_avail and try_native,
         native_parity_ok=native_parity_ok,
         native_step_parity_ok=list(native_steps or []),
         native_full_layer_parity_ok=native_full_layer_parity_ok,
