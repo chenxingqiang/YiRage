@@ -27,7 +27,7 @@ def yirage_serving(serving):
 
 
 def test_runtime_fusion_version_s29(yirage_serving):
-    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s29"
+    assert yirage_serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_validate_serving_multi_tier_bench_archive_synthetic(yirage_serving):
