@@ -47,7 +47,7 @@ def hf_serving(serving):
 
 
 def test_runtime_fusion_version_s33(hf_serving):
-    assert hf_serving.RuntimeFusion([]).inspect()["version"] == "s33"
+    assert hf_serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_validate_multistep_generation_synthetic(hf_serving):

@@ -78,7 +78,7 @@ def test_vllm_qwen2_mlp_rf_e2e(serving):
 
 
 def test_rf_inspect_version_s11(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_torch_vllm_hybrid_tiny_parity(serving):

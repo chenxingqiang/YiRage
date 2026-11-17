@@ -65,7 +65,7 @@ def test_hybrid_partial_sglang_extend_lens(serving, torch):
 
 
 def test_rf_inspect_version_s9(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_all_zero_extend_lens_are_all_hit(serving, torch):

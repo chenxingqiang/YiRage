@@ -70,7 +70,7 @@ def test_runtime_fusion_inspect_lists_capsule(serving):
     rf = serving.RuntimeFusion([cap])
     info = rf.inspect()
     assert info["runtime"] == "RuntimeFusion"
-    assert info["version"] == "s21"
+    assert info["version"] == "s50"
     assert info["capsules"][0]["plan"]["backend"] == serving.BACKEND_TORCH
 
 
