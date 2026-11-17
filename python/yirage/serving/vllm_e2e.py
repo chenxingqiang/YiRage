@@ -92,14 +92,20 @@ class VllmHybridE2EReport:
 
 
 def _vllm_native_mlp_forward(vllm_decoder_layer, hidden_after_attn):
-    """Reference MLP on a vLLM Qwen2 decoder layer (post-attn hidden)."""
+    """Reference fused MLP on a vLLM Qwen2 decoder layer (post-attn hidden).
+
+    Computes the same function as the RF MLP capsule (``mlp_torch``):
+    ``hidden + mlp(rmsnorm(hidden))`` -- the post-attention norm + MLP +
+    residual-add block the capsule replaces. The plain ``layer.mlp`` call
+    alone is NOT the reference (it skips the norm and the residual add).
+    """
     require_torch()
     import torch
 
     with torch.no_grad():
         try:
             normed = vllm_decoder_layer.post_attention_layernorm(hidden_after_attn)
-            return vllm_decoder_layer.mlp(normed)
+            return hidden_after_attn + vllm_decoder_layer.mlp(normed)
         except (AttributeError, RuntimeError, NotImplementedError):
             # CPU wheel: freshly constructed layers may lack cpu_linear kernels;
             # fall back to torch reference using weights extracted from vLLM modules.
@@ -119,6 +125,99 @@ def _vllm_decoder_stack_logits_hidden(
     return hidden_states + residual
 
 
+def _vllm_standalone_decode_forward_context(layers, *, vcfg, batch, device):
+    """Install the minimal vLLM forward context for standalone decode chains.
+
+    vLLM >=0.26 routes every attention through the unified attention custom
+    op, which reads a process-global ``ForwardContext`` (attention metadata,
+    per-layer KV caches and slot mappings) normally maintained by the engine's
+    model runner. The standalone parity chains run outside the engine, so we
+    install a minimal context modelling each forward as a one-token-per-request
+    decode over a fresh paged cache: every request writes its own K/V slot and
+    attends to that slot only. The attention stays deterministic and identical
+    across the reference and RF-hook chains -- exactly what the S45/S46 parity
+    benches assert -- without depending on engine-side scheduler state.
+
+    Raises ``NotImplementedError`` off the CPU wheel so the native tiers
+    degrade honestly instead of computing on garbage (the warming-up path
+    returns uninitialized memory when ``attn_metadata`` is None).
+    """
+    import torch
+
+    try:
+        from vllm.platforms import current_platform
+
+        if not current_platform.is_cpu():
+            raise NotImplementedError(
+                "standalone native decode context is CPU-wheel only"
+            )
+        from vllm import _custom_ops as ops
+        from vllm import envs as vllm_envs
+        from vllm.forward_context import (
+            create_forward_context,
+            override_forward_context,
+        )
+        from vllm.v1.attention.backends.cpu_attn import (
+            CPUAttentionMetadata,
+            _get_attn_isa,
+        )
+    except ImportError as e:
+        raise NotImplementedError(f"vLLM CPU wheel backend unavailable: {e}") from e
+
+    attns = [layer.self_attn.attn for layer in layers]
+    # One token per request: request i owns block i (BLOCK-aligned), its token
+    # lives at slot i * BLOCK + 0. Write kernel wants int64 slot_mapping; the
+    # read kernel wants int32 query_start_loc/seq_lens/block_table; cache
+    # blocks must satisfy the CPU kernel's block-size alignment.
+    BLOCK = 16
+    slot_mapping = (
+        torch.arange(batch, dtype=torch.int64, device=device) * BLOCK
+    )
+    block_table = torch.arange(batch, dtype=torch.int32, device=device).view(batch, 1)
+    seq_lens = torch.ones(batch, dtype=torch.int32, device=device)
+    query_start_loc = torch.arange(batch + 1, dtype=torch.int32, device=device)
+    head_dim = int(attns[0].head_size)
+    scheduler_metadata = ops.cpu_attn_get_scheduler_metadata(
+        num_reqs=batch,
+        num_heads=int(attns[0].num_heads),
+        num_kv_heads=int(attns[0].num_kv_heads),
+        head_dim=head_dim,
+        seq_lens=seq_lens,
+        dtype=torch.float32,
+        query_start_loc=query_start_loc,
+        causal=True,
+        sliding_window_size=-1,
+        isa=_get_attn_isa(torch.float32, BLOCK, head_dim, "auto"),
+        enable_kv_split=vllm_envs.VLLM_CPU_ATTN_SPLIT_KV,
+        dynamic_causal=None,
+    )
+    meta = CPUAttentionMetadata(
+        num_actual_tokens=batch,
+        max_query_len=1,
+        query_start_loc=query_start_loc,
+        max_seq_len=1,
+        seq_lens=seq_lens,
+        block_table=block_table,
+        slot_mapping=slot_mapping,
+        scheduler_metadata=scheduler_metadata,
+    )
+    for attn in attns:
+        attn.kv_cache = torch.zeros(
+            batch,
+            attn.num_kv_heads,
+            BLOCK,
+            2 * attn.head_size,
+            dtype=torch.float32,
+            device=device,
+        )
+    ctx = create_forward_context(
+        attn_metadata=meta,
+        vllm_config=vcfg,
+        slot_mapping={attn.layer_name: slot_mapping for attn in attns},
+    )
+    return override_forward_context(ctx)
+
+
 def _vllm_chain_native_decoder_layers(
     layers,
     *,
@@ -131,10 +230,16 @@ def _vllm_chain_native_decoder_layers(
 
     residual = None
     hidden = hidden_states
-    with vllm_test_config_context():
-        with torch.no_grad():
-            for layer in layers:
-                hidden, residual = layer(positions, hidden, residual)
+    with vllm_test_config_context() as vcfg:
+        with _vllm_standalone_decode_forward_context(
+            layers,
+            vcfg=vcfg,
+            batch=int(hidden_states.shape[0]),
+            device=hidden_states.device,
+        ):
+            with torch.no_grad():
+                for layer in layers:
+                    hidden, residual = layer(positions, hidden, residual)
     return _vllm_decoder_stack_logits_hidden(hidden, residual)
 
 
@@ -152,20 +257,31 @@ def _vllm_chain_native_decoder_layers_rf_mlp(
 
     residual = None
     hidden = hidden_states
-    with vllm_test_config_context():
-        with torch.no_grad():
-            for layer, hook in zip(layers, hooks):
-                cap_name = hook.override.capsule_name
-                meta = dict(rf_meta_base)
-                meta["enabled"] = {cap_name}
-                if residual is None:
-                    residual = hidden
-                    normed = layer.input_layernorm(hidden)
-                else:
-                    normed, residual = layer.input_layernorm(hidden, residual)
-                attn_out = layer.self_attn(positions=positions, hidden_states=normed)
-                mlp_in, residual = layer.post_attention_layernorm(attn_out, residual)
-                hidden = hook.forward_mlp(mlp_in, rf_meta=meta).hidden
+    with vllm_test_config_context() as vcfg:
+        with _vllm_standalone_decode_forward_context(
+            layers,
+            vcfg=vcfg,
+            batch=int(hidden_states.shape[0]),
+            device=hidden_states.device,
+        ):
+            with torch.no_grad():
+                for layer, hook in zip(layers, hooks):
+                    cap_name = hook.override.capsule_name
+                    meta = dict(rf_meta_base)
+                    meta["enabled"] = {cap_name}
+                    if residual is None:
+                        residual = hidden
+                        normed = layer.input_layernorm(hidden)
+                    else:
+                        normed, residual = layer.input_layernorm(hidden, residual)
+                    attn_out = layer.self_attn(positions=positions, hidden_states=normed)
+                    # The RF capsule replaces post-attention norm + MLP +
+                    # residual-add, so feed it the un-normalized sum and let
+                    # it re-apply the norm itself (matches _vllm_native_mlp_forward
+                    # and the reference full-layer forward bit for bit).
+                    mlp_in = attn_out + residual
+                    hidden = hook.forward_mlp(mlp_in, rf_meta=meta).hidden
+                    residual = None
     return _vllm_decoder_stack_logits_hidden(hidden, residual)
 
 
@@ -178,6 +294,66 @@ def _init_vllm_qwen2_layer_weights(layer) -> None:
         for p in layer.parameters():
             if p.numel() > 0:
                 torch.nn.init.normal_(p, mean=0.0, std=0.02)
+
+
+def _mount_vllm_cpu_linear(layer) -> int:
+    """Mount ``cpu_linear`` on vLLM CPU-wheel linear modules (cert-gate repair).
+
+    vLLM CPU wheels route linear forwards through ``layer.cpu_linear``, which
+    the engine's weight-loading pipeline normally attaches via
+    ``process_weights_after_loading`` -> ``dispatch_cpu_unquantized_gemm``.
+    Tiny decoder layers constructed standalone for parity benches never run
+    that pipeline, so native forwards raise ``AttributeError``. Mount it here
+    with ``remove_weight=False`` (the same out-of-engine pattern as
+    ``vocab_parallel_embedding.py``) so weights stay in place for
+    torch-reference parity checks. Returns the number of modules mounted
+    (0 on non-CPU platforms or wheels without the dispatch helper).
+    """
+    try:
+        from vllm.platforms import current_platform
+
+        if not current_platform.is_cpu():
+            return 0
+        from vllm.model_executor.layers.utils import dispatch_cpu_unquantized_gemm
+    except Exception:
+        return 0
+
+    import torch
+
+    mounted = 0
+    for module in layer.modules():
+        weight = getattr(module, "weight", None)
+        if not isinstance(weight, torch.Tensor) or weight.ndim != 2:
+            continue
+        if weight.numel() == 0 or getattr(module, "cpu_linear", None) is not None:
+            continue
+        try:
+            dispatch_cpu_unquantized_gemm(module, remove_weight=False)
+            mounted += 1
+        except Exception:
+            continue
+    return mounted
+
+
+def native_tier_qwen2_head_layout(hidden_size: int) -> "tuple[int, int]":
+    """``(num_attention_heads, num_key_value_heads)`` with a kernel-safe head_dim.
+
+    The vLLM CPU attention kernel only accepts head_dim sizes aligned to its
+    vector kernels: the default tiny-layer layout (hidden 64 / 4 heads ->
+    head_dim 16) is rejected at runtime with
+    ``Unsupported CPU attention configuration``. Native-tier decoder stacks
+    pick the largest supported head_dim (128/64/32) that divides
+    ``hidden_size``. Raises ``NotImplementedError`` when no supported layout
+    exists so the tier degrades honestly instead of crashing the bench.
+    """
+    for head_dim in (128, 64, 32):
+        if hidden_size % head_dim == 0:
+            heads = hidden_size // head_dim
+            return heads, heads
+    raise NotImplementedError(
+        f"hidden_size={hidden_size} admits no CPU-kernel-supported "
+        "head_dim (32/64/128)"
+    )
 
 
 def build_minimal_vllm_qwen2_decoder_layer(
@@ -216,6 +392,7 @@ def build_minimal_vllm_qwen2_decoder_layer(
             layer = Qwen2DecoderLayer(cfg, layer_id=layer_id)
     layer = layer.to(dev)
     _init_vllm_qwen2_layer_weights(layer)
+    _mount_vllm_cpu_linear(layer)
     layer.eval()
     return layer
 
