@@ -1,0 +1,46 @@
+name: Serving CPU Cert Gate
+
+# Unconditional gate: every PR and every main push must keep the Serving Loop
+# CPU cert pytest suite green.
+#
+# Rationale (cert-gate repair): the path-filtered serving workflows (e.g.
+# serving-engine-g1-regression.yml, serving-qwen-multistep-generation.yml)
+# never triggered when a version bump only touched runtime_fusion.py, so 28
+# rounds of S-loop bumps landed while the live version assertions in the test
+# suite silently drifted (fixed by the cert-gate repair + the
+# test_serving_version_pin_guard drift guard). This gate closes that hole by
+# running the full cert pytest suite -- including the drift guard and the
+# native vLLM CPU-wheel tiers -- regardless of which files changed.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: serving-cpu-cert-gate-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  cert-pytest:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Python dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install vLLM CPU wheel + transformers
+        run: bash scripts/setup_serving_vllm_cpu.sh
+
+      - name: Serving CPU cert pytest gate (incl. version pin drift guard)
+        env:
+          YIRAGE_BACKEND: cpu
+        run: make test-serving-cpu-cert-pytest
