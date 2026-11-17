@@ -80,7 +80,7 @@ def _live_pins():
 
 
 def test_live_version_pins_found(serving):
-    """The scan itself must keep finding live pins; otherwise the guard roots."""
+    """The scan itself must keep finding live pins; otherwise the guard rots."""
     pins = _live_pins()
     assert len(pins) >= 20, (
         f"expected >=20 live RF version pins across test sources, found {len(pins)}; "
