@@ -48,7 +48,7 @@ def test_vllm_paged_auto_entry(serving):
 
 
 def test_rf_inspect_version_s13(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_torch_paged_full_layer_tiny_parity(serving):

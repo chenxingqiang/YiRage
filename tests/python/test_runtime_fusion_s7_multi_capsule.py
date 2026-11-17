@@ -89,7 +89,7 @@ def test_segment_hybrid_mixed_paths(serving, torch):
 
 
 def test_rf_inspect_version_s7(serving):
-    assert serving.RuntimeFusion([]).inspect()["version"] == "s21"
+    assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
 
 def test_pipeline_sm_budget_zero_skips_both(serving, torch):
