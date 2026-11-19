@@ -23,6 +23,37 @@ def _bootstrap():
     return run_serving_cpu_cert, serving_cpu_cert_manifest
 
 
+def test_serving_cpu_cert_gate_installs_pytest_from_pypi():
+    """The unconditional cert gate must resolve pytest from PyPI.
+
+    ``--index-url`` replaces the default index. The PyTorch CPU wheel index
+    does not host pytest, so the install step exits before any cert test runs
+    (Actions run 44114956773). The vLLM setup script must also use the
+    interpreter's pip: ubuntu-22.04's ``/usr/bin/pip`` is 22.0.2 and rejects
+    ``--break-system-packages``.
+    """
+    root = Path(__file__).resolve().parents[2]
+    workflow = (root / ".github/workflows/serving-cpu-cert-gate.yml").read_text()
+    install_lines = [
+        line
+        for line in workflow.splitlines()
+        if "pip install" in line and "pytest" in line
+    ]
+    assert install_lines, "cert gate workflow must install pytest"
+    for line in install_lines:
+        assert "--index-url" not in line, line
+
+    script = (root / "scripts/setup_serving_vllm_cpu.sh").read_text()
+    assert "python3 -m pip install --upgrade" in script
+    for line in script.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("pip install") or stripped.startswith("pip3 install"):
+            raise AssertionError(
+                "setup_serving_vllm_cpu.sh must call python3 -m pip, not bare pip: "
+                + stripped
+            )
+
+
 def test_serving_cpu_cert_manifest_has_core_stages():
     _, manifest_fn = _bootstrap()
     names = [s.name for s in manifest_fn(quick=True)]
