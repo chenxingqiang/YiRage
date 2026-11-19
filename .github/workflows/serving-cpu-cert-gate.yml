@@ -35,7 +35,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
+          # pytest lives on PyPI. `--index-url` replaces that index, and the
+          # PyTorch CPU wheel index does not host pytest, so the gate exited
+          # here before any cert test (Actions run 44114956773).
+          python3 -m pip install pytest
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: Install vLLM CPU wheel + transformers
         run: bash scripts/setup_serving_vllm_cpu.sh
