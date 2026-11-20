@@ -239,3 +239,161 @@ def test_paged_multistep_torch_gate_when_native_disabled(serving):
     assert report.native_decoder_parity_ok is None
     assert report.native_decoder_generation_parity_ok is None
     assert report.paged_kv_bridged is True
+
+
+def test_native_tier_head_layout_selects_largest_kernel_head_dim(serving):
+    """S51: CPU attention accepts head_dim 32/64/128; pick the largest divisor."""
+    from yirage.serving.vllm_e2e import native_tier_qwen2_head_layout
+
+    cases = (
+        (32, 1, 32),
+        (64, 1, 64),
+        (96, 3, 32),
+        (128, 1, 128),
+        (192, 3, 64),
+        (256, 2, 128),
+    )
+    for hidden, heads, head_dim in cases:
+        num_heads, num_kv_heads = native_tier_qwen2_head_layout(hidden)
+        assert (num_heads, num_kv_heads) == (heads, heads)
+        assert hidden // num_heads == head_dim
+
+
+def test_native_tier_head_layout_rejects_kernel_unsafe_hidden_sizes(serving):
+    """Sizes the pre-S51 quick default used (hidden 16) must degrade, not crash."""
+    from yirage.serving.vllm_e2e import native_tier_qwen2_head_layout
+
+    for hidden in (16, 24, 31, 48, 80):
+        with pytest.raises(NotImplementedError, match="head_dim"):
+            native_tier_qwen2_head_layout(hidden)
+
+
+def test_vllm_native_mlp_forward_includes_residual(serving):
+    """Reference is hidden + mlp(rmsnorm(hidden)), the block the RF capsule replaces."""
+    serving.require_torch()
+    import torch
+
+    from yirage.serving.vllm_e2e import _vllm_native_mlp_forward
+
+    class _Norm(torch.nn.Module):
+        def forward(self, hidden):
+            return hidden * 2
+
+    class _Mlp(torch.nn.Module):
+        def forward(self, hidden):
+            return hidden + 1
+
+    class _Layer:
+        def __init__(self):
+            self.post_attention_layernorm = _Norm()
+            self.mlp = _Mlp()
+
+    hidden = torch.tensor([[1.0, -2.0, 0.5]])
+    layer = _Layer()
+    got = _vllm_native_mlp_forward(layer, hidden)
+    normed = layer.post_attention_layernorm(hidden)
+    assert torch.equal(got, hidden + layer.mlp(normed))
+    assert torch.equal(got, torch.tensor([[4.0, -5.0, 2.5]]))
+
+
+def test_native_tier_or_none_degrades_wheel_errors_only(serving):
+    """Wheel failures become None; programming errors still fail the bench."""
+    from yirage.serving.vllm_paged_multistep_bench import _native_tier_or_none
+
+    def _raise(exc_type):
+        def fn(**kwargs):
+            raise exc_type(kwargs.get("msg", "fail"))
+
+        return fn
+
+    assert _native_tier_or_none(lambda **kwargs: kwargs["n"] + 1, n=3) == 4
+    for exc in (AttributeError, RuntimeError, NotImplementedError):
+        assert _native_tier_or_none(_raise(exc), msg="wheel") is None
+    with pytest.raises(ValueError):
+        _native_tier_or_none(_raise(ValueError), msg="bug")
+    with pytest.raises(TypeError):
+        _native_tier_or_none(_raise(TypeError), msg="bug")
+
+
+_NATIVE_TIER_RUNNERS = (
+    "_run_vllm_native_paged_multistep",
+    "_run_vllm_native_paged_multistep_full_layer",
+    "_run_vllm_native_decoder_paged_multistep",
+    "_run_vllm_native_decoder_generation",
+)
+
+
+def _patch_native_tier_runners(monkeypatch, fn):
+    from yirage.serving import vllm_paged_multistep_bench as bench
+
+    monkeypatch.setattr(bench, "is_vllm_available", lambda: True)
+    for name in _NATIVE_TIER_RUNNERS:
+        monkeypatch.setattr(bench, name, fn)
+    return bench
+
+
+def _run_tiny_paged_bench(bench, **overrides):
+    kwargs = dict(
+        quick=True,
+        decode_steps=1,
+        num_layers=1,
+        batch=1,
+        hidden_size=32,
+        intermediate_size=64,
+        vocab_size=32,
+        version="s45",
+        try_native_full_layer=True,
+        try_native_decoder=True,
+    )
+    kwargs.update(overrides)
+    return bench.run_vllm_paged_multistep_bench(**kwargs)
+
+
+def test_try_native_master_gate_skips_child_tiers(serving, monkeypatch):
+    """Child flags stay on; try_native=False must still skip every native probe."""
+    calls = []
+
+    def _forbidden(**kwargs):
+        calls.append(kwargs)
+        raise AssertionError("native tier ran with try_native=False")
+
+    bench = _patch_native_tier_runners(monkeypatch, _forbidden)
+    report = _run_tiny_paged_bench(bench, try_native=False)
+    assert calls == []
+    assert report.parity_ok is True
+    assert report.token_match_ok is True
+    assert report.hidden_size == 32
+    assert report.vllm_native_available is False
+    assert report.native_parity_ok is None
+    assert report.native_step_parity_ok == []
+    assert report.native_full_layer_parity_ok is None
+    assert report.native_full_layer_step_parity_ok == []
+    assert report.native_decoder_parity_ok is None
+    assert report.native_decoder_token_match_ok is None
+    assert report.native_decoder_step_parity_ok == []
+    assert report.native_decoder_ref_token_ids == []
+    assert report.native_decoder_rf_token_ids == []
+    assert report.native_decoder_generation_parity_ok is None
+    assert report.native_decoder_generation_token_match_ok is None
+    assert report.native_decoder_generation_step_parity_ok == []
+
+
+def test_native_tier_wheel_failure_keeps_torch_gate(serving, monkeypatch):
+    """NotImplementedError from a native probe degrades; the torch gate stays green."""
+    calls = []
+
+    def _unsupported(**kwargs):
+        calls.append(1)
+        raise NotImplementedError("unsupported CPU attention configuration")
+
+    bench = _patch_native_tier_runners(monkeypatch, _unsupported)
+    report = _run_tiny_paged_bench(bench, try_native=True)
+    assert len(calls) == len(_NATIVE_TIER_RUNNERS)
+    assert report.parity_ok is True
+    assert report.token_match_ok is True
+    assert report.paged_kv_bridged is True
+    assert report.vllm_native_available is True
+    assert report.native_parity_ok is None
+    assert report.native_full_layer_parity_ok is None
+    assert report.native_decoder_parity_ok is None
+    assert report.native_decoder_generation_parity_ok is None
