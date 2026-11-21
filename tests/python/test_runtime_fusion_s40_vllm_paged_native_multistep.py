@@ -50,6 +50,18 @@ def test_paged_multistep_native_fields_contract(serving):
     assert "native_step_parity_ok" in payload
     assert payload["vllm_native_available"] is False
     assert payload["native_parity_ok"] is None
+    # try_native is the master gate: child tiers stay unset even though their
+    # own flags default to True. Quick geometry must stay on a kernel-legal
+    # head_dim (vLLM 0.26 CPU attention rejects head_dim < 32).
+    assert payload["native_full_layer_parity_ok"] is None
+    assert payload["native_decoder_parity_ok"] is None
+    assert payload["native_decoder_generation_parity_ok"] is None
+    assert payload["hidden_size"] >= 32
+    from yirage.serving.vllm_e2e import native_tier_qwen2_head_layout
+
+    heads, kv_heads = native_tier_qwen2_head_layout(payload["hidden_size"])
+    assert heads == kv_heads >= 1
+    assert payload["hidden_size"] // heads in (32, 64, 128)
     json.dumps(payload)
 
 
@@ -92,6 +104,131 @@ def test_combined_metadata_native_paged_fields(serving):
         payload, archive_path="artifacts/combined.json", validation_ok=True, quick=True
     )
     assert "paged_multistep_native_parity_ok" in meta
+
+
+@pytest.mark.parametrize(
+    ("hidden_size", "heads", "head_dim"),
+    [
+        (32, 1, 32),
+        (64, 1, 64),
+        (96, 3, 32),
+        (128, 1, 128),
+        (192, 3, 64),
+        (256, 2, 128),
+        (320, 5, 64),
+    ],
+)
+def test_native_tier_head_layout_picks_largest_legal_head_dim(hidden_size, heads, head_dim):
+    """S51: CPU attention rejects head_dim 16. Layout must take the largest of 32/64/128."""
+    from yirage.serving.vllm_e2e import native_tier_qwen2_head_layout
+
+    num_heads, num_kv_heads = native_tier_qwen2_head_layout(hidden_size)
+    assert (num_heads, num_kv_heads) == (heads, heads)
+    assert hidden_size // num_heads == head_dim
+
+
+def test_native_tier_head_layout_does_not_revive_rejected_head_dim_16():
+    """Pre-S51 tiny default was hidden 64 / 4 heads (head_dim 16), which the kernel rejects."""
+    from yirage.serving.vllm_e2e import native_tier_qwen2_head_layout
+
+    num_heads, num_kv_heads = native_tier_qwen2_head_layout(64)
+    assert (num_heads, num_kv_heads) == (1, 1)
+    assert 64 // num_heads == 64
+
+
+@pytest.mark.parametrize("hidden_size", [0, -32, -1, 1, 16, 31, 48])
+def test_native_tier_head_layout_rejects_unsupported_hidden_size(hidden_size):
+    from yirage.serving.vllm_e2e import native_tier_qwen2_head_layout
+
+    with pytest.raises(NotImplementedError, match="head_dim"):
+        native_tier_qwen2_head_layout(hidden_size)
+
+
+def test_native_mlp_reference_includes_residual(serving):
+    """S51 reference is hidden + mlp(norm(hidden)), not the bare MLP output.
+
+    The pre-fix native branch omitted the residual add and only matched the
+    capsule because the native call crashed into the torch fallback.
+    """
+    serving.require_torch()
+    import torch
+
+    from yirage.serving.vllm_e2e import _vllm_native_mlp_forward
+
+    class _Norm(torch.nn.Module):
+        def forward(self, hidden):
+            return hidden * 0.5
+
+    class _Mlp(torch.nn.Module):
+        def forward(self, hidden):
+            return hidden + 1.0
+
+    class _Block(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.post_attention_layernorm = _Norm()
+            self.mlp = _Mlp()
+
+    hidden = torch.tensor([[2.0, 4.0], [0.0, -2.0]])
+    out = _vllm_native_mlp_forward(_Block(), hidden)
+    expected = hidden + (hidden * 0.5 + 1.0)
+    assert torch.equal(out, expected)
+    assert not torch.equal(out, hidden * 0.5 + 1.0)
+
+
+def test_native_tier_or_none_degrades_only_wheel_failures():
+    """Wheel gaps become None. Programming errors must still escape the torch gate."""
+    from yirage.serving.vllm_paged_multistep_bench import _native_tier_or_none
+
+    assert _native_tier_or_none(lambda value: value + 1, value=2) == 3
+
+    def _raise(exc_type):
+        def _fn(**_kwargs):
+            raise exc_type("native tier unavailable")
+
+        return _fn
+
+    for exc_type in (AttributeError, RuntimeError, NotImplementedError):
+        assert _native_tier_or_none(_raise(exc_type)) is None
+
+    def _value_error(**_kwargs):
+        raise ValueError("caller bug")
+
+    with pytest.raises(ValueError, match="caller bug"):
+        _native_tier_or_none(_value_error)
+
+
+@pytest.mark.skipif(vllm_available(), reason="CPU wheel path is covered by native tier benches")
+def test_standalone_decode_context_degrades_without_cpu_backend():
+    """Import failure must be NotImplementedError so _native_tier_or_none can degrade it.
+
+    ImportError is not in that wrapper's allowlist; leaking it would fail the torch gate.
+    """
+    from yirage.serving.vllm_e2e import _vllm_standalone_decode_forward_context
+
+    with pytest.raises(NotImplementedError, match="CPU wheel"):
+        _vllm_standalone_decode_forward_context([], vcfg=None, batch=1, device="cpu")
+
+
+@pytest.mark.skipif(not vllm_available(), reason="vllm not installed")
+def test_native_child_tiers_stay_off_when_flags_disabled(serving):
+    """Master gate on does not force the full-layer or decoder tiers."""
+    serving.require_torch()
+    report = serving.run_vllm_paged_multistep_bench(
+        decode_steps=2,
+        quick=True,
+        try_native=True,
+        try_native_full_layer=False,
+        try_native_decoder=False,
+        version="s40",
+    )
+    assert report.vllm_native_available is True
+    assert report.native_parity_ok is True
+    assert report.native_full_layer_parity_ok is None
+    assert report.native_decoder_parity_ok is None
+    assert report.native_decoder_generation_parity_ok is None
+    assert report.native_full_layer_step_parity_ok == []
+    assert report.native_decoder_step_parity_ok == []
 
 
 def test_cpu_cert_manifest_s40_contract():
