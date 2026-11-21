@@ -345,7 +345,15 @@ def native_tier_qwen2_head_layout(hidden_size: int) -> "tuple[int, int]":
     pick the largest supported head_dim (128/64/32) that divides
     ``hidden_size``. Raises ``NotImplementedError`` when no supported layout
     exists so the tier degrades honestly instead of crashing the bench.
+    Non-positive sizes are rejected up front: Python's modulo treats ``0`` and
+    negatives as divisible by every head_dim and would otherwise return a
+    zero or negative head count.
     """
+    if hidden_size <= 0:
+        raise NotImplementedError(
+            f"hidden_size={hidden_size} admits no CPU-kernel-supported "
+            "head_dim (32/64/128)"
+        )
     for head_dim in (128, 64, 32):
         if hidden_size % head_dim == 0:
             heads = hidden_size // head_dim
