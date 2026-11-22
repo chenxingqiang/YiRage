@@ -68,6 +68,34 @@ def test_archive_metadata_vllm_paged_sm_budget_fields(serving):
     assert "vllm_paged_sm_budget" in sections
 
 
+def test_vllm_paged_sm_budget_floors_degenerate_shape(serving):
+    """Paged SM-budget generation keeps both budgets when the request is empty.
+
+    The floor matches the SGLang path: one requested step becomes skip-then-run,
+    and paged KV stays bridged on both. A removed floor leaves ``sm_run_observed``
+    false and fails the S50 validator.
+    """
+    serving.require_torch()
+    report = serving.run_vllm_paged_generation_sm_budget(
+        decode_steps=1,
+        num_layers=0,
+        batch=0,
+        quick=False,
+        seed=3,
+    )
+    payload = report.to_dict()
+    serving.validate_vllm_paged_sm_budget_generation(payload)
+    assert payload["decode_steps"] == 2
+    assert payload["num_layers"] == 1
+    assert payload["batch"] == 1
+    assert payload["step_sm_budget"] == [0, 64]
+    assert payload["step_used_rf"] == [False, True]
+    assert payload["paged_kv_bridged"] is True
+    assert payload["sm_skip_observed"] is True
+    assert payload["sm_run_observed"] is True
+    assert payload["engine_token_ids"] == payload["hybrid_token_ids"]
+
+
 def test_vllm_paged_sm_budget_three_layers(serving):
     serving.require_torch()
     report = serving.run_vllm_paged_generation_sm_budget(
