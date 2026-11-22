@@ -88,3 +88,77 @@ def test_sglang_generation_try_native_false_leaves_native_unset(serving):
     assert report.native_generation_parity_ok is None
     assert report.native_generation_token_match_ok is None
     assert set(report.radix_step_kinds) >= {"partial", "miss", "all_hit"}
+
+
+def test_sglang_generation_first_k_keeps_partial_radix_when_batch_is_one(serving):
+    """Quick generation must keep a miss row, and only the first K MLPs fuse.
+
+    ``batch=1`` would collapse the partial step to an all-hit (``extend=[0]``),
+    so the quick path floors the batch at 2. ``parity_ok`` also requires
+    ``rf_layer_ids == [0]`` on miss/partial steps, which fails if the loop
+    ignores ``max_rf_mlp_layers`` and fuses every layer.
+    """
+    serving.require_torch()
+    report = serving.run_sglang_multilayer_generation(
+        decode_steps=3,
+        num_layers=2,
+        max_rf_mlp_layers=1,
+        batch=1,
+        quick=True,
+        try_native=False,
+        seed=4,
+        version="s47",
+    )
+    assert report.batch == 2
+    assert report.num_layers == 2
+    assert report.max_rf_mlp_layers == 1
+    assert report.decode_steps == 3
+    assert report.radix_step_kinds == ["partial", "miss", "all_hit"]
+    assert report.step_parity_ok == [True, True, True]
+    assert report.step_token_match_ok == [True, True, True]
+    assert report.parity_ok is True
+    assert report.token_match_ok is True
+    assert report.engine_token_ids == report.hybrid_token_ids
+    assert report.native_generation_parity_ok is None
+    assert serving.validate_sglang_multilayer_generation(report.to_dict()) == []
+    vocab = int(report.vocab_size)
+    for row in report.engine_token_ids:
+        assert len(row) == report.batch
+        for token_id in row:
+            assert type(token_id) is int
+            assert 0 <= token_id < vocab
+
+
+def test_sglang_generation_max_rf_clamps_into_layer_range(serving):
+    """Non-positive and oversized ``max_rf_mlp_layers`` stay inside ``[1, num_layers]``."""
+    serving.require_torch()
+    low = serving.run_sglang_multilayer_generation(
+        decode_steps=3,
+        num_layers=2,
+        max_rf_mlp_layers=0,
+        quick=True,
+        try_native=False,
+        seed=5,
+        version="s47",
+    )
+    high = serving.run_sglang_multilayer_generation(
+        decode_steps=3,
+        num_layers=2,
+        max_rf_mlp_layers=9,
+        quick=True,
+        try_native=False,
+        seed=5,
+        version="s47",
+    )
+    assert low.max_rf_mlp_layers == 1
+    assert low.num_layers == 2
+    assert low.parity_ok is True
+    assert low.token_match_ok is True
+    assert low.engine_token_ids == low.hybrid_token_ids
+    assert high.max_rf_mlp_layers == 2
+    assert high.parity_ok is True
+    assert high.token_match_ok is True
+    assert high.engine_token_ids == high.hybrid_token_ids
+    # Same seed, different fused-layer counts: the recorded cap must not collapse
+    # to a single value, or the clamp is a no-op that both runs share.
+    assert low.max_rf_mlp_layers != high.max_rf_mlp_layers

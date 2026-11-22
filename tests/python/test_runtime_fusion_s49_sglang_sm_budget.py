@@ -67,6 +67,33 @@ def test_archive_metadata_sm_budget_fields(serving):
     assert "sglang_sm_budget" in sections
 
 
+def test_sglang_sm_budget_floors_degenerate_shape(serving):
+    """A one-step or empty request still observes both an SM skip and an SM run.
+
+    ``decode_steps < 2`` would record only the even-step skip (budget 0) and
+    ``validate_sglang_sm_budget_generation`` would reject the report. Zero
+    layers or a zero batch would skip the MLP loop entirely.
+    """
+    serving.require_torch()
+    report = serving.run_sglang_generation_sm_budget(
+        decode_steps=1,
+        num_layers=0,
+        batch=0,
+        quick=False,
+        seed=3,
+    )
+    payload = report.to_dict()
+    serving.validate_sglang_sm_budget_generation(payload)
+    assert payload["decode_steps"] == 2
+    assert payload["num_layers"] == 1
+    assert payload["batch"] == 1
+    assert payload["step_sm_budget"] == [0, 64]
+    assert payload["step_used_rf"] == [False, True]
+    assert payload["sm_skip_observed"] is True
+    assert payload["sm_run_observed"] is True
+    assert payload["engine_token_ids"] == payload["hybrid_token_ids"]
+
+
 def test_sglang_sm_budget_same_seed_is_deterministic(serving):
     serving.require_torch()
     validate = serving.validate_sglang_sm_budget_generation
