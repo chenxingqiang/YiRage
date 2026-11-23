@@ -266,23 +266,37 @@ def _vllm_chain_native_decoder_layers_rf_mlp(
         ):
             with torch.no_grad():
                 for layer, hook in zip(layers, hooks):
-                    cap_name = hook.override.capsule_name
-                    meta = dict(rf_meta_base)
-                    meta["enabled"] = {cap_name}
-                    if residual is None:
-                        residual = hidden
-                        normed = layer.input_layernorm(hidden)
-                    else:
-                        normed, residual = layer.input_layernorm(hidden, residual)
-                    attn_out = layer.self_attn(positions=positions, hidden_states=normed)
-                    # The RF capsule replaces post-attention norm + MLP +
-                    # residual-add, so feed it the un-normalized sum and let
-                    # it re-apply the norm itself (matches _vllm_native_mlp_forward
-                    # and the reference full-layer forward bit for bit).
-                    mlp_in = attn_out + residual
-                    hidden = hook.forward_mlp(mlp_in, rf_meta=meta).hidden
-                    residual = None
+                    hidden, residual = _rf_hook_decoder_step(
+                        layer,
+                        hook,
+                        positions=positions,
+                        hidden=hidden,
+                        residual=residual,
+                        rf_meta_base=rf_meta_base,
+                    )
     return _vllm_decoder_stack_logits_hidden(hidden, residual)
+
+
+def _rf_hook_decoder_step(layer, hook, *, positions, hidden, residual, rf_meta_base):
+    """One native-attention step whose MLP is the RF capsule.
+
+    The capsule replaces post-attention norm + MLP + residual-add, matching
+    ``_vllm_native_mlp_forward``. The hook therefore receives
+    ``attn_out + residual`` (not the post-attention norm output) and the
+    residual is cleared so the next layer does not add it again.
+    """
+    cap_name = hook.override.capsule_name
+    meta = dict(rf_meta_base)
+    meta["enabled"] = {cap_name}
+    if residual is None:
+        residual = hidden
+        normed = layer.input_layernorm(hidden)
+    else:
+        normed, residual = layer.input_layernorm(hidden, residual)
+    attn_out = layer.self_attn(positions=positions, hidden_states=normed)
+    mlp_in = attn_out + residual
+    hidden_out = hook.forward_mlp(mlp_in, rf_meta=meta).hidden
+    return hidden_out, None
 
 
 def _init_vllm_qwen2_layer_weights(layer) -> None:
@@ -318,21 +332,36 @@ def _mount_vllm_cpu_linear(layer) -> int:
     except Exception:
         return 0
 
-    import torch
-
     mounted = 0
-    for module in layer.modules():
-        weight = getattr(module, "weight", None)
-        if not isinstance(weight, torch.Tensor) or weight.ndim != 2:
-            continue
-        if weight.numel() == 0 or getattr(module, "cpu_linear", None) is not None:
-            continue
+    for module in _pending_cpu_linear_modules(layer):
         try:
             dispatch_cpu_unquantized_gemm(module, remove_weight=False)
             mounted += 1
         except Exception:
             continue
     return mounted
+
+
+def _pending_cpu_linear_modules(layer) -> List[Any]:
+    """Modules whose 2-D weight still needs a ``cpu_linear`` mount.
+
+    vLLM CPU linears are not ``torch.nn.Linear``. Selection is by weight
+    rank, so a custom module with a non-empty 2-D ``weight`` is included.
+    Rank-1 norms, empty parameters, and modules that already have
+    ``cpu_linear`` are skipped so the mount cannot clobber them.
+    """
+    require_torch()
+    import torch
+
+    pending: List[Any] = []
+    for module in layer.modules():
+        weight = getattr(module, "weight", None)
+        if not isinstance(weight, torch.Tensor) or weight.ndim != 2:
+            continue
+        if weight.numel() == 0 or getattr(module, "cpu_linear", None) is not None:
+            continue
+        pending.append(module)
+    return pending
 
 
 def native_tier_qwen2_head_layout(hidden_size: int) -> "tuple[int, int]":
