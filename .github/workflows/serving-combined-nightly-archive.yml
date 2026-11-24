@@ -102,7 +102,10 @@ jobs:
       - name: Install Python dependencies
         run: |
           python3 -m pip install --upgrade pip
-          python3 -m pip install pytest torch --index-url https://download.pytorch.org/whl/cpu
+          # pytest is on PyPI. --index-url replaces that index, and the
+          # PyTorch CPU wheel index does not host pytest.
+          python3 -m pip install pytest
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
       - name: S34–S45 combined archive + dashboard contract
         env:

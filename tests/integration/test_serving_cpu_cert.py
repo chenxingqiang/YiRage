@@ -46,6 +46,32 @@ def test_serving_cpu_cert_manifest_has_core_stages():
     assert "qwen05b_cpu_e2e" in names
 
 
+def test_serving_contract_workflows_install_pytest_from_pypi():
+    """Path-filtered serving gates must resolve pytest from PyPI.
+
+    ``--index-url https://download.pytorch.org/whl/cpu`` replaces PyPI. That
+    index does not host pytest, so ``pip install pytest torch --index-url ...``
+    exits before the contract pytest step. The unconditional cert gate has the
+    same defect and is tracked separately.
+    """
+    root = Path(__file__).resolve().parents[2]
+    workflows = (
+        ".github/workflows/serving-combined-nightly-archive.yml",
+        ".github/workflows/serving-decode-bench-archive.yml",
+        ".github/workflows/serving-engine-g1-regression.yml",
+    )
+    for rel in workflows:
+        text = (root / rel).read_text(encoding="utf-8")
+        install_lines = [
+            line.strip()
+            for line in text.splitlines()
+            if "pip install" in line and "pytest" in line
+        ]
+        assert install_lines, f"{rel} must install pytest"
+        for line in install_lines:
+            assert "--index-url" not in line, f"{rel}: {line}"
+
+
 def test_serving_cpu_cert_quick_passes():
     run_cert, _ = _bootstrap()
     report = run_cert(quick=True)
