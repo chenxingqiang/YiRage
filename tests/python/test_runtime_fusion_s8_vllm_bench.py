@@ -100,6 +100,34 @@ def test_vllm_hook_raises_without_package(serving):
         serving.build_vllm_qwen2_mlp_rf_hook(object())
 
 
+def test_split_gate_up_weights_halves_transposed_fused_proj(serving):
+    serving.require_torch()
+    import torch
+    """vLLM 0.26 stores fused gate_up as [2F, H]. The fallback needs [H, F] halves.
+
+    Splitting before the transpose, or on an odd fused width, feeds the residual
+    MLP reference a swapped or truncated gate and the S51 fallback matches the
+    wrong function.
+    """
+    from yirage.serving.vllm_plugin import _split_gate_up_weights
+
+    class _Linear:
+        def __init__(self, weight):
+            self.weight = weight
+
+    weight = torch.arange(12, dtype=torch.float32).view(4, 3)
+    gate, up = _split_gate_up_weights(_Linear(weight))
+    transposed = weight.t()
+    assert gate.shape == (3, 2)
+    assert up.shape == (3, 2)
+    assert torch.equal(gate, transposed[:, :2])
+    assert torch.equal(up, transposed[:, 2:])
+
+    odd = torch.ones(3, 2)
+    with pytest.raises(ValueError, match="even"):
+        _split_gate_up_weights(_Linear(odd))
+
+
 def test_rf_inspect_version_s8(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
 
