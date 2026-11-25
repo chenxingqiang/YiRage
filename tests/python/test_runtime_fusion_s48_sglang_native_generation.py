@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from serving_test_utils import serving, sglang_available
+from serving_test_utils import serving, sglang_available, torch  # noqa: F401
 from test_runtime_fusion_s36_serving_dashboard import _synthetic_combined_for_dashboard
 
 
@@ -22,6 +22,30 @@ def _run_sglang_native_generation(serving):
 
 def test_runtime_fusion_version_s48(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
+
+
+def test_sglang_native_mlp_forward_is_residual_block(serving, torch):
+    """Native MLP reference is hidden + mlp(norm(hidden)), not the bare MLP.
+
+    S48 compares this tensor to the RF hook. Dropping the residual (or the
+    norm) makes that comparison agree with the wrong function.
+    """
+
+    class _Scale:
+        def __call__(self, hidden):
+            return hidden * 2
+
+    class _Shift:
+        def __call__(self, hidden):
+            return hidden + 3
+
+    class _Layer:
+        post_attention_layernorm = _Scale()
+        mlp = _Shift()
+
+    hidden = torch.tensor([[1.0, -2.0], [0.5, 4.0]])
+    got = serving.sglang_e2e._sglang_native_mlp_forward(_Layer(), hidden)
+    assert torch.equal(got, hidden + (hidden * 2 + 3))
 
 
 def test_sglang_native_generation_absent_without_sglang(serving):
