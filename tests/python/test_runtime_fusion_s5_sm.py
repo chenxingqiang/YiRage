@@ -126,6 +126,80 @@ def test_serving_cpu_cert_manifest_includes_s5(serving):
     assert "s8_contract" in names
 
 
+def test_sm_budget_zero_stays_legal_and_kwargs_win(serving):
+    """A zero capsule budget is the S49/S50 skip signal, including via extras.
+
+    Treating 0 as missing would schedule into the default budget and the
+    engine would no longer own the skipped MLP step.
+    """
+    from_extras = serving.resolve_sm_worker_quota(
+        extras={"total_sms": 16, "reserved_aux_sms": 4, "sm_budget": 0}
+    )
+    assert from_extras.total_sms == 16
+    assert from_extras.reserved_aux_sms == 4
+    assert from_extras.capsule_budget_sms == 0
+
+    overridden = serving.resolve_sm_worker_quota(
+        total_sms=32,
+        reserved_aux_sms=6,
+        sm_budget=3,
+        extras={"total_sms": 16, "reserved_aux_sms": 4, "sm_budget": 0},
+    )
+    assert overridden.total_sms == 32
+    assert overridden.reserved_aux_sms == 6
+    assert overridden.capsule_budget_sms == 3
+
+    with pytest.raises(ValueError, match="sm_budget"):
+        serving.resolve_sm_worker_quota(total_sms=16, reserved_aux_sms=4, sm_budget=-1)
+    with pytest.raises(ValueError, match="total_sms"):
+        serving.resolve_sm_worker_quota(total_sms=0, reserved_aux_sms=0)
+    with pytest.raises(ValueError, match="reserved_aux_sms"):
+        serving.resolve_sm_worker_quota(total_sms=8, reserved_aux_sms=8)
+    with pytest.raises(ValueError, match="reserved_aux_sms"):
+        serving.resolve_sm_worker_quota(total_sms=8, reserved_aux_sms=-1)
+
+
+def test_capsule_sm_cost_precedence_and_clamp(serving):
+    class _Plan:
+        def __init__(self, cost):
+            self.extras = {"sm_cost": cost}
+
+    class _Attr:
+        sm_cost = 4
+        plan = _Plan(9)
+
+    class _Zero:
+        sm_cost = 0
+        plan = _Plan(9)
+
+    class _Negative:
+        sm_cost = -4
+
+    class _Callable:
+        plan = _Plan(2)
+
+        def sm_cost(self):
+            raise RuntimeError("cost probe failed")
+
+    class _Missing:
+        sm_cost = None
+        plan = _Plan(5)
+
+    class _PlanOnly:
+        plan = _Plan(-9)
+
+    class _Bare:
+        pass
+
+    assert serving.capsule_sm_cost(_Attr()) == 4
+    assert serving.capsule_sm_cost(_Zero()) == 0
+    assert serving.capsule_sm_cost(_Negative()) == 0
+    assert serving.capsule_sm_cost(_Callable()) == 2
+    assert serving.capsule_sm_cost(_Missing()) == 5
+    assert serving.capsule_sm_cost(_PlanOnly()) == 0
+    assert serving.capsule_sm_cost(_Bare()) == 1
+
+
 def test_capsule_sm_cost_skips_then_runs(serving, torch):
     plan = serving.FusionPlan(
         name="mlp_costly",
