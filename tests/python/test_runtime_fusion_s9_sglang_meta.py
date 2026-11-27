@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from serving_test_utils import serving, torch  # noqa: F401
 
@@ -66,6 +67,28 @@ def test_hybrid_partial_sglang_extend_lens(serving, torch):
 
 def test_rf_inspect_version_s9(serving):
     assert serving.RuntimeFusion([]).inspect()["version"] == "s50"
+
+
+def test_explicit_radix_mask_wins_over_extend_lens(serving):
+    meta = serving.build_sglang_rf_step_meta(
+        extend_lens=[0, 0],
+        radix_hit_mask=[False, True],
+        seq_lens=[8, 8],
+        sm_budget=3,
+        enabled={"mlp_layer_0"},
+    )
+    np.testing.assert_array_equal(meta["radix_hit_mask"], [False, True])
+    assert meta["extras"]["radix_hit"]["all_hit"] is False
+    assert meta["extras"]["sglang"]["extend_lens"] == [0, 0]
+    assert meta["sm_budget"] == 3
+    assert meta["enabled"] == {"mlp_layer_0"}
+
+
+def test_negative_extend_lens_rejected(serving):
+    with pytest.raises(ValueError, match="non-negative"):
+        serving.radix_hit_mask_from_sglang_extend_lens([1, -1])
+    with pytest.raises(ValueError, match="non-negative"):
+        serving.build_sglang_rf_step_meta(extend_lens=[0, -2])
 
 
 def test_all_zero_extend_lens_are_all_hit(serving, torch):

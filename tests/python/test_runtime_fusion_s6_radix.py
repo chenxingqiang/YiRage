@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from serving_test_utils import serving, torch  # noqa: F401
 
@@ -90,6 +91,84 @@ def test_hybrid_partial_radix_shrink_matches_manual(serving, torch):
         out = hybrid.forward(x, rf_meta={"radix_hit_mask": mask})
     assert out.rf_layer_ids == [0]
     assert torch.allclose(out.hidden, expected, rtol=1e-5, atol=1e-6)
+
+
+def test_parse_radix_hit_mask_coerces_and_rejects(serving):
+    assert serving.parse_radix_hit_mask(None) is None
+    ints = serving.parse_radix_hit_mask([0, 1, 0])
+    np.testing.assert_array_equal(ints.hit_mask, [False, True, False])
+    assert ints.active_row_indices().tolist() == [0, 2]
+    scalar_miss = serving.parse_radix_hit_mask(0)
+    assert scalar_miss.batch_size == 1
+    assert scalar_miss.hit_mask.tolist() == [False]
+    assert scalar_miss.skip_capsule_entirely() is False
+    scalar_hit = serving.parse_radix_hit_mask(True)
+    assert scalar_hit.all_hit is True
+    with pytest.raises(ValueError, match="rank-1"):
+        serving.parse_radix_hit_mask([[True, False]])
+    with pytest.raises(ValueError, match="batch_size"):
+        serving.parse_radix_hit_mask([True, False], batch_size=3)
+
+
+def test_radix_mask_length_follows_batch_not_hidden_width(serving, torch):
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=8, intermediate_size=16, seed=1, name="mlp_a", backend=serving.BACKEND_TORCH
+    )
+    rf = serving.RuntimeFusion([cap])
+    row = torch.randn(8, dtype=torch.float32)
+    with pytest.raises(ValueError, match="batch_size"):
+        rf.step({"hidden": row}, meta={"radix_hit_mask": [False] * 8})
+    batch = torch.randn(2, 8, dtype=torch.float32)
+    with pytest.raises(ValueError, match="batch_size"):
+        rf.step({"hidden": batch}, meta={"radix_hit_mask": [False] * 8})
+
+
+def test_all_hit_radix_does_not_consume_sm_budget(serving, torch):
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=8, intermediate_size=16, seed=2, name="mlp_a", backend=serving.BACKEND_TORCH
+    )
+    rf = serving.RuntimeFusion([cap])
+    x = torch.randn(2, 8, dtype=torch.float32)
+    extras = {"total_sms": 16, "reserved_aux_sms": 4}
+    result = rf.step(
+        {"hidden": x},
+        meta={
+            "enabled": {"mlp_a"},
+            "radix_hit_mask": [True, True],
+            "sm_budget": 4,
+            "extras": extras,
+        },
+    )
+    assert result.ran == []
+    assert result.skipped_radix == ["mlp_a"]
+    assert result.sm_allocation.skipped_budget == []
+    assert result.sm_allocation.used_sms == 0
+    assert result.sm_allocation.remaining_sms == 4
+    assert torch.equal(result.outputs["hidden"], x)
+
+
+def test_partial_radix_still_charges_capsule_sm_cost(serving, torch):
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=8, intermediate_size=16, seed=3, name="mlp_a", backend=serving.BACKEND_TORCH
+    )
+    rf = serving.RuntimeFusion([cap])
+    x = torch.randn(2, 8, dtype=torch.float32)
+    result = rf.step(
+        {"hidden": x},
+        meta={
+            "enabled": {"mlp_a"},
+            "radix_hit_mask": [True, False],
+            "sm_budget": 4,
+            "extras": {"total_sms": 16, "reserved_aux_sms": 4},
+        },
+    )
+    cost = serving.capsule_sm_cost(cap)
+    assert result.ran == ["mlp_a"]
+    assert result.skipped_radix == []
+    assert result.sm_allocation.skipped_budget == []
+    assert result.sm_allocation.used_sms == cost
+    assert result.sm_allocation.remaining_sms == 4 - cost
+    assert not torch.equal(result.outputs["hidden"], x)
 
 
 def test_rf_inspect_version_s6(serving):

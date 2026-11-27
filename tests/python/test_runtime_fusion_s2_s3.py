@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from serving_test_utils import serving, torch  # noqa: F401
 
 
@@ -71,6 +73,25 @@ def test_s3_force_engine_mlp_flag(serving, torch):
     r = hybrid.forward(x, force_engine_mlp=True)
     assert r.rf_layer_ids == []
     assert r.engine_mlp_layer_ids == [0, 1, 2]
+
+
+def test_resolve_rf_mlp_layer_ids_explicit_ids_win_and_reject_invalid(serving):
+    assert serving.resolve_rf_mlp_layer_ids(4) == set()
+    assert serving.resolve_rf_mlp_layer_ids(4, max_rf_mlp_layers=0) == set()
+    assert serving.resolve_rf_mlp_layer_ids(
+        4, max_rf_mlp_layers=1, rf_mlp_layer_ids=[]
+    ) == set()
+    assert serving.resolve_rf_mlp_layer_ids(
+        4, max_rf_mlp_layers=1, rf_mlp_layer_ids=[2, 3]
+    ) == {2, 3}
+    with pytest.raises(ValueError, match="out of range"):
+        serving.resolve_rf_mlp_layer_ids(4, rf_mlp_layer_ids=[4])
+    with pytest.raises(ValueError, match="out of range"):
+        serving.resolve_rf_mlp_layer_ids(4, rf_mlp_layer_ids=[-1])
+    with pytest.raises(ValueError, match="invalid"):
+        serving.resolve_rf_mlp_layer_ids(4, max_rf_mlp_layers=5)
+    with pytest.raises(ValueError, match="invalid"):
+        serving.resolve_rf_mlp_layer_ids(4, max_rf_mlp_layers=-1)
 
 
 def test_s3_noncontiguous_layer_ids_match_engine(serving, torch):

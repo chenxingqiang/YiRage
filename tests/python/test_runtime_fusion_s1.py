@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from serving_test_utils import serving, torch  # noqa: F401
 
 
@@ -72,6 +74,84 @@ def test_runtime_fusion_inspect_lists_capsule(serving):
     assert info["runtime"] == "RuntimeFusion"
     assert info["version"] == "s50"
     assert info["capsules"][0]["plan"]["backend"] == serving.BACKEND_TORCH
+
+
+def test_rf_step_empty_enabled_skips_every_capsule(serving, torch):
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=16, intermediate_size=32, seed=1, name="mlp_a", backend=serving.BACKEND_TORCH
+    )
+    rf = serving.RuntimeFusion([cap])
+    x = torch.randn(2, 16, dtype=torch.float32)
+    result = rf.step({"hidden": x}, meta={"enabled": set()})
+    assert result.ran == []
+    assert result.skipped == ["mlp_a"]
+    assert torch.equal(result.outputs["hidden"], x)
+
+
+def test_rf_step_force_skip_overrides_enabled(serving, torch):
+    cap = serving.MlpFusionCapsule.from_random(
+        hidden_size=16, intermediate_size=32, seed=2, name="mlp_a", backend=serving.BACKEND_TORCH
+    )
+    rf = serving.RuntimeFusion([cap])
+    x = torch.randn(2, 16, dtype=torch.float32)
+    result = rf.step(
+        {"hidden": x},
+        meta={"force_skip_all": True, "enabled": {"mlp_a"}},
+    )
+    assert result.ran == []
+    assert result.skipped == ["mlp_a"]
+    assert torch.equal(result.outputs["hidden"], x)
+
+
+def test_rf_step_enabled_overrides_disabled(serving, torch):
+    a = serving.MlpFusionCapsule.from_random(
+        hidden_size=16, intermediate_size=32, seed=3, name="a", backend=serving.BACKEND_TORCH
+    )
+    b = serving.MlpFusionCapsule.from_random(
+        hidden_size=16, intermediate_size=32, seed=4, name="b", backend=serving.BACKEND_TORCH
+    )
+    rf = serving.RuntimeFusion([a, b])
+    x = torch.randn(2, 16, dtype=torch.float32)
+    result = rf.step(
+        {"hidden": x},
+        meta={"enabled": {"b"}, "disabled": {"a", "b"}},
+    )
+    assert result.ran == ["b"]
+    assert result.skipped == ["a"]
+    with torch.no_grad():
+        expected = b.execute({"hidden": x})["hidden"]
+    assert torch.allclose(result.outputs["hidden"], expected, rtol=1e-5, atol=1e-5)
+
+
+def test_rf_step_disabled_leaves_sibling_capsule_running(serving, torch):
+    a = serving.MlpFusionCapsule.from_random(
+        hidden_size=16, intermediate_size=32, seed=5, name="a", backend=serving.BACKEND_TORCH
+    )
+    b = serving.MlpFusionCapsule.from_random(
+        hidden_size=16, intermediate_size=32, seed=6, name="b", backend=serving.BACKEND_TORCH
+    )
+    rf = serving.RuntimeFusion([a, b])
+    x = torch.randn(2, 16, dtype=torch.float32)
+    result = rf.step({"hidden": x}, meta={"disabled": {"a"}})
+    assert result.ran == ["b"]
+    assert result.skipped == ["a"]
+    with torch.no_grad():
+        expected = b.execute({"hidden": x})["hidden"]
+    assert torch.allclose(result.outputs["hidden"], expected, rtol=1e-5, atol=1e-5)
+
+
+def test_runtime_fusion_rejects_duplicate_capsule_names(serving):
+    first = serving.MlpFusionCapsule.from_random(
+        hidden_size=8, intermediate_size=16, seed=1, name="dup"
+    )
+    second = serving.MlpFusionCapsule.from_random(
+        hidden_size=8, intermediate_size=16, seed=2, name="dup"
+    )
+    with pytest.raises(ValueError, match="unique"):
+        serving.RuntimeFusion([first, second])
+    rf = serving.RuntimeFusion([first])
+    with pytest.raises(ValueError, match="duplicate"):
+        rf.register(second)
 
 
 def test_mlp_capsule_batch1_matches_oracle(serving, torch):

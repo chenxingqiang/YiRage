@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from serving_test_utils import serving, torch  # noqa: F401
 
 
@@ -20,6 +22,68 @@ def test_resolve_capsule_pipeline_explicit_order(serving):
     meta = serving.StepMeta.from_mapping({"pipeline": ["b", "a"], "enabled": {"a", "b"}})
     ordered = serving.resolve_capsule_pipeline(rf.capsules, meta)
     assert [c.name for c in ordered] == ["b", "a"]
+
+
+def _two_capsules(serving):
+    a = serving.MlpFusionCapsule.from_random(
+        hidden_size=8, intermediate_size=16, seed=1, name="a", backend=serving.BACKEND_TORCH
+    )
+    b = serving.MlpFusionCapsule.from_random(
+        hidden_size=8, intermediate_size=16, seed=2, name="b", backend=serving.BACKEND_TORCH
+    )
+    return a, b
+
+
+def test_resolve_capsule_pipeline_extras_and_unknown(serving):
+    a, b = _two_capsules(serving)
+    rf = serving.RuntimeFusion([a, b])
+    from_extras = serving.StepMeta.from_mapping(
+        {"extras": {"capsule_pipeline": ["b", "a"]}}
+    )
+    assert [c.name for c in serving.resolve_capsule_pipeline(rf.capsules, from_extras)] == [
+        "b",
+        "a",
+    ]
+    explicit_wins = serving.StepMeta.from_mapping(
+        {
+            "pipeline": ["a", "b"],
+            "extras": {"capsule_pipeline": ["b", "a"]},
+        }
+    )
+    assert [c.name for c in serving.resolve_capsule_pipeline(rf.capsules, explicit_wins)] == [
+        "a",
+        "b",
+    ]
+    with pytest.raises(KeyError, match="unknown capsule"):
+        serving.resolve_capsule_pipeline(
+            rf.capsules,
+            serving.StepMeta.from_mapping({"pipeline": ["missing"]}),
+        )
+
+
+def test_rf_step_pipeline_subset_and_enabled_filter(serving, torch):
+    a, b = _two_capsules(serving)
+    rf = serving.RuntimeFusion([a, b])
+    x = torch.randn(2, 8, dtype=torch.float32)
+    only_b = rf.step(
+        {"hidden": x},
+        meta={"pipeline": ["b"], "enabled": {"a", "b"}},
+    )
+    assert only_b.ran == ["b"]
+    assert only_b.skipped == []
+    with torch.no_grad():
+        expected_b = b.execute({"hidden": x})["hidden"]
+    assert torch.allclose(only_b.outputs["hidden"], expected_b, rtol=1e-5, atol=1e-5)
+
+    only_a = rf.step(
+        {"hidden": x},
+        meta={"pipeline": ["b", "a"], "enabled": {"a"}},
+    )
+    assert only_a.ran == ["a"]
+    assert only_a.skipped == ["b"]
+    with torch.no_grad():
+        expected_a = a.execute({"hidden": x})["hidden"]
+    assert torch.allclose(only_a.outputs["hidden"], expected_a, rtol=1e-5, atol=1e-5)
 
 
 def test_rf_step_runs_pipeline_gate_up_then_down(serving, torch):
