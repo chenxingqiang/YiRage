@@ -169,6 +169,7 @@ class MlpDownFusionCapsule(FusionCapsule):
                 radix = parse_radix_hit_mask(mask, batch_size=bs)
 
         if self.plan.backend == BACKEND_TORCH:
+            import torch
             import torch.nn.functional as F
 
             h = to_torch(hidden, device=self._device)
