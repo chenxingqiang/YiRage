@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from serving_test_utils import serving, torch  # noqa: F401
 
 
@@ -122,3 +124,105 @@ def test_pipeline_sm_budget_zero_skips_both(serving, torch):
     hidden = ran.outputs["hidden"]
     assert bool(torch.isfinite(hidden).all())
     assert not torch.equal(hidden, x)
+
+
+def test_split_mlp_partial_radix_keeps_hit_rows(serving, torch):
+    """Hit rows stay at the MLP input; only miss rows match the fused MLP."""
+    layer = serving.TorchDecoderLayer(0, hidden_size=8, intermediate_size=16, seed=5)
+    rf = serving.build_split_mlp_runtime_fusion(layer, backend=serving.BACKEND_TORCH)
+    torch.manual_seed(3)
+    x = torch.randn(3, 8, dtype=torch.float32, device=layer.device)
+    mask = [True, False, True]
+    meta = serving.pipeline_meta_for_layer(0, {"radix_hit_mask": mask})
+    with torch.no_grad():
+        result = rf.step({"hidden": x}, meta=meta)
+        fused = serving.mlp_torch(
+            x,
+            rms_weight=layer.rms_weight,
+            w_gate=layer.w_gate,
+            w_up=layer.w_up,
+            w_down=layer.w_down,
+        )
+    assert result.ran == [
+        serving.split_mlp_gate_up_name(0),
+        serving.split_mlp_down_name(0),
+    ]
+    assert result.skipped_radix == []
+    hidden = result.outputs["hidden"]
+    assert torch.allclose(hidden[0], x[0])
+    assert torch.allclose(hidden[2], x[2])
+    assert torch.allclose(hidden[1], fused[1], rtol=1e-5, atol=1e-6)
+    assert not torch.allclose(hidden[1], x[1])
+
+
+def test_split_override_partial_budget_falls_back_to_engine_mlp(serving, torch):
+    """A budget that finishes only gate_up must not publish that half-step."""
+    layer = serving.TorchDecoderLayer(1, hidden_size=8, intermediate_size=16, seed=7)
+    override = serving.RuntimeFusionSplitMlpLayerOverride(
+        layer, backend=serving.BACKEND_TORCH
+    )
+    torch.manual_seed(9)
+    x = torch.randn(2, 8, dtype=torch.float32, device=layer.device)
+    extras = {"total_sms": 16, "reserved_aux_sms": 4}
+    with torch.no_grad():
+        result = override.forward(
+            x,
+            rf_meta={"sm_budget": 1, "extras": extras},
+        )
+        full = layer.forward_engine_full(x)
+        post_attn = layer.attention_forward(x)
+    assert result.used_rf_mlp is False
+    assert result.rf is not None
+    assert result.rf.ran == [serving.split_mlp_gate_up_name(1)]
+    assert serving.split_mlp_down_name(1) in result.rf.skipped
+    assert torch.allclose(result.hidden, full, rtol=1e-5, atol=1e-6)
+    assert not torch.allclose(result.hidden, post_attn)
+
+
+def test_split_override_all_hit_radix_is_post_attention_identity(serving, torch):
+    layer = serving.TorchDecoderLayer(0, hidden_size=8, intermediate_size=16, seed=8)
+    override = serving.RuntimeFusionSplitMlpLayerOverride(
+        layer, backend=serving.BACKEND_TORCH
+    )
+    torch.manual_seed(4)
+    x = torch.randn(2, 8, dtype=torch.float32, device=layer.device)
+    with torch.no_grad():
+        result = override.forward(x, rf_meta={"radix_hit_mask": [True, True]})
+        post_attn = layer.attention_forward(x)
+        full = layer.forward_engine_full(x)
+    assert result.used_rf_mlp is False
+    assert result.rf is not None
+    assert result.rf.ran == []
+    assert set(result.rf.skipped_radix) == {
+        serving.split_mlp_gate_up_name(0),
+        serving.split_mlp_down_name(0),
+    }
+    assert torch.allclose(result.hidden, post_attn)
+    assert not torch.allclose(result.hidden, full)
+
+
+def test_resolve_segment_layer_ids_rejects_bad_ranges(serving):
+    with pytest.raises(ValueError, match="invalid segment"):
+        serving.resolve_segment_layer_ids(4, layer_start=2, layer_end=2)
+    with pytest.raises(ValueError, match="invalid segment"):
+        serving.resolve_segment_layer_ids(4, layer_start=3, layer_end=1)
+    with pytest.raises(ValueError, match="invalid segment"):
+        serving.resolve_segment_layer_ids(4, layer_start=-1, layer_end=2)
+    with pytest.raises(ValueError, match="invalid segment"):
+        serving.resolve_segment_layer_ids(4, layer_start=1, layer_end=5)
+    with pytest.raises(ValueError, match="provide layer_ids"):
+        serving.resolve_segment_layer_ids(4)
+    with pytest.raises(ValueError, match="out of range"):
+        serving.resolve_segment_layer_ids(4, layer_ids=[4])
+    with pytest.raises(ValueError, match="out of range"):
+        serving.resolve_segment_layer_ids(4, layer_ids=[-1])
+
+
+def test_resolve_segment_layer_ids_explicit_ids_win(serving):
+    assert serving.resolve_segment_layer_ids(4, layer_ids=[2, 0, 2]) == [0, 2]
+    assert serving.resolve_segment_layer_ids(4, layer_ids=[]) == []
+    # An explicit list is the selection, even when the unused range is illegal.
+    assert serving.resolve_segment_layer_ids(
+        4, layer_ids=[1], layer_start=9, layer_end=-1
+    ) == [1]
+    assert serving.resolve_segment_layer_ids(4, layer_start=1, layer_end=3) == [1, 2]
